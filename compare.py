@@ -130,13 +130,13 @@ def load_excel_coupon_b(uploaded_file):
 # ────────────────────────────────────────────────────────
 if "MW 보증 비교" in mode:
     st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
-    st.write("PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다. (글자 수 무제한 인식)")
+    st.write("MW 보증금액을 비교합니다")
     
     col1, col2 = st.columns(2)
     with col1:
-        pdf_file = st.file_uploader("1. PDF 파일을 선택하세요 (.pdf)", type=["pdf"], key="mw_pdf")
+        pdf_file = st.file_uploader("1. MW 보증 PDF 파일을 선택하세요 ", type=["pdf"], key="mw_pdf")
     with col2:
-        excel_file = st.file_uploader("2. 엑셀 파일을 선택하세요 (.xlsx)", type=["xlsx"], key="mw_excel")
+        excel_file = st.file_uploader("2. MW 보증 EXEL 파일을 선택하세요 (원본 그대로 사용)", type=["xlsx"], key="mw_excel")
         
     if pdf_file and excel_file:
         with st.spinner("MW 보증 데이터 교차 대조 중..."):
@@ -186,14 +186,14 @@ if "MW 보증 비교" in mode:
             st.dataframe(res_df, use_container_width=True)
 
 else:
-    st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
-    st.write("A파일(D열 차량번호, (I열+J열)*1.1 반올림)과 B파일(G열 차량번호, S열 합계금액 반올림)을 정밀 매칭합니다.")
+    st.subheader("🚗 쿠폰 보증 비교")
+    st.write("공지된 쿠폰파일 과 DMS 에서 출력된 쿠폰 파일의 정밀 매칭합니다.")
     
     col1, col2 = st.columns(2)
     with col1:
-        file_a = st.file_uploader("1. A 엑셀 파일을 선택하세요 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
+        file_a = st.file_uploader("1. 공지된 쿠폰 파일 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
     with col2:
-        file_b = st.file_uploader("2. B 엑셀 파일을 선택하세요 (G, S행 포함)", type=["xlsx"], key="cp_b")
+        file_b = st.file_uploader("2. DMS 쿠폰파일 (출력물 그대로사용)", type=["xlsx"], key="cp_b")
         
     if file_a and file_b:
         with st.spinner("쿠폰 보증 엑셀 간 교차 대조 중..."):
