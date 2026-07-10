@@ -46,7 +46,6 @@ def load_excel_mw(uploaded_file):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-    # ★ 엑셀 계산 금액도 계산 후 반올림 처리 적용
     df['Excel_Total'] = (df.get('공임청구액', 0) + df.get('공임청구부가세', 0) + 
                          df.get('부품청구액', 0) + df.get('부품청구부가세', 0)).apply(round_half_up)
     
@@ -74,7 +73,9 @@ def load_pdf_mw(uploaded_file):
                     continue
                 page_seen.add(line_stripped)
                 
-                match = re.search(r'(ZJQ\d+)', line_stripped)
+                # ★ 중요 변경: 알파벳 개수([A-Z]+), 숫자 개수(\d+) 제한을 완전히 풀어 
+                # 영어가 4개든 숫자가 5개든 어떤 조합이든 완벽하게 매칭합니다.
+                match = re.search(r'([A-Z]+\d+)', line_stripped)
                 if match:
                     rep_order = match.group(1)
                     parts = line_stripped.split()
@@ -120,7 +121,6 @@ def load_excel_coupon_b(uploaded_file):
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
-            # 원본 데이터가 소수점일 수 있으므로 여기서도 반올림 처리 안전장치 추가
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
@@ -129,8 +129,8 @@ def load_excel_coupon_b(uploaded_file):
 # 🖥️ 화면 조건별 렌더링
 # ────────────────────────────────────────────────────────
 if "MW 보증 비교" in mode:
-    st.subheader("📋 MW 보증 비교 ")
-    st.write("보증 크레딧 파일(PDF) 와 DMS 에서 출력한 Exel 파일을 비교합니다.")
+    st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
+    st.write("PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다. (글자 수 무제한 인식)")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -186,14 +186,14 @@ if "MW 보증 비교" in mode:
             st.dataframe(res_df, use_container_width=True)
 
 else:
-    st.subheader("🚗 쿠폰 보증 비교 ")
-    st.write("공지된 쿠폰 자료와 DMS 에서 출력한 쿠폰 자료를 비교합니다.")
+    st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
+    st.write("A파일(D열 차량번호, (I열+J열)*1.1 반올림)과 B파일(G열 차량번호, S열 합계금액 반올림)을 정밀 매칭합니다.")
     
     col1, col2 = st.columns(2)
     with col1:
-        file_a = st.file_uploader("1. A 엑셀 파일을 선택하세요", type=["xlsx"], key="cp_a")
+        file_a = st.file_uploader("1. A 엑셀 파일을 선택하세요 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
     with col2:
-        file_b = st.file_uploader("2. B 엑셀 파일을 선택하세요 ", type=["xlsx"], key="cp_b")
+        file_b = st.file_uploader("2. B 엑셀 파일을 선택하세요 (G, S행 포함)", type=["xlsx"], key="cp_b")
         
     if file_a and file_b:
         with st.spinner("쿠폰 보증 엑셀 간 교차 대조 중..."):
