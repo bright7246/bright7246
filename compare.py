@@ -6,7 +6,6 @@ from collections import defaultdict
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-io_import = True
 import io
 
 # 웹페이지 기본 설정
@@ -90,27 +89,51 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (이름으로 매핑)
+# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (다양한 헤더 유연하게 지원)
 def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
     
-    # 2번 파일에서 찾고자 하는 열 이름 순서
     target_headers = [
         "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
         "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
         "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세"
     ]
     
-    # 원본 DF의 열 이름과 매핑
+    # 각 키워드별 유연한 대체 단어 모음집
+    alias_dict = {
+        "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
+        "차량번호": ["차량번호", "차량 번호", "CAR NO", "VEHICLE"],
+        "Job No": ["JOB NO", "JOB", "작업번호"],
+        "완결일자": ["완결일자", "완결일", "완결"],
+        "청구일자": ["청구일자", "청구일"],
+        "공임청구액": ["공임청구액", "공임청구", "공임 청구액"],
+        "공임청구부가세": ["공임청구부가세", "공임청구 부가세", "공임부가세"],
+        "부품청구액": ["부품청구액", "부품청구", "부품 청구액"],
+        "부품청구부가세": ["부품청구부가세", "부품청구 부가세", "부품부가세"],
+        "공임입금액": ["공임입금액", "공임입금", "공임승인액", "공임승인", "공임 입금액"],
+        "공임입금부가세": ["공임입금부가세", "공임입금 부가세", "공임승인부가세"],
+        "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액"],
+        "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"]
+    }
+    
+    # 유연한 열 이름 맵핑
     col_mapping = {}
     for th in target_headers:
         found_col = None
+        possible_keywords = alias_dict.get(th, [th])
+        
         for col in df_mw_raw.columns:
-            if th.replace(" ", "").upper() in str(col).replace(" ", "").upper():
-                found_col = col
+            clean_col = str(col).replace(" ", "").upper()
+            for kw in possible_keywords:
+                clean_kw = kw.replace(" ", "").upper()
+                if clean_kw in clean_col:
+                    found_col = col
+                    break
+            if found_col:
                 break
+                
         col_mapping[th] = found_col
 
     # 월 구하기
@@ -145,13 +168,11 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     # 2. 헤더 작성 (3행)
     ws.row_dimensions[3].height = 25
     
-    # A열: No.
     cell_a = ws.cell(row=3, column=1, value="No.")
     cell_a.font = header_font
     cell_a.alignment = header_align
     cell_a.border = thin_border
     
-    # B~N열: 헤더 13개
     for col_pos, h_name in enumerate(target_headers, 2):
         cell = ws.cell(row=3, column=col_pos, value=h_name)
         cell.font = header_font
@@ -164,18 +185,22 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     for _, row in df_mw_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
         
-        # A열 : 순번
         c_no = ws.cell(row=current_row, column=1, value=no_counter)
         c_no.alignment = Alignment(horizontal='center', vertical='center')
         c_no.border = thin_border
         
-        # B~N열 데이터 맵핑
         for col_pos, h_name in enumerate(target_headers, 2):
             cell = ws.cell(row=current_row, column=col_pos)
             mapped_col = col_mapping.get(h_name)
             
             if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
                 val = row[mapped_col]
+                # 날짜 형식 처리 (YYYY-MM-DD만 깔끔하게 출력)
+                if isinstance(val, pd.Timestamp):
+                    val = val.strftime('%Y-%m-%d')
+                elif isinstance(val, str) and len(val) >= 10 and '00:00:00' in val:
+                    val = val.split()[0]
+                    
                 cell.value = val
                 if isinstance(val, (int, float)):
                     cell.number_format = '#,##0'
