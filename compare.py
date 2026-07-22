@@ -199,7 +199,7 @@ if "MW 보증 비교" in mode:
 
 else:
     st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
-    st.write("A파일(D열 차량번호, (I열+J열)*1.1 반올림)과 B파일(G열 차량번호, S열 합계금액 반올림)을 정밀 매칭합니다.")
+    st.write("공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
     
     col1, col2 = st.columns(2)
     with col1:
