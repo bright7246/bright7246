@@ -3,6 +3,10 @@ import pandas as pd
 import pdfplumber
 import re
 from collections import defaultdict
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+import io
 
 # 웹페이지 기본 설정
 st.set_page_config(page_title="보증금액 통합 비교 시스템", layout="wide")
@@ -122,6 +126,157 @@ def load_excel_coupon_b(uploaded_file):
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
+# ★ 쿠폰 청구 현황 엑셀 다운로드 생성 함수
+def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "쿠폰 청구 현황"
+    
+    # 월 구하기 (날짜 컬럼 탐색)
+    month_str = "6월"
+    for col in df_b_raw.columns:
+        if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구']):
+            sample_dates = df_b_raw[col].dropna().astype(str).tolist()
+            for d in sample_dates:
+                m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
+                if m:
+                    month_str = f"{int(m.group(1))}월"
+                    break
+            if month_str != "6월":
+                break
+
+    # 1. 메인 타이틀 (1행)
+    ws.merge_cells('A1:N1')
+    ws['A1'] = f"{month_str} 쿠폰 청구 현황"
+    ws['A1'].font = Font(size=22, bold=True)
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 40
+
+    # 테두리 및 스타일 정의
+    thin_border = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    header_font = Font(size=10, bold=True)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    # 2. 헤더 작성 (3행)
+    headers = list(df_b_raw.columns)
+    ws.row_dimensions[3].height = 25
+    for col_idx, h_name in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col_idx, value=str(h_name))
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    # 3. 데이터 본문 작성 (4행 ~ )
+    current_row = 4
+    for _, row in df_b_raw.iterrows():
+        ws.row_dimensions[current_row].height = 20
+        for col_idx, val in enumerate(row, 1):
+            cell = ws.cell(row=current_row, column=col_idx)
+            if pd.isna(val):
+                cell.value = ""
+            else:
+                cell.value = val
+                
+            cell.border = thin_border
+            # 숫자 우측 정렬, 문자/날짜 중앙 정렬
+            if isinstance(val, (int, float)):
+                cell.number_format = '#,##0'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+            else:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        current_row += 1
+
+    # 4. 하단 요약 작성 (이미지 동일 양식)
+    current_row += 2  # 빈 행 추가
+    
+    # 댓수 & 총 청구 금액 행
+    ws.row_dimensions[current_row].height = 30
+    
+    # 댓수 : 25 대
+    c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
+    c_lbl1.font = Font(size=14, bold=True)
+    c_lbl1.alignment = Alignment(horizontal='right', vertical='center')
+    
+    c_val1 = ws.cell(row=current_row, column=4, value=count)
+    c_val1.font = Font(size=14, bold=True)
+    c_val1.alignment = Alignment(horizontal='center', vertical='center')
+    
+    c_unit1 = ws.cell(row=current_row, column=5, value="대")
+    c_unit1.font = Font(size=14, bold=True)
+    c_unit1.alignment = Alignment(horizontal='left', vertical='center')
+
+    # 총 청구 금액 : 5,346,081 원 VAT 포함
+    c_lbl2 = ws.cell(row=current_row, column=7, value="총 청구 금액 :")
+    c_lbl2.font = Font(size=14, bold=True)
+    c_lbl2.alignment = Alignment(horizontal='right', vertical='center')
+
+    c_val2 = ws.cell(row=current_row, column=9, value=total_b)
+    c_val2.font = Font(size=14, bold=True)
+    c_val2.number_format = '#,##0'
+    c_val2.alignment = Alignment(horizontal='right', vertical='center')
+
+    c_unit2 = ws.cell(row=current_row, column=10, value="원")
+    c_unit2.font = Font(size=14, bold=True)
+    c_unit2.alignment = Alignment(horizontal='left', vertical='center')
+
+    c_vat1 = ws.cell(row=current_row, column=11, value="VAT 포함")
+    c_vat1.font = Font(size=10, bold=True)
+    c_vat1.alignment = Alignment(horizontal='left', vertical='center')
+
+    current_row += 2 # 빈 행 추가
+
+    # 차액 : -4 원 & 총 입금 금액 : 5,346,077 원 VAT 포함
+    ws.row_dimensions[current_row].height = 30
+    
+    c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
+    c_lbl3.font = Font(size=14, bold=True)
+    c_lbl3.alignment = Alignment(horizontal='right', vertical='center')
+
+    c_val3 = ws.cell(row=current_row, column=4, value=total_diff)
+    c_val3.font = Font(size=14, bold=True)
+    c_val3.number_format = '#,##0'
+    c_val3.alignment = Alignment(horizontal='center', vertical='center')
+
+    c_unit3 = ws.cell(row=current_row, column=5, value="원")
+    c_unit3.font = Font(size=14, bold=True)
+    c_unit3.alignment = Alignment(horizontal='left', vertical='center')
+
+    c_lbl4 = ws.cell(row=current_row, column=7, value="총 입금 금액 :")
+    c_lbl4.font = Font(size=14, bold=True)
+    c_lbl4.alignment = Alignment(horizontal='right', vertical='center')
+
+    c_val4 = ws.cell(row=current_row, column=9, value=total_a)
+    c_val4.font = Font(size=14, bold=True)
+    c_val4.number_format = '#,##0'
+    c_val4.alignment = Alignment(horizontal='right', vertical='center')
+
+    c_unit4 = ws.cell(row=current_row, column=10, value="원")
+    c_unit4.font = Font(size=14, bold=True)
+    c_unit4.alignment = Alignment(horizontal='left', vertical='center')
+
+    c_vat2 = ws.cell(row=current_row, column=11, value="VAT 포함")
+    c_vat2.font = Font(size=10, bold=True)
+    c_vat2.alignment = Alignment(horizontal='left', vertical='center')
+
+    # 너비 자동 조절
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 5, 14)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output, month_str
+
 
 # ────────────────────────────────────────────────────────
 # 🖥️ 화면 조건별 렌더링
@@ -195,15 +350,14 @@ if "MW 보증 비교" in mode:
             res_df = pd.DataFrame(matched_results)
             res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
             
-            # ★ 분석 요약 결과 4개 컬럼으로 구성
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             m_col1.metric("총 대조 건수", f"{len(res_df)-1} 건")
-            m_col2.metric("PDF 총 합계 금액 ( 실 수령액 )", f"{total_pdf_sum:,}원")
-            m_col3.metric("DMS 총 합계 금액 ( 청구 금액 )", f"{total_excel_sum:,}원")
+            m_col2.metric("PDF 총 합계 금액", f"{total_pdf_sum:,}원")
+            m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            st.subheader("📋 상세 대조 내역")
+            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
 
 else:
@@ -263,7 +417,6 @@ else:
                             'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
                         })
             
-            # 맨 아랫줄에 총합계 행 추가
             total_diff_sum = total_a_sum - total_b_sum
             matched_results.append({
                 '차량번호': "★ 총합계",
@@ -275,13 +428,28 @@ else:
             res_df = pd.DataFrame(matched_results)
             res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
             
-            # ★ 분석 요약 결과 4개 컬럼으로 구성
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            m_col1.metric("총 대조 건수", f"{len(res_df)-1} 건")
-            m_col2.metric("공지 쿠폰 총 합계 ( 입금 금액 )", f"{total_a_sum:,}원")
-            m_col3.metric("DMS 쿠폰 총 합계 ( 청구 금액 )", f"{total_b_sum:,}원")
+            total_count = len(res_df) - 1
+            m_col1.metric("총 대조 건수", f"{total_count} 건")
+            m_col2.metric("공지 쿠폰 총 합계", f"{total_a_sum:,}원")
+            m_col3.metric("DMS 쿠폰 총 합계", f"{total_b_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            st.subheader("📋 상세 대조 내역")
+            # ★ 엑셀 보고서 다운로드 기능 추가
+            df_b_raw = pd.read_excel(file_b)
+            excel_data, month_name = create_coupon_excel_report(
+                df_b_raw, total_count, total_b_sum, total_a_sum, total_diff_sum
+            )
+            
+            st.write("")
+            st.download_button(
+                label=f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드",
+                data=excel_data,
+                file_name=f"{month_name}_쿠폰_청구_현황_보고서.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            
+            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
