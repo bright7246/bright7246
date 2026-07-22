@@ -203,7 +203,7 @@ if "MW 보증 비교" in mode:
             m_col3.metric("DMS 총 합계 금액 ( 청구 금액 )", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
+            st.subheader("📋 상세 대조 내역")
             st.dataframe(res_df, use_container_width=True)
 
 else:
@@ -283,5 +283,5 @@ else:
             m_col3.metric("DMS 쿠폰 총 합계 ( 청구 금액 )", f"{total_b_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
+            st.subheader("📋 상세 대조 내역")
             st.dataframe(res_df, use_container_width=True)
