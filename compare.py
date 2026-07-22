@@ -234,17 +234,17 @@ else:
                     if a_amt is not None and b_amt is not None:
                         diff = a_amt - b_amt
                         matched_results.append({
-                            '차량번호': car_label, 'A파일 계산금액 (실 수령액)': f"{a_amt:,}원", 'B파일 합계금액 (반올림)': f"{b_amt:,}원",
+                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원", 'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
                             '차액': f"{diff:,}원" if diff != 0 else "0원", '비고': "정확히 일치" if diff == 0 else f"불일치 ({diff:+,}원)"
                         })
                     elif a_amt is not None:
                         matched_results.append({
-                            '차량번호': car_label, 'A파일 계산금액 (실 수령액)': f"{a_amt:,}원", 'B파일 합계금액 (반올림)': "-",
+                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원", 'DMS 쿠폰파일 ( 청구 금액 ) ': "-",
                             '차액': f"{a_amt:,}원", '비고': "★ B파일에 일치하는 항목 없음"
                         })
                     elif b_amt is not None:
                         matched_results.append({
-                            '차량번호': car_label, 'A파일 계산금액 (실 수령액)': "-", 'B파일 합계금액 (반올림)': f"{b_amt:,}원",
+                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': "-", 'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
                             '차액': f"{-b_amt:,}원", '비고': "★ A파일에 일치하는 항목 없음"
                         })
             
@@ -252,8 +252,8 @@ else:
             total_diff_sum = total_a_sum - total_b_sum
             matched_results.append({
                 '차량번호': "★ 총합계",
-                'A파일 계산금액 (실 수령액)': f"{total_a_sum:,}원",
-                'B파일 합계금액 (반올림)': f"{total_b_sum:,}원",
+                '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_a_sum:,}원",
+                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원",
                 '차액': f"{total_diff_sum:,}원",
                 '비고': "전체 합계 일치" if total_diff_sum == 0 else f"전체 차액 {total_diff_sum:+,}원"
             })
