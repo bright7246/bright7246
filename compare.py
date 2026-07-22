@@ -89,14 +89,14 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수
+# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (열 위치 완벽 보정)
 def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
     
-    # 2번 엑셀의 지정 열 인덱스 (B:1, C:2, K:10, X:23, Y:24, Z:25, AA:26, AB:27, AC:28, AD:29, AE:30, AF:31, AG:32)
-    target_indices = [1, 2, 10, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+    # 정확한 엑셀 0-index 매핑: B(1), C(2), K(10), X(23) ~ AG(32)
+    target_indices = [1, 2, 10] + list(range(23, 33))
     
     # 월 구하기 (날짜 검색)
     month_str = "6월"
@@ -127,7 +127,7 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 2. 헤더 작성 (3행) - A열(No.) + 2번 파일 지정 열의 원본 이름
+    # 2. 헤더 작성 (3행)
     ws.row_dimensions[3].height = 25
     
     # A열 헤더
@@ -173,7 +173,7 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
         current_row += 1
         no_counter += 1
 
-    # 4. 하단 요약 행 작성 (이미지와 100% 동일 매핑)
+    # 4. 하단 요약 행 작성
     ws.row_dimensions[current_row].height = 25
     
     # A, B열 합쳐서 '합계'
@@ -516,7 +516,6 @@ if "MW 보증 비교" in mode:
             m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            # ★ MW WARRANTY 수령내역 엑셀 다운로드 버튼 추가
             df_mw_raw = pd.read_excel(excel_file)
             mw_excel_data, mw_month_name = create_mw_excel_report(
                 df_mw_raw, mw_count, total_pdf_sum, total_excel_sum, total_diff_sum
