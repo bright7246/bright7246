@@ -126,17 +126,17 @@ def load_excel_coupon_b(uploaded_file):
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
-# ★ 쿠폰 청구 현황 엑셀 다운로드 생성 함수
-def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
+# ★ 쿠폰 청구 현황 엑셀 다운로드 생성 함수 (1번 파일 기준)
+def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "쿠폰 청구 현황"
     
-    # 월 구하기 (날짜 컬럼 탐색)
+    # 월 구하기 (1번 파일 날짜 컬럼 탐색)
     month_str = "6월"
-    for col in df_b_raw.columns:
-        if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구']):
-            sample_dates = df_b_raw[col].dropna().astype(str).tolist()
+    for col in df_a_raw.columns:
+        if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구', '입고', '출고']):
+            sample_dates = df_a_raw[col].dropna().astype(str).tolist()
             for d in sample_dates:
                 m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
                 if m:
@@ -162,8 +162,8 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 2. 헤더 작성 (3행)
-    headers = list(df_b_raw.columns)
+    # 2. 헤더 작성 (3행) - 1번 파일 헤더 기준
+    headers = list(df_a_raw.columns)
     ws.row_dimensions[3].height = 25
     for col_idx, h_name in enumerate(headers, 1):
         cell = ws.cell(row=3, column=col_idx, value=str(h_name))
@@ -171,9 +171,9 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
         cell.alignment = header_align
         cell.border = thin_border
 
-    # 3. 데이터 본문 작성 (4행 ~ )
+    # 3. 데이터 본문 작성 (4행 ~ ) - 1번 파일 데이터 기준
     current_row = 4
-    for _, row in df_b_raw.iterrows():
+    for _, row in df_a_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
         for col_idx, val in enumerate(row, 1):
             cell = ws.cell(row=current_row, column=col_idx)
@@ -183,7 +183,6 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
                 cell.value = val
                 
             cell.border = thin_border
-            # 숫자 우측 정렬, 문자/날짜 중앙 정렬
             if isinstance(val, (int, float)):
                 cell.number_format = '#,##0'
                 cell.alignment = Alignment(horizontal='right', vertical='center')
@@ -191,13 +190,12 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
                 cell.alignment = Alignment(horizontal='center', vertical='center')
         current_row += 1
 
-    # 4. 하단 요약 작성 (이미지 동일 양식)
-    current_row += 2  # 빈 행 추가
+    # 4. 하단 요약 작성 (이미지와 동일 양식)
+    current_row += 2  # 빈 행
     
     # 댓수 & 총 청구 금액 행
     ws.row_dimensions[current_row].height = 30
     
-    # 댓수 : 25 대
     c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
     c_lbl1.font = Font(size=14, bold=True)
     c_lbl1.alignment = Alignment(horizontal='right', vertical='center')
@@ -210,7 +208,6 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
     c_unit1.font = Font(size=14, bold=True)
     c_unit1.alignment = Alignment(horizontal='left', vertical='center')
 
-    # 총 청구 금액 : 5,346,081 원 VAT 포함
     c_lbl2 = ws.cell(row=current_row, column=7, value="총 청구 금액 :")
     c_lbl2.font = Font(size=14, bold=True)
     c_lbl2.alignment = Alignment(horizontal='right', vertical='center')
@@ -228,9 +225,9 @@ def create_coupon_excel_report(df_b_raw, count, total_b, total_a, total_diff):
     c_vat1.font = Font(size=10, bold=True)
     c_vat1.alignment = Alignment(horizontal='left', vertical='center')
 
-    current_row += 2 # 빈 행 추가
+    current_row += 2 # 빈 행
 
-    # 차액 : -4 원 & 총 입금 금액 : 5,346,077 원 VAT 포함
+    # 차액 & 총 입금 금액 행
     ws.row_dimensions[current_row].height = 30
     
     c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
@@ -436,10 +433,10 @@ else:
             m_col3.metric("DMS 쿠폰 총 합계", f"{total_b_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            # ★ 엑셀 보고서 다운로드 기능 추가
-            df_b_raw = pd.read_excel(file_b)
+            # ★ 1번 파일(file_a)을 기준으로 엑셀 보고서 생성
+            df_a_raw = pd.read_excel(file_a)
             excel_data, month_name = create_coupon_excel_report(
-                df_b_raw, total_count, total_b_sum, total_a_sum, total_diff_sum
+                df_a_raw, total_count, total_b_sum, total_a_sum, total_diff_sum
             )
             
             st.write("")
