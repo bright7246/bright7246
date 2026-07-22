@@ -6,6 +6,7 @@ from collections import defaultdict
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+io_import = True
 import io
 
 # 웹페이지 기본 설정
@@ -42,7 +43,7 @@ def round_half_up(value):
 # ────────────────────────────────────────────────────────
 def load_excel_mw(uploaded_file):
     df = pd.read_excel(uploaded_file)
-    df.columns = df.columns.str.strip().str.upper()
+    df.columns = df.columns.astype(str).str.strip().str.upper()
     col_claim_no = 'CLAIM NO'
     
     target_cols = ['공임청구액', '공임청구부가세', '부품청구액', '부품청구부가세']
@@ -89,16 +90,30 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (열 위치 완벽 보정)
+# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (이름으로 매핑)
 def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
     
-    # 정확한 엑셀 0-index 매핑: B(1), C(2), K(10), X(23) ~ AG(32)
-    target_indices = [1, 2, 10] + list(range(23, 33))
+    # 2번 파일에서 찾고자 하는 열 이름 순서
+    target_headers = [
+        "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
+        "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
+        "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세"
+    ]
     
-    # 월 구하기 (날짜 검색)
+    # 원본 DF의 열 이름과 매핑
+    col_mapping = {}
+    for th in target_headers:
+        found_col = None
+        for col in df_mw_raw.columns:
+            if th.replace(" ", "").upper() in str(col).replace(" ", "").upper():
+                found_col = col
+                break
+        col_mapping[th] = found_col
+
+    # 월 구하기
     month_str = "6월"
     for col in df_mw_raw.columns:
         if any(keyword in str(col).upper() for keyword in ['일자', 'DATE', '완결', '청구']):
@@ -130,16 +145,15 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     # 2. 헤더 작성 (3행)
     ws.row_dimensions[3].height = 25
     
-    # A열 헤더
+    # A열: No.
     cell_a = ws.cell(row=3, column=1, value="No.")
     cell_a.font = header_font
     cell_a.alignment = header_align
     cell_a.border = thin_border
     
-    # B~N열 헤더
-    for col_pos, idx in enumerate(target_indices, 2):
-        cell_name = df_mw_raw.columns[idx] if idx < len(df_mw_raw.columns) else f"Col_{idx}"
-        cell = ws.cell(row=3, column=col_pos, value=str(cell_name))
+    # B~N열: 헤더 13개
+    for col_pos, h_name in enumerate(target_headers, 2):
+        cell = ws.cell(row=3, column=col_pos, value=h_name)
         cell.font = header_font
         cell.alignment = header_align
         cell.border = thin_border
@@ -150,33 +164,36 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     for _, row in df_mw_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
         
-        # A열 : No. 순번
+        # A열 : 순번
         c_no = ws.cell(row=current_row, column=1, value=no_counter)
         c_no.alignment = Alignment(horizontal='center', vertical='center')
         c_no.border = thin_border
         
-        # B~N열 데이터
-        for col_pos, idx in enumerate(target_indices, 2):
+        # B~N열 데이터 맵핑
+        for col_pos, h_name in enumerate(target_headers, 2):
             cell = ws.cell(row=current_row, column=col_pos)
-            val = row.iloc[idx] if idx < len(row) else ""
-            if pd.isna(val):
-                cell.value = ""
-            else:
+            mapped_col = col_mapping.get(h_name)
+            
+            if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
+                val = row[mapped_col]
                 cell.value = val
+                if isinstance(val, (int, float)):
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal='right', vertical='center')
+                else:
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+            else:
+                cell.value = ""
+                cell.alignment = Alignment(horizontal='center', vertical='center')
                 
             cell.border = thin_border
-            if isinstance(val, (int, float)):
-                cell.number_format = '#,##0'
-                cell.alignment = Alignment(horizontal='right', vertical='center')
-            else:
-                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
         current_row += 1
         no_counter += 1
 
     # 4. 하단 요약 행 작성
     ws.row_dimensions[current_row].height = 25
     
-    # A, B열 합쳐서 '합계'
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
     c_sum = ws.cell(row=current_row, column=1, value="합계")
     c_sum.font = Font(bold=True)
@@ -184,62 +201,52 @@ def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff)
     ws.cell(row=current_row, column=1).border = thin_border
     ws.cell(row=current_row, column=2).border = thin_border
     
-    # C열 우측 정렬 '댓수 :'
     c_c = ws.cell(row=current_row, column=3, value="댓수 :")
     c_c.font = Font(bold=True)
     c_c.alignment = Alignment(horizontal='right', vertical='center')
     c_c.border = thin_border
     
-    # D열 가운데 정렬 카운트
     c_d = ws.cell(row=current_row, column=4, value=count)
     c_d.font = Font(bold=True)
     c_d.alignment = Alignment(horizontal='center', vertical='center')
     c_d.border = thin_border
     
-    # E, F열 빈 테두리
     ws.cell(row=current_row, column=5).border = thin_border
     ws.cell(row=current_row, column=6).border = thin_border
     
-    # G열 가운데 정렬 '총 실 수령액 :'
     c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
     c_g.font = Font(bold=True)
     c_g.alignment = Alignment(horizontal='center', vertical='center')
     c_g.border = thin_border
     
-    # H열 우측 정렬 PDF 금액 합계
     c_h = ws.cell(row=current_row, column=8, value=total_pdf)
     c_h.font = Font(bold=True)
     c_h.number_format = '#,##0'
     c_h.alignment = Alignment(horizontal='right', vertical='center')
     c_h.border = thin_border
     
-    # I열 가운데 정렬 '총 청구 금액 :'
     c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
     c_i.font = Font(bold=True)
     c_i.alignment = Alignment(horizontal='center', vertical='center')
     c_i.border = thin_border
     
-    # J열 우측 정렬 엑셀 내 금액 합계
     c_j = ws.cell(row=current_row, column=10, value=total_excel)
     c_j.font = Font(bold=True)
     c_j.number_format = '#,##0'
     c_j.alignment = Alignment(horizontal='right', vertical='center')
     c_j.border = thin_border
     
-    # K열 가운데 정렬 '총 차액 :'
     c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
     c_k.font = Font(bold=True)
     c_k.alignment = Alignment(horizontal='center', vertical='center')
     c_k.border = thin_border
     
-    # L열 우측 정렬 차액
     c_l = ws.cell(row=current_row, column=12, value=total_diff)
     c_l.font = Font(bold=True)
     c_l.number_format = '#,##0'
     c_l.alignment = Alignment(horizontal='right', vertical='center')
     c_l.border = thin_border
     
-    # M, N열 합쳐서 '*부가세포함'
     ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
     c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
     c_mn.font = Font(bold=True)
