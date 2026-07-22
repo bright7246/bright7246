@@ -89,6 +89,179 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
+# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수
+def create_mw_excel_report(df_mw_raw, count, total_pdf, total_excel, total_diff):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "WARRANTY 수령내역"
+    
+    # 2번 엑셀의 지정 열 인덱스 (B:1, C:2, K:10, X:23, Y:24, Z:25, AA:26, AB:27, AC:28, AD:29, AE:30, AF:31, AG:32)
+    target_indices = [1, 2, 10, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+    
+    # 월 구하기 (날짜 검색)
+    month_str = "6월"
+    for col in df_mw_raw.columns:
+        if any(keyword in str(col).upper() for keyword in ['일자', 'DATE', '완결', '청구']):
+            sample_dates = df_mw_raw[col].dropna().astype(str).tolist()
+            for d in sample_dates:
+                m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
+                if m:
+                    month_str = f"{int(m.group(1))}월"
+                    break
+            if month_str != "6월":
+                break
+
+    # 1. 메인 타이틀 (1행)
+    ws.merge_cells('A1:N1')
+    ws['A1'] = f"{month_str} WARRANTY 수 령 내 역"
+    ws['A1'].font = Font(size=22, bold=True)
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 40
+
+    thin_border = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    header_font = Font(size=10, bold=True)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    # 2. 헤더 작성 (3행) - A열(No.) + 2번 파일 지정 열의 원본 이름
+    ws.row_dimensions[3].height = 25
+    
+    # A열 헤더
+    cell_a = ws.cell(row=3, column=1, value="No.")
+    cell_a.font = header_font
+    cell_a.alignment = header_align
+    cell_a.border = thin_border
+    
+    # B~N열 헤더
+    for col_pos, idx in enumerate(target_indices, 2):
+        cell_name = df_mw_raw.columns[idx] if idx < len(df_mw_raw.columns) else f"Col_{idx}"
+        cell = ws.cell(row=3, column=col_pos, value=str(cell_name))
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    # 3. 데이터 본문 작성 (4행 ~ )
+    current_row = 4
+    no_counter = 1
+    for _, row in df_mw_raw.iterrows():
+        ws.row_dimensions[current_row].height = 20
+        
+        # A열 : No. 순번
+        c_no = ws.cell(row=current_row, column=1, value=no_counter)
+        c_no.alignment = Alignment(horizontal='center', vertical='center')
+        c_no.border = thin_border
+        
+        # B~N열 데이터
+        for col_pos, idx in enumerate(target_indices, 2):
+            cell = ws.cell(row=current_row, column=col_pos)
+            val = row.iloc[idx] if idx < len(row) else ""
+            if pd.isna(val):
+                cell.value = ""
+            else:
+                cell.value = val
+                
+            cell.border = thin_border
+            if isinstance(val, (int, float)):
+                cell.number_format = '#,##0'
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+            else:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        current_row += 1
+        no_counter += 1
+
+    # 4. 하단 요약 행 작성 (이미지와 100% 동일 매핑)
+    ws.row_dimensions[current_row].height = 25
+    
+    # A, B열 합쳐서 '합계'
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+    c_sum = ws.cell(row=current_row, column=1, value="합계")
+    c_sum.font = Font(bold=True)
+    c_sum.alignment = Alignment(horizontal='center', vertical='center')
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=2).border = thin_border
+    
+    # C열 우측 정렬 '댓수 :'
+    c_c = ws.cell(row=current_row, column=3, value="댓수 :")
+    c_c.font = Font(bold=True)
+    c_c.alignment = Alignment(horizontal='right', vertical='center')
+    c_c.border = thin_border
+    
+    # D열 가운데 정렬 카운트
+    c_d = ws.cell(row=current_row, column=4, value=count)
+    c_d.font = Font(bold=True)
+    c_d.alignment = Alignment(horizontal='center', vertical='center')
+    c_d.border = thin_border
+    
+    # E, F열 빈 테두리
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=6).border = thin_border
+    
+    # G열 가운데 정렬 '총 실 수령액 :'
+    c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
+    c_g.font = Font(bold=True)
+    c_g.alignment = Alignment(horizontal='center', vertical='center')
+    c_g.border = thin_border
+    
+    # H열 우측 정렬 PDF 금액 합계
+    c_h = ws.cell(row=current_row, column=8, value=total_pdf)
+    c_h.font = Font(bold=True)
+    c_h.number_format = '#,##0'
+    c_h.alignment = Alignment(horizontal='right', vertical='center')
+    c_h.border = thin_border
+    
+    # I열 가운데 정렬 '총 청구 금액 :'
+    c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
+    c_i.font = Font(bold=True)
+    c_i.alignment = Alignment(horizontal='center', vertical='center')
+    c_i.border = thin_border
+    
+    # J열 우측 정렬 엑셀 내 금액 합계
+    c_j = ws.cell(row=current_row, column=10, value=total_excel)
+    c_j.font = Font(bold=True)
+    c_j.number_format = '#,##0'
+    c_j.alignment = Alignment(horizontal='right', vertical='center')
+    c_j.border = thin_border
+    
+    # K열 가운데 정렬 '총 차액 :'
+    c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
+    c_k.font = Font(bold=True)
+    c_k.alignment = Alignment(horizontal='center', vertical='center')
+    c_k.border = thin_border
+    
+    # L열 우측 정렬 차액
+    c_l = ws.cell(row=current_row, column=12, value=total_diff)
+    c_l.font = Font(bold=True)
+    c_l.number_format = '#,##0'
+    c_l.alignment = Alignment(horizontal='right', vertical='center')
+    c_l.border = thin_border
+    
+    # M, N열 합쳐서 '*부가세포함'
+    ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
+    c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
+    c_mn.font = Font(bold=True)
+    c_mn.alignment = Alignment(horizontal='center', vertical='center')
+    ws.cell(row=current_row, column=13).border = thin_border
+    ws.cell(row=current_row, column=14).border = thin_border
+
+    # 너비 자동 조절
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output, month_str
+
+
 # ────────────────────────────────────────────────────────
 # 2️⃣ [모드 2] 쿠폰 보증 비교 관련 로직
 # ────────────────────────────────────────────────────────
@@ -126,13 +299,11 @@ def load_excel_coupon_b(uploaded_file):
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
-# ★ 쿠폰 청구 현황 엑셀 다운로드 생성 함수 (1번 파일 기준)
 def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "쿠폰 청구 현황"
     
-    # 월 구하기 (1번 파일 날짜 컬럼 탐색)
     month_str = "6월"
     for col in df_a_raw.columns:
         if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구', '입고', '출고']):
@@ -145,14 +316,12 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
             if month_str != "6월":
                 break
 
-    # 1. 메인 타이틀 (1행)
     ws.merge_cells('A1:N1')
     ws['A1'] = f"{month_str} 쿠폰 청구 현황"
     ws['A1'].font = Font(size=22, bold=True)
     ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 40
 
-    # 테두리 및 스타일 정의
     thin_border = Border(
         left=Side(style='thin', color='000000'),
         right=Side(style='thin', color='000000'),
@@ -162,7 +331,6 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 2. 헤더 작성 (3행) - 1번 파일 헤더 기준
     headers = list(df_a_raw.columns)
     ws.row_dimensions[3].height = 25
     for col_idx, h_name in enumerate(headers, 1):
@@ -171,7 +339,6 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
         cell.alignment = header_align
         cell.border = thin_border
 
-    # 3. 데이터 본문 작성 (4행 ~ ) - 1번 파일 데이터 기준
     current_row = 4
     for _, row in df_a_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
@@ -190,10 +357,7 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
                 cell.alignment = Alignment(horizontal='center', vertical='center')
         current_row += 1
 
-    # 4. 하단 요약 작성 (이미지와 동일 양식)
-    current_row += 2  # 빈 행
-    
-    # 댓수 & 총 청구 금액 행
+    current_row += 2
     ws.row_dimensions[current_row].height = 30
     
     c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
@@ -225,9 +389,8 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
     c_vat1.font = Font(size=10, bold=True)
     c_vat1.alignment = Alignment(horizontal='left', vertical='center')
 
-    current_row += 2 # 빈 행
+    current_row += 2
 
-    # 차액 & 총 입금 금액 행
     ws.row_dimensions[current_row].height = 30
     
     c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
@@ -260,7 +423,6 @@ def create_coupon_excel_report(df_a_raw, count, total_b, total_a, total_diff):
     c_vat2.font = Font(size=10, bold=True)
     c_vat2.alignment = Alignment(horizontal='left', vertical='center')
 
-    # 너비 자동 조절
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
@@ -335,7 +497,6 @@ if "MW 보증 비교" in mode:
                             'DMS 금액 (청구 금액)': f"{e_amt:,}원"
                         })
             
-            # 맨 아랫줄에 총합계 행 추가
             total_diff_sum = total_pdf_sum - total_excel_sum
             matched_results.append({
                 '주문번호': "★ 총합계",
@@ -349,10 +510,26 @@ if "MW 보증 비교" in mode:
             
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            m_col1.metric("총 대조 건수", f"{len(res_df)-1} 건")
+            mw_count = len(res_df) - 1
+            m_col1.metric("총 대조 건수", f"{mw_count} 건")
             m_col2.metric("PDF 총 합계 금액", f"{total_pdf_sum:,}원")
             m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
+            
+            # ★ MW WARRANTY 수령내역 엑셀 다운로드 버튼 추가
+            df_mw_raw = pd.read_excel(excel_file)
+            mw_excel_data, mw_month_name = create_mw_excel_report(
+                df_mw_raw, mw_count, total_pdf_sum, total_excel_sum, total_diff_sum
+            )
+            
+            st.write("")
+            st.download_button(
+                label=f"📥 [{mw_month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드",
+                data=mw_excel_data,
+                file_name=f"{mw_month_name}_WARRANTY_수령내역_보고서.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
             
             st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
@@ -433,7 +610,6 @@ else:
             m_col3.metric("DMS 쿠폰 총 합계", f"{total_b_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            # ★ 1번 파일(file_a)을 기준으로 엑셀 보고서 생성
             df_a_raw = pd.read_excel(file_a)
             excel_data, month_name = create_coupon_excel_report(
                 df_a_raw, total_count, total_b_sum, total_a_sum, total_diff_sum
