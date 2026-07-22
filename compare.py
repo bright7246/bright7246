@@ -203,9 +203,9 @@ else:
     
     col1, col2 = st.columns(2)
     with col1:
-        file_a = st.file_uploader("1. A 엑셀 파일을 선택하세요 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
+        file_a = st.file_uploader("1. 공지된 쿠폰 파일 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
     with col2:
-        file_b = st.file_uploader("2. B 엑셀 파일을 선택하세요 (G, S행 포함)", type=["xlsx"], key="cp_b")
+        file_b = st.file_uploader("2. DMS 쿠폰파일 (출력물 그대로사용)", type=["xlsx"], key="cp_b")
         
     if file_a and file_b:
         with st.spinner("쿠폰 보증 엑셀 간 교차 대조 중..."):
