@@ -189,6 +189,9 @@ if "MW 보증 비교" in mode:
             
             res_df = pd.DataFrame(matched_results)
             
+            # ★ 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
+            res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
+            
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2 = st.columns(2)
             m_col1.metric("총 대조 건수", f"{len(res_df)-1} 건")
@@ -259,6 +262,9 @@ else:
             })
             
             res_df = pd.DataFrame(matched_results)
+            
+            # ★ 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
+            res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
             
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2 = st.columns(2)
