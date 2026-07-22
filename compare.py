@@ -163,33 +163,38 @@ if "MW 보증 비교" in mode:
                     if p_amt is not None and e_amt is not None:
                         diff = p_amt - e_amt
                         matched_results.append({
-                            '주문번호': order_label, 'PDF 금액 (실 수령액)': f"{p_amt:,}원", 'DMS 금액 (청구 금액)': f"{e_amt:,}원",
-                            '차액': f"{diff:,}원" if diff != 0 else "0원", '비고': "정확히 일치" if diff == 0 else f"불일치 ({diff:+,}원)"
+                            '주문번호': order_label,
+                            '차액': f"{diff:,}원" if diff != 0 else "0원",
+                            'PDF 금액 (실 수령액)': f"{p_amt:,}원",
+                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
                         })
                     elif p_amt is not None:
                         matched_results.append({
-                            '주문번호': order_label, 'PDF 금액 (실 수령액)': f"{p_amt:,}원", 'DMS 금액 (청구 금액)': "-",
-                            '차액': f"{p_amt:,}원", '비고': "★ 엑셀에 일치하는 항목 없음"
+                            '주문번호': order_label,
+                            '차액': f"{p_amt:,}원",
+                            'PDF 금액 (실 수령액)': f"{p_amt:,}원",
+                            'DMS 금액 (청구 금액)': "-"
                         })
                     elif e_amt is not None:
                         matched_results.append({
-                            '주문번호': order_label, 'PDF 금액 (실 수령액)': "-", 'DMS 금액 (청구 금액)': f"{e_amt:,}원",
-                            '차액': f"{-e_amt:,}원", '비고': "★ PDF에 일치하는 항목 없음"
+                            '주문번호': order_label,
+                            '차액': f"{-e_amt:,}원",
+                            'PDF 금액 (실 수령액)': "-",
+                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
                         })
             
-            # ★ 맨 아랫줄에 총합계 행 추가
+            # 맨 아랫줄에 총합계 행 추가
             total_diff_sum = total_pdf_sum - total_excel_sum
             matched_results.append({
                 '주문번호': "★ 총합계",
-                'PDF 금액 (실 수령액)': f"{total_pdf_sum:,}원",
-                'DMS 금액 (청구 금액)': f"{total_excel_sum:,}원",
                 '차액': f"{total_diff_sum:,}원",
-                '비고': "전체 합계 일치" if total_diff_sum == 0 else f"전체 차액 {total_diff_sum:+,}원"
+                'PDF 금액 (실 수령액)': f"{total_pdf_sum:,}원",
+                'DMS 금액 (청구 금액)': f"{total_excel_sum:,}원"
             })
             
             res_df = pd.DataFrame(matched_results)
             
-            # ★ 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
+            # 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
             res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
             
             st.subheader("📌 분석 요약 결과")
@@ -237,33 +242,38 @@ else:
                     if a_amt is not None and b_amt is not None:
                         diff = a_amt - b_amt
                         matched_results.append({
-                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원", 'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
-                            '차액': f"{diff:,}원" if diff != 0 else "0원", '비고': "정확히 일치" if diff == 0 else f"불일치 ({diff:+,}원)"
+                            '차량번호': car_label,
+                            '차액': f"{diff:,}원" if diff != 0 else "0원",
+                            '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
                         })
                     elif a_amt is not None:
                         matched_results.append({
-                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원", 'DMS 쿠폰파일 ( 청구 금액 ) ': "-",
-                            '차액': f"{a_amt:,}원", '비고': "★ B파일에 일치하는 항목 없음"
+                            '차량번호': car_label,
+                            '차액': f"{a_amt:,}원",
+                            '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': "-"
                         })
                     elif b_amt is not None:
                         matched_results.append({
-                            '차량번호': car_label, '공지된 쿠폰 금액 ( 입금 금액 )': "-", 'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
-                            '차액': f"{-b_amt:,}원", '비고': "★ A파일에 일치하는 항목 없음"
+                            '차량번호': car_label,
+                            '차액': f"{-b_amt:,}원",
+                            '공지된 쿠폰 금액 ( 입금 금액 )': "-",
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
                         })
             
-            # ★ 맨 아랫줄에 총합계 행 추가
+            # 맨 아랫줄에 총합계 행 추가
             total_diff_sum = total_a_sum - total_b_sum
             matched_results.append({
                 '차량번호': "★ 총합계",
-                '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_a_sum:,}원",
-                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원",
                 '차액': f"{total_diff_sum:,}원",
-                '비고': "전체 합계 일치" if total_diff_sum == 0 else f"전체 차액 {total_diff_sum:+,}원"
+                '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_a_sum:,}원",
+                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원"
             })
             
             res_df = pd.DataFrame(matched_results)
             
-            # ★ 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
+            # 1부터 시작하는 인덱스로 설정하고, 맨 마지막(총합계)은 번호 제거
             res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
             
             st.subheader("📌 분석 요약 결과")
