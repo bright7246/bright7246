@@ -199,8 +199,8 @@ if "MW 보증 비교" in mode:
             st.subheader("📌 분석 요약 결과")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             m_col1.metric("총 대조 건수", f"{len(res_df)-1} 건")
-            m_col2.metric("PDF 총 합계 금액", f"{total_pdf_sum:,}원")
-            m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
+            m_col2.metric("PDF 총 합계 금액 ( 실 수령액 )", f"{total_pdf_sum:,}원")
+            m_col3.metric("DMS 총 합계 금액 ( 청구 금액 )", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
             st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
