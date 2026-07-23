@@ -103,7 +103,7 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (인쇄 반복 제목 설정 추가)
+# MW WARRANTY 수령내역 엑셀 다운로드 생성 함수
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
     
@@ -111,7 +111,7 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
     
-    # ★ 핵심 추가: 인쇄 시 1행~3행(타이틀 및 표 헤더)이 모든 페이지 상단에 반복되도록 설정
+    # 인쇄 시 1행~3행(타이틀 및 표 헤더)이 모든 페이지 상단에 반복 출력
     ws.print_title_rows = '1:3'
     
     target_headers = [
@@ -340,13 +340,14 @@ def load_excel_coupon_b(uploaded_file):
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
+# 쿠폰 청구 현황 엑셀 다운로드 생성 함수
 def create_coupon_excel_report(uploaded_file_a, count, total_b, total_a, total_diff):
     df_a_raw = read_excel_smart_header(uploaded_file_a)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "쿠폰 청구 현황"
     
-    # 인쇄 반복 설정 (쿠폰 리포트에도 적용)
+    # ★ 쿠폰 보증 보고서에도 동일하게 인쇄 헤더 반복 설정 적용 (1~3행)
     ws.print_title_rows = '1:3'
     
     month_str = "6월"
