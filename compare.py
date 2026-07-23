@@ -103,13 +103,16 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (이미지 양식 100% 반영)
+# ★ MW WARRANTY 수령내역 엑셀 다운로드 생성 함수 (인쇄 반복 제목 설정 추가)
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
     
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
+    
+    # ★ 핵심 추가: 인쇄 시 1행~3행(타이틀 및 표 헤더)이 모든 페이지 상단에 반복되도록 설정
+    ws.print_title_rows = '1:3'
     
     target_headers = [
         "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
@@ -227,10 +230,9 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         current_row += 1
         no_counter += 1
 
-    # 4. 하단 요약 행 작성 (image_284bc3.png 양식)
+    # 4. 하단 요약 행 작성
     ws.row_dimensions[current_row].height = 25
     
-    # A~B열 병합: '합계'
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
     c_sum = ws.cell(row=current_row, column=1, value="합계")
     c_sum.font = Font(bold=True)
@@ -238,7 +240,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws.cell(row=current_row, column=1).border = thin_border
     ws.cell(row=current_row, column=2).border = thin_border
     
-    # C~D열 병합: '댓수 : X'
     ws.merge_cells(start_row=current_row, start_column=3, end_row=current_row, end_column=4)
     c_cnt = ws.cell(row=current_row, column=3, value=f"댓수 : {count}")
     c_cnt.font = Font(bold=True)
@@ -249,46 +250,39 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws.cell(row=current_row, column=5).border = thin_border
     ws.cell(row=current_row, column=6).border = thin_border
     
-    # G열: '총 실 수령액 :'
     c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
     c_g.font = Font(bold=True)
     c_g.alignment = Alignment(horizontal='center', vertical='center')
     c_g.border = thin_border
     
-    # H열: PDF 수령 금액 합계
     c_h = ws.cell(row=current_row, column=8, value=total_pdf)
     c_h.font = Font(bold=True)
     c_h.number_format = '#,##0'
     c_h.alignment = Alignment(horizontal='right', vertical='center')
     c_h.border = thin_border
     
-    # I열: '총 청구 금액 :'
     c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
     c_i.font = Font(bold=True)
     c_i.alignment = Alignment(horizontal='center', vertical='center')
     c_i.border = thin_border
     
-    # J열: 엑셀 청구 금액 합계
     c_j = ws.cell(row=current_row, column=10, value=total_excel)
     c_j.font = Font(bold=True)
     c_j.number_format = '#,##0'
     c_j.alignment = Alignment(horizontal='right', vertical='center')
     c_j.border = thin_border
     
-    # K열: '총 차액 :'
     c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
     c_k.font = Font(bold=True)
     c_k.alignment = Alignment(horizontal='center', vertical='center')
     c_k.border = thin_border
     
-    # L열: 최종 차액
     c_l = ws.cell(row=current_row, column=12, value=total_diff)
     c_l.font = Font(bold=True)
     c_l.number_format = '#,##0'
     c_l.alignment = Alignment(horizontal='right', vertical='center')
     c_l.border = thin_border
     
-    # M~N열 병합: '*부가세포함'
     ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
     c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
     c_mn.font = Font(bold=True)
@@ -351,6 +345,9 @@ def create_coupon_excel_report(uploaded_file_a, count, total_b, total_a, total_d
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "쿠폰 청구 현황"
+    
+    # 인쇄 반복 설정 (쿠폰 리포트에도 적용)
+    ws.print_title_rows = '1:3'
     
     month_str = "6월"
     for col in df_a_raw.columns:
@@ -564,7 +561,6 @@ if "MW 보증 비교" in mode:
             m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
-            # ★ MW WARRANTY 수령내역 다운로드 버튼 연결
             mw_excel_data, mw_month_name = create_mw_excel_report(
                 excel_file, mw_count, total_pdf_sum, total_excel_sum, total_diff_sum
             )
