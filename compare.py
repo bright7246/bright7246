@@ -8,22 +8,15 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
-# 웹페이지 기본 설정
 st.set_page_config(page_title="보증금액 통합 비교 시스템", layout="wide")
 st.title("📊 보증금액 교차 비교 시스템")
 
-# ────────────────────────────────────────────────────────
-# 🗂️ 사이드바 / 상단 메뉴를 통한 작업 선택 UI
-# ────────────────────────────────────────────────────────
 st.sidebar.header("⚙️ 작업 모드 선택")
 mode = st.sidebar.radio(
     "실행할 분석 작업을 선택하세요:",
     ("📋 MW 보증 비교 (PDF vs 엑셀)", "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
 )
 
-# ────────────────────────────────────────────────────────
-# 🛠️ [공통 함수] 엑셀 상단 타이틀/빈줄을 건너뛰고 진짜 헤더 행 찾아 읽기
-# ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
     df_raw = pd.read_excel(uploaded_file, header=None)
@@ -103,15 +96,12 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-# MW WARRANTY 수령내역 엑셀 다운로드 생성 함수
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
     
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
-    
-    # 인쇄 시 1행~3행(타이틀 및 표 헤더)이 모든 페이지 상단에 반복 출력
     ws.print_title_rows = '1:3'
     
     target_headers = [
@@ -152,18 +142,22 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         col_mapping[th] = found_col
 
     month_str = "6월"
-    for col in df_mw_raw.columns:
-        if any(keyword in str(col).upper() for keyword in ['일자', 'DATE', '완결', '청구']):
-            sample_dates = df_mw_raw[col].dropna().astype(str).tolist()
-            for d in sample_dates:
-                m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
-                if m:
-                    month_str = f"{int(m.group(1))}월"
+    file_name = getattr(uploaded_file_mw, 'name', '')
+    m_fn = re.search(r'20\d{2}(\d{2})', file_name)
+    if m_fn:
+        month_str = f"{int(m_fn.group(1))}월"
+    else:
+        for col in df_mw_raw.columns:
+            if any(keyword in str(col).upper() for keyword in ['일자', 'DATE', '완결', '청구']):
+                sample_dates = df_mw_raw[col].dropna().astype(str).tolist()
+                for d in sample_dates:
+                    m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
+                    if m:
+                        month_str = f"{int(m.group(1))}월"
+                        break
+                if month_str != "6월":
                     break
-            if month_str != "6월":
-                break
 
-    # 1. 메인 타이틀 (1행)
     ws.merge_cells('A1:N1')
     ws['A1'] = f"{month_str} WARRANTY 수 령 내 역"
     ws['A1'].font = Font(size=22, bold=True)
@@ -179,7 +173,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 2. 헤더 작성 (3행)
     ws.row_dimensions[3].height = 25
     cell_a = ws.cell(row=3, column=1, value="No.")
     cell_a.font = header_font
@@ -192,7 +185,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         cell.alignment = header_align
         cell.border = thin_border
 
-    # 3. 데이터 본문 작성 (4행 ~ )
     current_row = 4
     no_counter = 1
     for _, row in df_mw_raw.iterrows():
@@ -230,7 +222,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         current_row += 1
         no_counter += 1
 
-    # 4. 하단 요약 행 작성
     ws.row_dimensions[current_row].height = 25
     
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
@@ -290,7 +281,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws.cell(row=current_row, column=13).border = thin_border
     ws.cell(row=current_row, column=14).border = thin_border
 
-    # 너비 자동 조절
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
@@ -303,7 +293,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     wb.save(output)
     output.seek(0)
     return output, month_str
-
 
 # ────────────────────────────────────────────────────────
 # 2️⃣ [모드 2] 쿠폰 보증 비교 관련 로직
@@ -340,27 +329,30 @@ def load_excel_coupon_b(uploaded_file):
             b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
     return b_groups
 
-# 쿠폰 청구 현황 엑셀 다운로드 생성 함수
-def create_coupon_excel_report(uploaded_file_a, count, total_b, total_a, total_diff):
+def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff):
     df_a_raw = read_excel_smart_header(uploaded_file_a)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "쿠폰 청구 현황"
-    
-    # ★ 쿠폰 보증 보고서에도 동일하게 인쇄 헤더 반복 설정 적용 (1~3행)
     ws.print_title_rows = '1:3'
     
-    month_str = "6월"
-    for col in df_a_raw.columns:
-        if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구', '입고', '출고']):
-            sample_dates = df_a_raw[col].dropna().astype(str).tolist()
-            for d in sample_dates:
-                m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
-                if m:
-                    month_str = f"{int(m.group(1))}월"
+    month_str = "8월"
+    file_b_name = getattr(uploaded_file_b, 'name', '')
+    m_fn = re.search(r'20\d{2}(\d{2})', file_b_name)
+    
+    if m_fn:
+        month_str = f"{int(m_fn.group(1))}월"
+    else:
+        for col in df_a_raw.columns:
+            if any(keyword in str(col) for keyword in ['일자', 'DATE', '승인', '청구', '입고', '출고']):
+                sample_dates = df_a_raw[col].dropna().astype(str).tolist()
+                for d in sample_dates:
+                    m = re.search(r'-(\d{2})-', d) or re.search(r'/(\d{2})/', d)
+                    if m:
+                        month_str = f"{int(m.group(1))}월"
+                        break
+                if month_str != "8월":
                     break
-            if month_str != "6월":
-                break
 
     ws.merge_cells('A1:N1')
     ws['A1'] = f"{month_str} 쿠폰 청구 현황"
@@ -481,7 +473,6 @@ def create_coupon_excel_report(uploaded_file_a, count, total_b, total_a, total_d
     wb.save(output)
     output.seek(0)
     return output, month_str
-
 
 # ────────────────────────────────────────────────────────
 # 🖥️ 화면 조건별 렌더링
@@ -655,7 +646,7 @@ else:
             m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
             
             excel_data, month_name = create_coupon_excel_report(
-                file_a, total_count, total_b_sum, total_a_sum, total_diff_sum
+                file_a, file_b, total_count, total_b_sum, total_a_sum, total_diff_sum
             )
             
             st.write("")
