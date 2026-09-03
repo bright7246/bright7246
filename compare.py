@@ -8,15 +8,26 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
+# 웹페이지 기본 설정
 st.set_page_config(page_title="보증금액 통합 비교 시스템", layout="wide")
 st.title("📊 보증금액 교차 비교 시스템")
 
+# ────────────────────────────────────────────────────────
+# 🗂️ 사이드바 / 상단 메뉴를 통한 작업 선택 UI
+# ────────────────────────────────────────────────────────
 st.sidebar.header("⚙️ 작업 모드 선택")
 mode = st.sidebar.radio(
     "실행할 분석 작업을 선택하세요:",
-    ("📋 MW 보증 비교 (PDF vs 엑셀)", "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
+    (
+        "📋 MW 보증 비교 (PDF vs 엑셀)",
+        "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)",
+        "🔧 공임코드 비교"
+    )
 )
 
+# ────────────────────────────────────────────────────────
+# 🛠️ [공통 함수] 엑셀 상단 타이틀/빈줄을 건너뛰고 진짜 헤더 행 찾아 읽기
+# ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
     df_raw = pd.read_excel(uploaded_file, header=None)
@@ -454,209 +465,221 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     c_val4.alignment = Alignment(horizontal='right', vertical='center')
 
     c_unit4 = ws.cell(row=current_row, column=10, value="원")
-    c_unit4.font = Font(size=14, bold=True)
-    c_unit4.alignment = Alignment(horizontal='left', vertical='center')
+    c_unit4.font = Font(size=14웹 브라우저에서 바로 열어 간편하게 붙여넣고 비교할 수 있는 **단일 HTML 파일(공임코드 비교 도구)**입니다. 
 
-    c_vat2 = ws.cell(row=current_row, column=11, value="VAT 포함")
-    c_vat2.font = Font(size=10, bold=True)
-    c_vat2.alignment = Alignment(horizontal='left', vertical='center')
+아래 코드를 복사해 메모장에 붙여넣은 뒤, **`공임코드_비교.html`**로 저장하고 더블 클릭하여 실행하면 됩니다.
 
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.row > 3 and cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[col_letter].width = max(max_len + 5, 14)
+```html
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>공임코드 비교</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 20px auto;
+    max-width: 1000px;
+    padding: 0 15px;
+    color: #333;
+  }
+  h2 {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .input-container {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+  }
+  .input-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .input-box label {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  textarea {
+    width: 100%;
+    height: 250px;
+    padding: 10px;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    resize: vertical;
+    white-space: pre;
+  }
+  .btn-wrap {
+    text-align: center;
+    margin: 20px 0;
+  }
+  button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #0056b3;
+  }
+  .result-section {
+    margin-top: 25px;
+  }
+  .summary {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-left: 4px solid #007bff;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  th, td {
+    border: 1px solid #dee2e6;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th {
+    background-color: #e9ecef;
+  }
+  .dup-code {
+    color: #d9534f;
+    font-weight: bold;
+  }
+  .no-data {
+    color: #6c757d;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
 
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output, month_str
+<h2>공임코드 비교</h2>
 
-# ────────────────────────────────────────────────────────
-# 🖥️ 화면 조건별 렌더링
-# ────────────────────────────────────────────────────────
-if "MW 보증 비교" in mode:
-    st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
-    st.write("PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        pdf_file = st.file_uploader("1. PDF 파일을 선택하세요 (.pdf)", type=["pdf"], key="mw_pdf")
-    with col2:
-        excel_file = st.file_uploader("2. 엑셀 파일을 선택하세요 (.xlsx)", type=["xlsx"], key="mw_excel")
-        
-    if pdf_file and excel_file:
-        with st.spinner("MW 보증 데이터 교차 대조 중..."):
-            excel_groups = load_excel_mw(excel_file)
-            pdf_groups = load_pdf_mw(pdf_file)
-            
-            matched_results = []
-            all_orders = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
-            
-            total_pdf_sum = 0
-            total_excel_sum = 0
-            
-            for order in all_orders:
-                p_amts = pdf_groups.get(order, [])
-                e_amts = excel_groups.get(order, [])
-                max_len = max(len(p_amts), len(e_amts))
-                
-                for i in range(max_len):
-                    p_amt = p_amts[i] if i < len(p_amts) else None
-                    e_amt = e_amts[i] if i < len(e_amts) else None
-                    order_label = f"{order} ({i+1})" if max_len > 1 else order
-                    
-                    if p_amt is not None: total_pdf_sum += p_amt
-                    if e_amt is not None: total_excel_sum += e_amt
-                    
-                    if p_amt is not None and e_amt is not None:
-                        diff = p_amt - e_amt
-                        matched_results.append({
-                            '주문번호': order_label,
-                            '차액': f"{diff:,}원" if diff != 0 else "0원",
-                            'PDF 금액 (실 수령액)': f"{p_amt:,}원",
-                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
-                        })
-                    elif p_amt is not None:
-                        matched_results.append({
-                            '주문번호': order_label,
-                            '차액': f"{p_amt:,}원",
-                            'PDF 금액 (실 수령액)': f"{p_amt:,}원",
-                            'DMS 금액 (청구 금액)': "-"
-                        })
-                    elif e_amt is not None:
-                        matched_results.append({
-                            '주문번호': order_label,
-                            '차액': f"{-e_amt:,}원",
-                            'PDF 금액 (실 수령액)': "-",
-                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
-                        })
-            
-            total_diff_sum = total_pdf_sum - total_excel_sum
-            matched_results.append({
-                '주문번호': "★ 총합계",
-                '차액': f"{total_diff_sum:,}원",
-                'PDF 금액 (실 수령액)': f"{total_pdf_sum:,}원",
-                'DMS 금액 (청구 금액)': f"{total_excel_sum:,}원"
-            })
-            
-            res_df = pd.DataFrame(matched_results)
-            res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-            
-            st.subheader("📌 분석 요약 결과")
-            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            mw_count = len(res_df) - 1
-            m_col1.metric("총 대조 건수", f"{mw_count} 건")
-            m_col2.metric("PDF 총 합계 금액", f"{total_pdf_sum:,}원")
-            m_col3.metric("DMS 총 합계 금액", f"{total_excel_sum:,}원")
-            m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
-            
-            mw_excel_data, mw_month_name = create_mw_excel_report(
-                excel_file, mw_count, total_pdf_sum, total_excel_sum, total_diff_sum
-            )
-            
-            st.write("")
-            st.download_button(
-                label=f"📥 [{mw_month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드",
-                data=mw_excel_data,
-                file_name=f"{mw_month_name}_WARRANTY_수령내역_보고서.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-            
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            st.dataframe(res_df, use_container_width=True)
+<div class="input-container">
+  <div class="input-box">
+    <label for="groupA">A 그룹 붙여넣기</label>
+    <textarea id="groupA" placeholder="A 그룹 데이터를 붙여넣으세요."></textarea>
+  </div>
+  <div class="input-box">
+    <label for="groupB">B 그룹 붙여넣기</label>
+    <textarea id="groupB" placeholder="B 그룹 데이터를 붙여넣으세요."></textarea>
+  </div>
+</div>
 
-else:
-    st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
-    st.write("공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        file_a = st.file_uploader("1. 공지된 쿠폰 파일 (D, I, J행 포함)", type=["xlsx"], key="cp_a")
-    with col2:
-        file_b = st.file_uploader("2. DMS 쿠폰파일 (출력물 그대로사용)", type=["xlsx"], key="cp_b")
-        
-    if file_a and file_b:
-        with st.spinner("쿠폰 보증 엑셀 간 교차 대조 중..."):
-            a_groups = load_excel_coupon_a(file_a)
-            b_groups = load_excel_coupon_b(file_b)
-            
-            matched_results = []
-            all_cars = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
-            
-            total_a_sum = 0
-            total_b_sum = 0
-            
-            for car in all_cars:
-                a_amts = a_groups.get(car, [])
-                b_amts = b_groups.get(car, [])
-                max_len = max(len(a_amts), len(b_amts))
-                
-                for i in range(max_len):
-                    a_amt = a_amts[i] if i < len(a_amts) else None
-                    b_amt = b_amts[i] if i < len(b_amts) else None
-                    car_label = f"{car} ({i+1})" if max_len > 1 else car
-                    
-                    if a_amt is not None: total_a_sum += a_amt
-                    if b_amt is not None: total_b_sum += b_amt
-                    
-                    if a_amt is not None and b_amt is not None:
-                        diff = a_amt - b_amt
-                        matched_results.append({
-                            '차량번호': car_label,
-                            '차액': f"{diff:,}원" if diff != 0 else "0원",
-                            '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
-                        })
-                    elif a_amt is not None:
-                        matched_results.append({
-                            '차량번호': car_label,
-                            '차액': f"{a_amt:,}원",
-                            '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': "-"
-                        })
-                    elif b_amt is not None:
-                        matched_results.append({
-                            '차량번호': car_label,
-                            '차액': f"{-b_amt:,}원",
-                            '공지된 쿠폰 금액 ( 입금 금액 )': "-",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
-                        })
-            
-            total_diff_sum = total_a_sum - total_b_sum
-            matched_results.append({
-                '차량번호': "★ 총합계",
-                '차액': f"{total_diff_sum:,}원",
-                '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_a_sum:,}원",
-                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원"
-            })
-            
-            res_df = pd.DataFrame(matched_results)
-            res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-            
-            st.subheader("📌 분석 요약 결과")
-            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            total_count = len(res_df) - 1
-            m_col1.metric("총 대조 건수", f"{total_count} 건")
-            m_col2.metric("공지 쿠폰 총 합계", f"{total_a_sum:,}원")
-            m_col3.metric("DMS 쿠폰 총 합계", f"{total_b_sum:,}원")
-            m_col4.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
-            
-            excel_data, month_name = create_coupon_excel_report(
-                file_a, file_b, total_count, total_b_sum, total_a_sum, total_diff_sum
-            )
-            
-            st.write("")
-            st.download_button(
-                label=f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드",
-                data=excel_data,
-                file_name=f"{month_name}_쿠폰_청구_현황_보고서.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-            
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            st.dataframe(res_df, use_container_width=True)
+<div class="btn-wrap">
+  <button onclick="compareLaborCodes()">비교진행</button>
+</div>
+
+<div class="result-section" id="resultArea" style="display:none;">
+  <div class="summary" id="summaryText"></div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 18%;">중복 공임코드</th>
+        <th style="width: 41%;">A 그룹 내용</th>
+        <th style="width: 41%;">B 그룹 내용</th>
+      </tr>
+    </thead>
+    <tbody id="resultBody"></tbody>
+  </table>
+</div>
+
+<script>
+function extractCode(line) {
+  // 앞뒤 공백 및 보이지 않는 줄바꿈/특수공백 정리
+  const cleanLine = line.trim();
+  if (!cleanLine) return null;
+
+  // 정규식: 문자 3개 - 문자 2개 - 문자 1~4개 패턴 검색
+  const match = cleanLine.match(/([a-zA-Z0-9]{3}-[a-zA-Z0-9]{2}-[a-zA-Z0-9]{1,4})/);
+  return match ? match[1] : null;
+}
+
+function parseGroup(text) {
+  const lines = text.split('\n');
+  const codeMap = new Map();
+
+  lines.forEach(rawLine => {
+    const code = extractCode(rawLine);
+    if (code) {
+      if (!codeMap.has(code)) {
+        codeMap.set(code, []);
+      }
+      codeMap.get(code).push(rawLine.trim());
+    }
+  });
+
+  return codeMap;
+}
+
+function compareLaborCodes() {
+  const textA = document.getElementById('groupA').value;
+  const textB = document.getElementById('groupB').value;
+
+  const mapA = parseGroup(textA);
+  const mapB = parseGroup(textB);
+
+  const duplicates = [];
+  mapA.forEach((linesA, code) => {
+    if (mapB.has(code)) {
+      duplicates.push({
+        code: code,
+        linesA: linesA,
+        linesB: mapB.get(code)
+      });
+    }
+  });
+
+  const resultArea = document.getElementById('resultArea');
+  const summaryText = document.getElementById('summaryText');
+  const resultBody = document.getElementById('resultBody');
+
+  resultBody.innerHTML = '';
+  resultArea.style.display = 'block';
+
+  if (duplicates.length === 0) {
+    summaryText.innerText = '비교 결과: 중복된 공임코드가 없습니다.';
+    resultBody.innerHTML = '<tr><td colspan="3" class="no-data" style="text-align:center;">일치하는 항목이 없습니다.</td></tr>';
+    return;
+  }
+
+  summaryText.innerText = `총 ${duplicates.length}개의 중복 공임코드를 발견했습니다.`;
+
+  duplicates.forEach(item => {
+    const row = document.createElement('tr');
+
+    const tdCode = document.createElement('td');
+    tdCode.className = 'dup-code';
+    tdCode.innerText = item.code;
+
+    const tdA = document.createElement('td');
+    tdA.innerHTML = item.linesA.join('<br>');
+
+    const tdB = document.createElement('td');
+    tdB.innerHTML = item.linesB.join('<br>');
+
+    row.appendChild(tdCode);
+    row.appendChild(tdA);
+    row.appendChild(tdB);
+    resultBody.appendChild(row);
+  });
+}
+</script>
+
+</body>
+</html>
