@@ -2,7 +2,7 @@ name: Keep Streamlit App Alive
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '*/30 * * * *'  # 30분마다 한 번씩 실행
   workflow_dispatch:
 
 jobs:
@@ -10,5 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Streamlit App
-        run: |
-          curl -s -L -o /dev/null "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: 'https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app'
+          method: 'GET'
+          timeout: 10000
