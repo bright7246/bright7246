@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 주문번호와 PDF 금액만 복사 허용
+# 📊 [컴포넌트 렌더링] 간격 120px 확장 적용
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -272,7 +272,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
     css_code = """
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
       body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
-      .flex-container { display: flex; gap: 20px; align-items: flex-start; justify-content: flex-start; }
+      .flex-container { display: flex; gap: 120px; align-items: flex-start; justify-content: flex-start; }
       .table-card { flex: 0 0 auto; }
       .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
       .scroll-wrap { max-height: 640px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
@@ -282,8 +282,10 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .compact-table { border-collapse: collapse; width: max-content; font-size: 16px; user-select: text; }
       .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 14px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
       .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+      
       .compact-table tbody td.copyable { cursor: pointer; }
       .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
+      
       .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
       .diff-red { color: #ef4444 !important; font-weight: bold; }
       .col-no { min-width: 48px; text-align: center; font-weight: bold; }
