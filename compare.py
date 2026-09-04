@@ -8,6 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
+# 웹페이지 기본 설정 (요청하신 타이틀 적용)
 st.set_page_config(page_title="아이언모터스 보증팀 지원 프로그램", layout="wide")
 
 # 브라우저 자동 번역 충돌 방지 태그
@@ -555,11 +556,12 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 화면 렌더링
+# 🖥️ 화면 렌더링 (설명 문구 크기를 소제목 크기와 일치)
 # ────────────────────────────────────────────────────────
 if mode == "MW 보증 비교":
     st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
-    st.write("PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
+    st.markdown("### 🔍 PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
+    st.write("")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -651,7 +653,8 @@ if mode == "MW 보증 비교":
 
 elif mode == "쿠폰 보증 비교":
     st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
-    st.write("공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
+    st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
+    st.write("")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -743,7 +746,8 @@ elif mode == "쿠폰 보증 비교":
 
 else:
     st.subheader("🔧 공임코드 비교")
-    st.write("A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
+    st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
