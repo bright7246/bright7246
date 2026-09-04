@@ -10,15 +10,21 @@ import io
 
 # 사이드바 초기 닫힘 상태로 설정
 st.set_page_config(
-    page_title="아이언모터스 보증팀 지원 프로그램", 
+    page_title="IRON WARRANTY", 
+    page_icon="🚗",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# 브라우저 자동 번역 충돌 방지 태그
+# 카카오톡 미리보기(OG Tag) 메타데이터 및 브라우저 자동 번역 충돌 방지 태그
 st.markdown(
     """
-    <meta name="google" content="notranslate">
+    <head>
+      <meta property="og:title" content="IRON WARRANTY">
+      <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
+      <meta property="og:type" content="website">
+      <meta name="google" content="notranslate">
+    </head>
     <div translate="no"></div>
     """,
     unsafe_allow_html=True
@@ -30,7 +36,6 @@ st.markdown(
 st.markdown(
     """
     <style>
-    /* 상단 메뉴 버튼 크기 */
     div[data-testid="stHorizontalBlock"] div.stButton > button {
         height: 65px !important;
         border-radius: 10px !important;
@@ -40,22 +45,16 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
-    
-    /* 선택된 Primary 버튼 & 주요 액션 버튼을 하늘색으로 변경 */
     button[kind="primary"], div.stDownloadButton > button {
         background-color: #0ea5e9 !important;
         border-color: #0ea5e9 !important;
         color: white !important;
     }
-    
-    /* 마우스 호버(올렸을 때) 조금 더 짙은 청량한 하늘색 */
     button[kind="primary"]:hover, div.stDownloadButton > button:hover {
         background-color: #0284c7 !important;
         border-color: #0284c7 !important;
         color: white !important;
     }
-    
-    /* 포커스 및 활성 상태 테두리 */
     button[kind="primary"]:active, button[kind="primary"]:focus,
     div.stDownloadButton > button:active, div.stDownloadButton > button:focus {
         background-color: #0369a1 !important;
@@ -67,7 +66,30 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 아이언모터스 보증팀 지원 프로그램")
+APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
+
+# ────────────────────────────────────────────────────────
+# 🔗 공유하기 다이얼로그 (QR 코드 + 주소 복사)
+# ────────────────────────────────────────────────────────
+@st.dialog("📱 프로그램 공유하기")
+def share_modal():
+    st.write("스마트폰 카메라로 아래 QR 코드를 비추면 즉시 접속할 수 있습니다.")
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={APP_URL}"
+    col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
+    with col_img2:
+        st.image(qr_url, caption="접속용 QR 코드", use_container_width=True)
+    
+    st.text_input("프로그램 접속 주소", value=APP_URL)
+    st.caption("주소창 오른쪽 아이콘 또는 주소를 전체 복사하여 전달해 주세요.")
+
+# 타이틀 및 우측 공유 버튼
+head_col1, head_col2 = st.columns([8, 2])
+with head_col1:
+    st.title("📊 아이언모터스 보증팀 지원 프로그램")
+with head_col2:
+    st.write("")
+    if st.button("🔗 프로그램 공유 / QR", use_container_width=True):
+        share_modal()
 
 # ────────────────────────────────────────────────────────
 # 🗂️ 상단 가로 메뉴 버튼 UI
@@ -112,7 +134,7 @@ st.divider()
 mode = st.session_state.current_mode
 
 # ────────────────────────────────────────────────────────
-# 🛠️ [공통 함수] 엑셀 상단 타이틀/빈줄을 건너뛰고 진짜 헤더 행 찾아 읽기
+# 🛠️ [공통 함수]
 # ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
@@ -142,7 +164,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 1️⃣ [모드 1] MW 보증 비교 관련 로직
+# 1️⃣ [모드 1] MW 보증 비교
 # ────────────────────────────────────────────────────────
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
@@ -195,7 +217,6 @@ def load_pdf_mw(uploaded_file):
 
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
-    
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "WARRANTY 수령내역"
@@ -262,10 +283,8 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws.row_dimensions[1].height = 40
 
     thin_border = Border(
-        left=Side(style='thin', color='000000'),
-        right=Side(style='thin', color='000000'),
-        top=Side(style='thin', color='000000'),
-        bottom=Side(style='thin', color='000000')
+        left=Side(style='thin', color='000000'), right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'), bottom=Side(style='thin', color='000000')
     )
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -287,7 +306,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     for _, row in df_mw_raw.iterrows():
         if row.dropna().empty:
             continue
-            
         ws.row_dimensions[current_row].height = 20
         c_no = ws.cell(row=current_row, column=1, value=no_counter)
         c_no.alignment = Alignment(horizontal='center', vertical='center')
@@ -296,14 +314,12 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         for col_pos, h_name in enumerate(target_headers, 2):
             cell = ws.cell(row=current_row, column=col_pos)
             mapped_col = col_mapping.get(h_name)
-            
             if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
                 val = row[mapped_col]
                 if isinstance(val, pd.Timestamp):
                     val = val.strftime('%Y-%m-%d')
                 elif isinstance(val, str) and len(val) >= 10 and '00:00:00' in val:
                     val = val.split()[0]
-                    
                 cell.value = val
                 if isinstance(val, (int, float)):
                     cell.number_format = '#,##0'
@@ -313,14 +329,12 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
             else:
                 cell.value = ""
                 cell.alignment = Alignment(horizontal='center', vertical='center')
-                
             cell.border = thin_border
             
         current_row += 1
         no_counter += 1
 
     ws.row_dimensions[current_row].height = 25
-    
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
     c_sum = ws.cell(row=current_row, column=1, value="합계")
     c_sum.font = Font(bold=True)
@@ -392,19 +406,17 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     return output, month_str
 
 # ────────────────────────────────────────────────────────
-# 2️⃣ [모드 2] 쿠폰 보증 비교 관련 로직
+# 2️⃣ [모드 2] 쿠폰 보증 비교
 # ────────────────────────────────────────────────────────
 def load_excel_coupon_a(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     col_car = get_col_by_idx_or_name(df, 3, ['차량번호', 'CAR', 'VEHICLE'])
     col_part = get_col_by_idx_or_name(df, 8, ['부품청구', '부품'])
     col_labour = get_col_by_idx_or_name(df, 9, ['공임청구', '공임'])
-    
     if col_part: df[col_part] = pd.to_numeric(df[col_part], errors='coerce').fillna(0)
     if col_labour: df[col_labour] = pd.to_numeric(df[col_labour], errors='coerce').fillna(0)
     
     df['Calc_Total'] = ((df[col_part] + df[col_labour]) * 1.1).apply(round_half_up)
-    
     a_groups = defaultdict(list)
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
@@ -416,7 +428,6 @@ def load_excel_coupon_b(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     col_car = get_col_by_idx_or_name(df, 6, ['차량번호', 'CAR', 'VEHICLE'])
     col_total = get_col_by_idx_or_name(df, 18, ['합계금액', '합계', 'TOTAL'])
-    
     if col_total: df[col_total] = pd.to_numeric(df[col_total], errors='coerce').fillna(0)
     
     b_groups = defaultdict(list)
@@ -436,7 +447,6 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     month_str = "8월"
     file_b_name = getattr(uploaded_file_b, 'name', '')
     m_fn = re.search(r'20\d{2}(\d{2})', file_b_name)
-    
     if m_fn:
         month_str = f"{int(m_fn.group(1))}월"
     else:
@@ -458,10 +468,8 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     ws.row_dimensions[1].height = 40
 
     thin_border = Border(
-        left=Side(style='thin', color='000000'),
-        right=Side(style='thin', color='000000'),
-        top=Side(style='thin', color='000000'),
-        bottom=Side(style='thin', color='000000')
+        left=Side(style='thin', color='000000'), right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'), bottom=Side(style='thin', color='000000')
     )
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -479,11 +487,7 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
         ws.row_dimensions[current_row].height = 20
         for col_idx, val in enumerate(row, 1):
             cell = ws.cell(row=current_row, column=col_idx)
-            if pd.isna(val):
-                cell.value = ""
-            else:
-                cell.value = val
-                
+            cell.value = "" if pd.isna(val) else val
             cell.border = thin_border
             if isinstance(val, (int, float)):
                 cell.number_format = '#,##0'
@@ -498,11 +502,9 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
     c_lbl1.font = Font(size=14, bold=True)
     c_lbl1.alignment = Alignment(horizontal='right', vertical='center')
-    
     c_val1 = ws.cell(row=current_row, column=4, value=count)
     c_val1.font = Font(size=14, bold=True)
     c_val1.alignment = Alignment(horizontal='center', vertical='center')
-    
     c_unit1 = ws.cell(row=current_row, column=5, value="대")
     c_unit1.font = Font(size=14, bold=True)
     c_unit1.alignment = Alignment(horizontal='left', vertical='center')
@@ -510,33 +512,27 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     c_lbl2 = ws.cell(row=current_row, column=7, value="총 청구 금액 :")
     c_lbl2.font = Font(size=14, bold=True)
     c_lbl2.alignment = Alignment(horizontal='right', vertical='center')
-
     c_val2 = ws.cell(row=current_row, column=9, value=total_b)
     c_val2.font = Font(size=14, bold=True)
     c_val2.number_format = '#,##0'
     c_val2.alignment = Alignment(horizontal='right', vertical='center')
-
     c_unit2 = ws.cell(row=current_row, column=10, value="원")
     c_unit2.font = Font(size=14, bold=True)
     c_unit2.alignment = Alignment(horizontal='left', vertical='center')
-
     c_vat1 = ws.cell(row=current_row, column=11, value="VAT 포함")
     c_vat1.font = Font(size=10, bold=True)
     c_vat1.alignment = Alignment(horizontal='left', vertical='center')
 
     current_row += 2
-
     ws.row_dimensions[current_row].height = 30
     
     c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
     c_lbl3.font = Font(size=14, bold=True)
     c_lbl3.alignment = Alignment(horizontal='right', vertical='center')
-
     c_val3 = ws.cell(row=current_row, column=4, value=total_diff)
     c_val3.font = Font(size=14, bold=True)
     c_val3.number_format = '#,##0'
     c_val3.alignment = Alignment(horizontal='center', vertical='center')
-
     c_unit3 = ws.cell(row=current_row, column=5, value="원")
     c_unit3.font = Font(size=14, bold=True)
     c_unit3.alignment = Alignment(horizontal='left', vertical='center')
@@ -544,16 +540,13 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     c_lbl4 = ws.cell(row=current_row, column=7, value="총 입금 금액 :")
     c_lbl4.font = Font(size=14, bold=True)
     c_lbl4.alignment = Alignment(horizontal='right', vertical='center')
-
     c_val4 = ws.cell(row=current_row, column=9, value=total_a)
     c_val4.font = Font(size=14, bold=True)
     c_val4.number_format = '#,##0'
     c_val4.alignment = Alignment(horizontal='right', vertical='center')
-
     c_unit4 = ws.cell(row=current_row, column=10, value="원")
     c_unit4.font = Font(size=14, bold=True)
     c_unit4.alignment = Alignment(horizontal='left', vertical='center')
-
     c_vat2 = ws.cell(row=current_row, column=11, value="VAT 포함")
     c_vat2.font = Font(size=10, bold=True)
     c_vat2.alignment = Alignment(horizontal='left', vertical='center')
@@ -572,13 +565,12 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     return output, month_str
 
 # ────────────────────────────────────────────────────────
-# 3️⃣ [모드 3] 공임코드 비교 관련 로직
+# 3️⃣ [모드 3] 공임코드 비교
 # ────────────────────────────────────────────────────────
 def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    
     pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
     for line in text.split('\n'):
         line_clean = line.strip()
@@ -612,7 +604,6 @@ if mode == "MW 보증 비교":
             
             matched_results = []
             all_orders = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
-            
             total_pdf_sum = 0
             total_excel_sum = 0
             
@@ -706,7 +697,6 @@ elif mode == "쿠폰 보증 비교":
             
             matched_results = []
             all_cars = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
-            
             total_a_sum = 0
             total_b_sum = 0
             
