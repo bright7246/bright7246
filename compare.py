@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 25개 기준 높이(1120px) 반영
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -385,7 +385,7 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -792,7 +792,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링 (안내 문구를 상단으로 올려 빈 공간 제거)
+# 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     is_mw = (mode == "MW 보증 비교")
@@ -941,7 +941,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
         else:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
-    # 파일 업로드가 완료된 경우에만 분석 요약 및 다운로드 버튼을 좌측 하단에 별도 표시
     if f1 and f2:
         with left_col:
             st.divider()
