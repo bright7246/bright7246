@@ -86,7 +86,7 @@ st.markdown(
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
 # ────────────────────────────────────────────────────────
-# 🔗 공유하기 다이얼로그 (QR 코드 + 주소 복사)
+# 🔗 공유하기 다이얼로그 (QR 코드 + 주소창 + 원클릭 복사 버튼)
 # ────────────────────────────────────────────────────────
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
@@ -96,8 +96,41 @@ def share_modal():
     with col_img2:
         st.image(qr_url, caption="접속용 QR 코드", use_container_width=True)
     
-    st.text_input("프로그램 접속 주소", value=APP_URL)
-    st.caption("주소창 오른쪽 아이콘 또는 주소를 전체 복사하여 전달해 주세요.")
+    st.text_input("프로그램 접속 주소", value=APP_URL, disabled=True)
+    
+    # 클릭 한 번으로 주소가 클립보드에 복사되는 HTML/JS 버튼
+    copy_btn_html = f"""
+    <div style="display: flex; justify-content: center; margin-top: 10px;">
+        <button id="copy-btn" onclick="copyAppUrl()" style="
+            background-color: #0ea5e9;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.2s;
+        ">📋 주소 복사하기</button>
+    </div>
+    <script>
+    function copyAppUrl() {{
+        navigator.clipboard.writeText('{APP_URL}').then(function() {{
+            const btn = document.getElementById('copy-btn');
+            btn.innerText = '✅ 복사 완료!';
+            btn.style.backgroundColor = '#10b981';
+            setTimeout(function() {{
+                btn.innerText = '📋 주소 복사하기';
+                btn.style.backgroundColor = '#0ea5e9';
+            }}, 2000);
+        }}).catch(function(err) {{
+            alert('복사에 실패했습니다. 주소를 직접 드래그하여 복사해 주세요.');
+        }});
+    }}
+    </script>
+    """
+    st.components.v1.html(copy_btn_html, height=65)
 
 # 타이틀 및 아담한 크기의 공유 버튼
 head_col1, head_col2 = st.columns([8.5, 1.5])
