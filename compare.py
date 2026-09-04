@@ -24,14 +24,13 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 아이언모터스 보증팀 지원 프로그램")
-
 # ────────────────────────────────────────────────────────
-# 🗂️ 상단 가로 메뉴 버튼 UI
+# 🎨 하늘색 테마 스타일링 (상단 탭, 주요 버튼, 다운로드 버튼)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
+    /* 상단 메뉴 버튼 크기 */
     div[data-testid="stHorizontalBlock"] div.stButton > button {
         height: 65px !important;
         border-radius: 10px !important;
@@ -41,11 +40,38 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
+    
+    /* 선택된 Primary 버튼 & 주요 액션 버튼을 하늘색으로 변경 */
+    button[kind="primary"], div.stDownloadButton > button {
+        background-color: #0ea5e9 !important;
+        border-color: #0ea5e9 !important;
+        color: white !important;
+    }
+    
+    /* 마우스 호버(올렸을 때) 조금 더 짙은 청량한 하늘색 */
+    button[kind="primary"]:hover, div.stDownloadButton > button:hover {
+        background-color: #0284c7 !important;
+        border-color: #0284c7 !important;
+        color: white !important;
+    }
+    
+    /* 포커스 및 활성 상태 테두리 */
+    button[kind="primary"]:active, button[kind="primary"]:focus,
+    div.stDownloadButton > button:active, div.stDownloadButton > button:focus {
+        background-color: #0369a1 !important;
+        border-color: #0369a1 !important;
+        box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
+st.title("📊 아이언모터스 보증팀 지원 프로그램")
+
+# ────────────────────────────────────────────────────────
+# 🗂️ 상단 가로 메뉴 버튼 UI
+# ────────────────────────────────────────────────────────
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
 
@@ -565,7 +591,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링 (중복 타이틀 제거)
+# 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
 if mode == "MW 보증 비교":
     st.markdown("### 🔍 PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
