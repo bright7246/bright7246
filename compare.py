@@ -9,14 +9,12 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
-# deep-translator 라이브러리 임포트
 try:
     from deep_translator import GoogleTranslator
     HAS_TRANSLATOR = True
 except ImportError:
     HAS_TRANSLATOR = False
 
-# 사이드바 초기 닫힘 상태로 설정
 st.set_page_config(
     page_title="IRON WARRANTY", 
     page_icon="🚗",
@@ -24,7 +22,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 카카오톡 미리보기(OG Tag) 메타데이터 및 브라우저 자동 번역 충돌 방지 태그
 st.markdown(
     """
     <head>
@@ -41,9 +38,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ────────────────────────────────────────────────────────
-# 🎨 기본 UI 스타일링
-# ────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
@@ -91,9 +85,6 @@ st.markdown(
 
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
-# ────────────────────────────────────────────────────────
-# 🔗 공유하기 다이얼로그
-# ────────────────────────────────────────────────────────
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
     st.write("스마트폰 카메라로 아래 QR 코드를 비추면 즉시 접속할 수 있습니다.")
@@ -146,9 +137,6 @@ with head_col2:
         share_modal()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ────────────────────────────────────────────────────────
-# 🗂️ 상단 가로 메뉴 버튼 UI
-# ────────────────────────────────────────────────────────
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
 
@@ -189,19 +177,17 @@ st.divider()
 mode = st.session_state.current_mode
 
 # ────────────────────────────────────────────────────────
-# 🛠️ [공통 함수] 헤더 행 지능형 검색 및 이름 기반 컬럼 매칭
+# 🛠️ [공통 함수]
 # ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
     df_raw = pd.read_excel(uploaded_file, header=None)
-    
     header_row_idx = 0
     for idx, row in df_raw.iterrows():
         row_str = " ".join(row.dropna().astype(str)).upper()
         if 'CLAIM' in row_str or '차량' in row_str or '공임' in row_str:
             header_row_idx = idx
             break
-            
     uploaded_file.seek(0)
     df = pd.read_excel(uploaded_file, header=header_row_idx)
     return df
@@ -221,27 +207,21 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 🌐 [자동 번역 엔진] deep-translator 및 예비 사전 복합 연동
+# 🌐 [클릭 시만 동작하는 고속 번역 함수]
 # ────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def translate_to_korean_auto(text):
+def translate_single_text(text):
     if not text or pd.isna(text):
         return "-"
     raw = str(text).strip()
     if raw == "" or raw.lower() == "nan" or raw == "-":
         return "-"
-
-    # 볼보/폴스타 고유 서비스 명칭 우선 정규화
     if "volvo original service" in raw.lower():
         return re.sub(r'volvo\s+original\s+service', '볼보 순정 서비스', raw, flags=re.IGNORECASE)
     if "ps original service" in raw.lower():
         return re.sub(r'ps\s+original\s+service', '폴스타 순정 서비스', raw, flags=re.IGNORECASE)
-
-    # 영문 알파벳이 아예 없는 경우 원문 그대로 반환
     if not re.search(r'[a-zA-Z]', raw):
         return raw
-
-    # 1순위: deep-translator 라이브러리를 통한 실시간 번역
     if HAS_TRANSLATOR:
         try:
             translated = GoogleTranslator(source='en', target='ko').translate(raw)
@@ -249,46 +229,10 @@ def translate_to_korean_auto(text):
                 return translated.strip()
         except Exception:
             pass
-
-    # 2순위: 예비 정밀 번역 규칙 (통신 장애 또는 패키지 지연 시 동작)
-    fallback_map = {
-        r"Engine won't start after turtle warning light comes on\.?": "거북이 경고등 점등 후 시동 불가",
-        r"Passenger side mirror operation malfunction\.?": "동승석 사이드 미러 작동 불량",
-        r"Steering\s+occurs\.?": "조향 소음 발생",
-        r"Steering\s+noise\s+occurs\.?": "조향 소음 발생",
-        r"Battery severe charging fault message illuminated\.?": "배터리 심각한 충전 결함 메시지 점등",
-        r"Engine power reduction occurred\.?": "엔진 출력 저하 발생",
-        r"Engine warning light illuminated\.?": "엔진 경고등 점등",
-        r"Driver'?s?\s+door\s+panel\s+tear\.?": "운전석 도어 패널 찢어짐",
-        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐",
-        r"Check engine light on\.?": "엔진 경고등 점등",
-        r"Periodic maintenance": "정기 점검",
-        r"Wheel alignment": "휠 얼라인먼트"
-    }
-    res = raw
-    for p, kr in fallback_map.items():
-        if re.search(p, res, re.IGNORECASE):
-            res = re.sub(p, kr, res, flags=re.IGNORECASE)
-            return res
-
-    # 3순위: 기본 단어별 치환
-    term_dict = {
-        r"\bSteering\b": "조향(스티어링)",
-        r"\bEngine\b": "엔진",
-        r"\bBattery\b": "배터리",
-        r"\bDoor\s+panel\b": "도어 패널",
-        r"\bTear\b": "찢어짐",
-        r"\bNoise\b": "소음",
-        r"\bOccurs\b": "발생",
-        r"\bMalfunction\b": "작동 불량",
-        r"\bIlluminated\b": "점등됨"
-    }
-    for en, kr in term_dict.items():
-        res = re.sub(en, kr, res, flags=re.IGNORECASE)
-    return res
+    return raw
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + Claim Type / 제목 지원
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -495,7 +439,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         function copyCell(el) {{
           const text = el.innerText.trim();
           if (!text || text === '-') return;
-          
           const ta = document.createElement('textarea');
           ta.value = text;
           ta.style.position = 'fixed';
@@ -530,7 +473,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
 # ────────────────────────────────────────────────────────
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
-    
     col_claim_no = find_col_smart(df, ['CLAIM NO', 'CLAIM_NO', '클레임번호', '청구번호', 'CLAIM'], fallback_idx=0)
             
     target_cols = ['공임청구액', '공임청구부가세', '부품청구액', '부품청구부가세']
@@ -559,12 +501,11 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = row.get(col_v, '-') if col_v else '-'
-            v_val = translate_to_korean_auto(raw_v)
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
-                'v_desc': v_val
+                'v_desc': raw_v if raw_v and raw_v != 'nan' else '-'
             })
     return excel_groups
 
@@ -609,7 +550,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
         "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세"
     ]
-    
     alias_dict = {
         "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
         "차량번호": ["차량번호", "차량 번호", "CAR NO", "VEHICLE"],
@@ -625,10 +565,7 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액", "부품승인금액"],
         "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"]
     }
-    
-    col_mapping = {}
-    for th in target_headers:
-        col_mapping[th] = find_col_smart(df_mw_raw, alias_dict.get(th, [th]))
+    col_mapping = {th: find_col_smart(df_mw_raw, alias_dict.get(th, [th])) for th in target_headers}
 
     month_str = "6월"
     file_name = getattr(uploaded_file_mw, 'name', '')
@@ -701,7 +638,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
                 cell.value = ""
                 cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = thin_border
-            
         current_row += 1
         no_counter += 1
 
@@ -784,10 +720,8 @@ def load_excel_coupon_a(uploaded_file):
     col_car = find_col_smart(df, ['차량번호', 'CAR NO', 'CAR_NO', 'VEHICLE'], fallback_idx=3)
     col_part = find_col_smart(df, ['부품청구', '부품'], fallback_idx=8)
     col_labour = find_col_smart(df, ['공임청구', '공임'], fallback_idx=9)
-    
     if col_part: df[col_part] = pd.to_numeric(df[col_part], errors='coerce').fillna(0)
     if col_labour: df[col_labour] = pd.to_numeric(df[col_labour], errors='coerce').fillna(0)
-    
     df['Calc_Total'] = (((df[col_part] if col_part else 0) + (df[col_labour] if col_labour else 0)) * 1.1).apply(round_half_up)
     
     col_r = find_col_smart(df, ['CLAIM TYPE', 'CLAIMTYPE', '청구유형', '클레임유형', 'TYPE', '유형'], fallback_idx=17)
@@ -798,12 +732,11 @@ def load_excel_coupon_a(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = row.get(col_v, '-') if col_v else '-'
-            v_val = translate_to_korean_auto(raw_v)
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             a_groups[car_no].append({
                 'amount': int(row['Calc_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
-                'v_desc': v_val
+                'v_desc': raw_v if raw_v and raw_v != 'nan' else '-'
             })
     return a_groups
 
@@ -821,12 +754,11 @@ def load_excel_coupon_b(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = row.get(col_v, '-') if col_v else '-'
-            v_val = translate_to_korean_auto(raw_v)
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             b_groups[car_no].append({
                 'amount': round_half_up(row[col_total]) if col_total else 0,
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
-                'v_desc': v_val
+                'v_desc': raw_v if raw_v and raw_v != 'nan' else '-'
             })
     return b_groups
 
@@ -991,7 +923,7 @@ if mode == "MW 보증 비교":
         excel_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key="mw_excel", label_visibility="collapsed")
         
     if pdf_file and excel_file:
-        with st.spinner("MW 보증 데이터 교차 대조 및 제목 실시간 한글 번역 중..."):
+        with st.spinner("MW 보증 데이터 초고속 교차 대조 중..."):
             excel_groups = load_excel_mw(excel_file)
             pdf_groups = load_pdf_mw(pdf_file)
             
@@ -1089,8 +1021,21 @@ if mode == "MW 보증 비교":
             )
             
             st.write("")
-            if diff_over_100_results:
-                diff_list_with_total = list(diff_over_100_results)
+            if "mw_do_translate" not in st.session_state:
+                st.session_state.mw_do_translate = False
+                
+            display_diff_results = []
+            for item in diff_over_100_results:
+                final_title = translate_single_text(item['제목']) if st.session_state.mw_do_translate else item['제목']
+                display_diff_results.append({
+                    '주문번호': item['주문번호'],
+                    'Claim Type': item['Claim Type'],
+                    '제목': final_title,
+                    '차액': item['차액']
+                })
+                
+            if display_diff_results:
+                diff_list_with_total = list(display_diff_results)
                 diff_list_with_total.append({
                     '주문번호': "★ 총합계",
                     'Claim Type': "-",
@@ -1103,6 +1048,14 @@ if mode == "MW 보증 비교":
                 diff_df = pd.DataFrame(columns=['주문번호', 'Claim Type', '제목', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
+
+            if diff_over_100_results:
+                t_col1, t_col2 = st.columns([6, 4])
+                with t_col2:
+                    btn_txt = "🔄 원문으로 보기" if st.session_state.mw_do_translate else "🔍 차액 리스트 한글 번역 상세 보기"
+                    if st.button(btn_txt, use_container_width=True):
+                        st.session_state.mw_do_translate = not st.session_state.mw_do_translate
+                        st.rerun()
 
 elif mode == "쿠폰 보증 비교":
     st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
@@ -1117,7 +1070,7 @@ elif mode == "쿠폰 보증 비교":
         file_b = st.file_uploader("DMS 쿠폰파일 업로드", type=["xlsx"], key="cp_b", label_visibility="collapsed")
         
     if file_a and file_b:
-        with st.spinner("쿠폰 보증 엑셀 간 교차 대조 및 제목 실시간 한글 번역 중..."):
+        with st.spinner("쿠폰 보증 엑셀 간 초고속 교차 대조 중..."):
             a_groups = load_excel_coupon_a(file_a)
             b_groups = load_excel_coupon_b(file_b)
             
@@ -1217,8 +1170,21 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.write("")
-            if diff_over_100_results:
-                diff_list_with_total = list(diff_over_100_results)
+            if "coupon_do_translate" not in st.session_state:
+                st.session_state.coupon_do_translate = False
+                
+            display_diff_results = []
+            for item in diff_over_100_results:
+                final_title = translate_single_text(item['제목']) if st.session_state.coupon_do_translate else item['제목']
+                display_diff_results.append({
+                    '차량번호': item['차량번호'],
+                    'Claim Type': item['Claim Type'],
+                    '제목': final_title,
+                    '차액': item['차액']
+                })
+                
+            if display_diff_results:
+                diff_list_with_total = list(display_diff_results)
                 diff_list_with_total.append({
                     '차량번호': "★ 총합계",
                     'Claim Type': "-",
@@ -1231,6 +1197,14 @@ elif mode == "쿠폰 보증 비교":
                 diff_df = pd.DataFrame(columns=['차량번호', 'Claim Type', '제목', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
+
+            if diff_over_100_results:
+                t_col1, t_col2 = st.columns([6, 4])
+                with t_col2:
+                    btn_txt = "🔄 원문으로 보기" if st.session_state.coupon_do_translate else "🔍 차액 리스트 한글 번역 상세 보기"
+                    if st.button(btn_txt, use_container_width=True):
+                        st.session_state.coupon_do_translate = not st.session_state.coupon_do_translate
+                        st.rerun()
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
