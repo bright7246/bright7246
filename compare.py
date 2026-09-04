@@ -1,3 +1,15 @@
+**`주문번호(또는 차량번호)`** 열과 **`PDF 금액 (실 수령액 / 공지 금액)`** 열만 클릭 시 복사되도록 기능을 제한했습니다.
+
+* **복사 가능 열**: `주문번호 / 차량번호`, `PDF 금액 (실 수령액 / 공지된 쿠폰 금액)` $\rightarrow$ 마우스를 올리면 하늘색 하이라이트 효과가 나타나며 클릭 시 클립보드로 복사됩니다.
+* **복사 제외 열**: `No.`, `DMS 금액`, `차액`, `Claim Type`, `제목` $\rightarrow$ 클릭해도 복사되지 않으며 불필요한 마우스 포인터 변경 및 호버 효과가 적용되지 않습니다.
+
+---
+
+### 💻 변경 적용 전체 코드 (`compare.py`)
+
+GitHub의 `compare.py` 내용을 전체 선택(Ctrl+A) 후 삭제하고, 아래 코드로 교체(Commit changes)해 주세요.
+
+```python
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -201,7 +213,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [안전한 HTML 테이블 렌더러] SyntaxError 방지 구조
+# 📊 [컴포넌트 렌더링] 주문번호와 PDF 금액만 복사 허용
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -211,11 +223,18 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         is_total = "총합계" in str(row.iloc[0])
         tr_class = ' class="total-row"' if is_total else ''
         main_tbody.append(f'<tr{tr_class}>')
-        main_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
+        # No. 열: 복사 불가
+        main_tbody.append(f'<td class="col-no">{idx}</td>')
+        
         for c_idx, val in enumerate(row):
             val_str = str(val)
-            align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row)-1 else "col-amt")
-            main_tbody.append(f'<td class="{align_class}" onclick="copyCell(this)">{val_str}</td>')
+            # c_idx == 0: 주문번호/차량번호, c_idx == 1: PDF 금액 (실 수령액 / 공지 금액)
+            if c_idx in [0, 1] and not is_total and val_str != "-":
+                align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
+                main_tbody.append(f'<td class="{align_class}" onclick="copyCell(this)">{val_str}</td>')
+            else:
+                align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row)-1 else "col-amt")
+                main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
         main_tbody.append('</tr>')
 
     diff_section = ""
@@ -227,12 +246,20 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
                 is_total = "총합계" in str(row.iloc[0])
                 tr_class = ' class="total-row"' if is_total else ''
                 diff_tbody.append(f'<tr{tr_class}>')
-                diff_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
-                diff_tbody.append(f'<td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td>')
-                diff_tbody.append(f'<td class="col-type" onclick="copyCell(this)">{row.iloc[1]}</td>')
-                diff_tbody.append(f'<td class="col-desc" onclick="copyCell(this)">{row.iloc[2]}</td>')
+                # No. 열: 복사 불가
+                diff_tbody.append(f'<td class="col-no">{idx}</td>')
+                
+                # 주문번호 열: 복사 허용 (총합계 제외)
+                if not is_total:
+                    diff_tbody.append(f'<td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td>')
+                else:
+                    diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+                    
+                # Claim Type, 제목, 차액 열: 복사 불가
+                diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+                diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
                 diff_color = "" if is_total else " diff-red"
-                diff_tbody.append(f'<td class="col-diff{diff_color}" onclick="copyCell(this)">{row.iloc[3]}</td>')
+                diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
                 diff_tbody.append('</tr>')
             
             diff_section = (
@@ -271,8 +298,12 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
       .compact-table { border-collapse: collapse; width: max-content; font-size: 16px; user-select: text; }
       .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 14px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
-      .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; cursor: pointer; transition: background-color 0.15s ease; }
-      .compact-table tbody td:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
+      .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+      
+      /* 복사 가능한 셀(주문번호, PDF금액) 전용 스타일 */
+      .compact-table tbody td.copyable { cursor: pointer; }
+      .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
+      
       .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
       .diff-red { color: #ef4444 !important; font-weight: bold; }
       .col-no { min-width: 48px; text-align: center; font-weight: bold; }
@@ -1084,15 +1115,16 @@ else:
                 main_headers = ["No."] + list(df_dup.columns)
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    main_tbody.append(f'<tr><td class="col-no" onclick="copyCell(this)">{idx}</td><td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt" onclick="copyCell(this)">{row.iloc[1]}</td><td class="col-amt" onclick="copyCell(this)">{row.iloc[2]}</td></tr>')
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
                   body { background-color: transparent; color: #f8fafc; }
                   table { border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; }
                   th { background-color: #1e293b; color: #fff; padding: 10px 12px; border: 1px solid #334155; text-align: center; }
-                  td { padding: 8px 12px; border: 1px solid #334155; cursor: pointer; }
-                  td:hover { background-color: rgba(14, 165, 233, 0.2) !important; }
+                  td { padding: 8px 12px; border: 1px solid #334155; }
+                  td.copyable { cursor: pointer; }
+                  td.copyable:hover { background-color: rgba(14, 165, 233, 0.2) !important; }
                   #toast { visibility: hidden; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #fff; padding: 8px 16px; border-radius: 6px; font-weight: bold; z-index: 99999; }
                   #toast.show { visibility: visible; }
                 """
@@ -1123,3 +1155,5 @@ else:
                 components.html(table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True)
             else:
                 st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
+
+```
