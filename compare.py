@@ -27,16 +27,19 @@ st.title("📊 아이언모터스 보증팀 지원 프로그램")
 # ────────────────────────────────────────────────────────
 st.sidebar.header("⚙️ 작업 모드 선택")
 
-# 사이드바 버튼 높이 및 패딩 스타일링
+# 사이드바 버튼 내부 글자 크기 강제 확대 (20px, 굵게)
 st.sidebar.markdown(
     """
     <style>
     div[data-testid="stSidebar"] div.stButton > button {
-        height: 60px !important;
-        font-size: 16px !important;
-        font-weight: 600 !important;
-        margin-bottom: 10px !important;
-        border-radius: 8px !important;
+        height: 70px !important;
+        margin-bottom: 12px !important;
+        border-radius: 10px !important;
+    }
+    div[data-testid="stSidebar"] div.stButton > button p {
+        font-size: 20px !important;
+        font-weight: 700 !important;
+        line-height: 1.3 !important;
     }
     </style>
     """,
@@ -48,7 +51,7 @@ if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
 
 btn_mw = st.sidebar.button(
-    "📋 MW 보증 비교\n(PDF vs 엑셀)", 
+    "📋 MW 보증 비교 (PDF vs 엑셀)", 
     use_container_width=True, 
     type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"
 )
@@ -57,7 +60,7 @@ if btn_mw:
     st.rerun()
 
 btn_coupon = st.sidebar.button(
-    "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)", 
+    "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)", 
     use_container_width=True, 
     type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"
 )
@@ -66,7 +69,7 @@ if btn_coupon:
     st.rerun()
 
 btn_labor = st.sidebar.button(
-    "🔧 공임코드 비교\n(중복 작업 검증)", 
+    "🔧 공임코드 비교 (중복 작업 검증)", 
     use_container_width=True, 
     type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"
 )
@@ -565,11 +568,9 @@ if mode == "MW 보증 비교":
     
     col1, col2 = st.columns(2)
     with col1:
-        # 1번 PDF 업로드 라벨 및 예시 문구 변경 적용
         st.markdown("### 1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)")
         pdf_file = st.file_uploader("PDF 파일 업로드", type=["pdf"], key="mw_pdf", label_visibility="collapsed")
     with col2:
-        # 2번 엑셀 업로드 라벨 및 예시 문구 변경 적용
         st.markdown("### 2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)")
         excel_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key="mw_excel", label_visibility="collapsed")
         
