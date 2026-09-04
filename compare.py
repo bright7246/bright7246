@@ -9,19 +9,75 @@ from openpyxl.utils import get_column_letter
 import io
 
 st.set_page_config(page_title="보증금액 통합 비교 시스템", layout="wide")
-st.title("📊 보증금액 교차 비교 시스템")
 
-# 작업 모드 선택
-st.sidebar.header("⚙️ 작업 모드 선택")
-mode = st.sidebar.radio(
-    "실행할 분석 작업을 선택하세요:",
-    (
-        "📋 MW 보증 비교 (PDF vs 엑셀)",
-        "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)",
-        "🔧 공임코드 비교"
-    )
+# 브라우저 자동 번역 충돌 방지 태그
+st.markdown(
+    """
+    <meta name="google" content="notranslate">
+    <div translate="no"></div>
+    """,
+    unsafe_allow_html=True
 )
 
+st.title("📊 보증금액 교차 비교 시스템")
+
+# ────────────────────────────────────────────────────────
+# 🗂️ 사이드바 큼직한 메뉴 버튼 UI
+# ────────────────────────────────────────────────────────
+st.sidebar.header("⚙️ 작업 모드 선택")
+
+# 사이드바 버튼 높이 및 패딩 스타일링 (글자 2줄 크기의 큼직한 박스)
+st.sidebar.markdown(
+    """
+    <style>
+    div[data-testid="stSidebar"] div.stButton > button {
+        height: 60px !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        margin-bottom: 10px !important;
+        border-radius: 8px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# 세션 상태로 현재 선택된 모드 관리
+if "current_mode" not in st.session_state:
+    st.session_state.current_mode = "MW 보증 비교"
+
+btn_mw = st.sidebar.button(
+    "📋 MW 보증 비교\n(PDF vs 엑셀)", 
+    use_container_width=True, 
+    type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"
+)
+if btn_mw:
+    st.session_state.current_mode = "MW 보증 비교"
+    st.rerun()
+
+btn_coupon = st.sidebar.button(
+    "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)", 
+    use_container_width=True, 
+    type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"
+)
+if btn_coupon:
+    st.session_state.current_mode = "쿠폰 보증 비교"
+    st.rerun()
+
+btn_labor = st.sidebar.button(
+    "🔧 공임코드 비교\n(중복 작업 검증)", 
+    use_container_width=True, 
+    type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"
+)
+if btn_labor:
+    st.session_state.current_mode = "공임코드 비교"
+    st.rerun()
+
+mode = st.session_state.current_mode
+
+# ────────────────────────────────────────────────────────
+# 🛠️ [공통 함수] 엑셀 상단 타이틀/빈줄을 건너뛰고 진짜 헤더 행 찾아 읽기
+# ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
     df_raw = pd.read_excel(uploaded_file, header=None)
@@ -483,9 +539,6 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
 # 3️⃣ [모드 3] 공임코드 비교 관련 로직
 # ────────────────────────────────────────────────────────
 def parse_labor_lines(text):
-    """
-    텍스트의 각 줄에서 [문자3개]-[문자2개]-[문자1~4개] 패턴의 공임코드를 추출
-    """
     code_map = defaultdict(list)
     if not text:
         return code_map
@@ -504,7 +557,7 @@ def parse_labor_lines(text):
 # ────────────────────────────────────────────────────────
 # 🖥️ 화면 렌더링
 # ────────────────────────────────────────────────────────
-if "MW 보증 비교" in mode:
+if mode == "MW 보증 비교":
     st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
     st.write("PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
     
@@ -596,7 +649,7 @@ if "MW 보증 비교" in mode:
             st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
 
-elif "쿠폰 보증 비교" in mode:
+elif mode == "쿠폰 보증 비교":
     st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
     st.write("공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
     
