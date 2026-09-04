@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 카카오톡 미리보기(OG Tag) 메타데이터 (제목, 설명, 썸네일 이미지)
+# 카카오톡 미리보기(OG Tag) 메타데이터 및 브라우저 자동 번역 충돌 방지 태그
 st.markdown(
     """
     <head>
@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 하늘색 테마 스타일링 (상단 탭, 주요 버튼, 다운로드 버튼, 공유 버튼)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 표 폰트 크기 확대)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -80,6 +80,11 @@ st.markdown(
         background-color: #0369a1 !important;
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
+    }
+
+    /* 상세 대조 내역 표(DataFrame) 내부 글자 크기 확대 */
+    div[data-testid="stDataFrame"] * {
+        font-size: 16px !important;
     }
     </style>
     """,
@@ -672,35 +677,36 @@ if mode == "MW 보증 비교":
                     if p_amt is not None: total_pdf_sum += p_amt
                     if e_amt is not None: total_excel_sum += e_amt
                     
+                    # 요청 반영: 주문번호 -> PDF금액 -> DMS금액 -> 차액 순서로 딕셔너리 키 배치
                     if p_amt is not None and e_amt is not None:
                         diff = p_amt - e_amt
                         matched_results.append({
                             '주문번호': order_label,
-                            '차액': f"{diff:,}원" if diff != 0 else "0원",
                             'PDF 금액 (실 수령액)': f"{p_amt:,}원",
-                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
+                            'DMS 금액 (청구 금액)': f"{e_amt:,}원",
+                            '차액': f"{diff:,}원" if diff != 0 else "0원"
                         })
                     elif p_amt is not None:
                         matched_results.append({
                             '주문번호': order_label,
-                            '차액': f"{p_amt:,}원",
                             'PDF 금액 (실 수령액)': f"{p_amt:,}원",
-                            'DMS 금액 (청구 금액)': "-"
+                            'DMS 금액 (청구 금액)': "-",
+                            '차액': f"{p_amt:,}원"
                         })
                     elif e_amt is not None:
                         matched_results.append({
                             '주문번호': order_label,
-                            '차액': f"{-e_amt:,}원",
                             'PDF 금액 (실 수령액)': "-",
-                            'DMS 금액 (청구 금액)': f"{e_amt:,}원"
+                            'DMS 금액 (청구 금액)': f"{e_amt:,}원",
+                            '차액': f"{-e_amt:,}원"
                         })
             
             total_diff_sum = total_pdf_sum - total_excel_sum
             matched_results.append({
                 '주문번호': "★ 총합계",
-                '차액': f"{total_diff_sum:,}원",
                 'PDF 금액 (실 수령액)': f"{total_pdf_sum:,}원",
-                'DMS 금액 (청구 금액)': f"{total_excel_sum:,}원"
+                'DMS 금액 (청구 금액)': f"{total_excel_sum:,}원",
+                '차액': f"{total_diff_sum:,}원"
             })
             
             res_df = pd.DataFrame(matched_results)
@@ -727,7 +733,7 @@ if mode == "MW 보증 비교":
                 use_container_width=True
             )
             
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
+            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
 
 elif mode == "쿠폰 보증 비교":
@@ -765,35 +771,36 @@ elif mode == "쿠폰 보증 비교":
                     if a_amt is not None: total_a_sum += a_amt
                     if b_amt is not None: total_b_sum += b_amt
                     
+                    # 차량번호 -> 공지 쿠폰금액 -> DMS 쿠폰금액 -> 차액 순서로 변경
                     if a_amt is not None and b_amt is not None:
                         diff = a_amt - b_amt
                         matched_results.append({
                             '차량번호': car_label,
-                            '차액': f"{diff:,}원" if diff != 0 else "0원",
                             '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
+                            '차액': f"{diff:,}원" if diff != 0 else "0원"
                         })
                     elif a_amt is not None:
                         matched_results.append({
                             '차량번호': car_label,
-                            '차액': f"{a_amt:,}원",
                             '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': "-"
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': "-",
+                            '차액': f"{a_amt:,}원"
                         })
                     elif b_amt is not None:
                         matched_results.append({
                             '차량번호': car_label,
-                            '차액': f"{-b_amt:,}원",
                             '공지된 쿠폰 금액 ( 입금 금액 )': "-",
-                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원"
+                            'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
+                            '차액': f"{-b_amt:,}원"
                         })
             
             total_diff_sum = total_a_sum - total_b_sum
             matched_results.append({
                 '차량번호': "★ 총합계",
-                '차액': f"{total_diff_sum:,}원",
                 '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_a_sum:,}원",
-                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원"
+                'DMS 쿠폰파일 ( 청구 금액 ) ': f"{total_b_sum:,}원",
+                '차액': f"{total_diff_sum:,}원"
             })
             
             res_df = pd.DataFrame(matched_results)
@@ -820,7 +827,7 @@ elif mode == "쿠폰 보증 비교":
                 use_container_width=True
             )
             
-            st.subheader("📋 상세 대조 내역 (맨 아래 총합계 포함)")
+            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
             st.dataframe(res_df, use_container_width=True)
 
 else:
@@ -856,7 +863,7 @@ else:
             c3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
             
             if duplicate_codes:
-                st.subheader(f"🚨 중복 발견 내역 ({len(duplicate_codes)}건)")
+                st.markdown(f"### 🚨 중복 발견 내역 ({len(duplicate_codes)}건)")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
                     lines_a_str = " | ".join(map_a[code])
