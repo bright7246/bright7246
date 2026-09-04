@@ -29,7 +29,6 @@ st.title("📊 아이언모터스 보증팀 지원 프로그램")
 # ────────────────────────────────────────────────────────
 # 🗂️ 상단 가로 메뉴 버튼 UI
 # ────────────────────────────────────────────────────────
-# 상단 메뉴 버튼 크기 및 텍스트 스타일링
 st.markdown(
     """
     <style>
@@ -47,7 +46,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 세션 상태로 현재 선택된 모드 관리
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
 
@@ -567,10 +565,9 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링
+# 🖥️ 본문 화면 렌더링 (중복 타이틀 제거)
 # ────────────────────────────────────────────────────────
 if mode == "MW 보증 비교":
-    st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
     st.markdown("### 🔍 PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
     st.write("")
     
@@ -665,7 +662,6 @@ if mode == "MW 보증 비교":
             st.dataframe(res_df, use_container_width=True)
 
 elif mode == "쿠폰 보증 비교":
-    st.subheader("🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)")
     st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
     st.write("")
     
@@ -760,7 +756,6 @@ elif mode == "쿠폰 보증 비교":
             st.dataframe(res_df, use_container_width=True)
 
 else:
-    st.subheader("🔧 공임코드 비교")
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
     st.write("")
     
