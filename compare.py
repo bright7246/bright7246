@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 대형 표 및 복사 툴팁 스타일)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 컴팩트 대형 표)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -82,30 +82,35 @@ st.markdown(
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
 
-    /* 큼직한 결과 표(HTML Table) 스타일링 */
-    .custom-result-table {
+    /* 컴팩트한 대형 결과 표 스타일링 */
+    .table-container {
+        display: flex;
+        justify-content: center;
         width: 100%;
-        border-collapse: collapse;
         margin-top: 15px;
         margin-bottom: 25px;
+    }
+    .custom-result-table {
+        width: 100%;
+        max-width: 900px;
+        border-collapse: collapse;
         font-size: 18px !important;
         user-select: text !important;
     }
     .custom-result-table th {
         background-color: #1e293b;
         color: #f8fafc;
-        padding: 14px 16px;
-        font-size: 18px;
+        padding: 12px 14px;
+        font-size: 17px;
         font-weight: bold;
         text-align: center;
         border: 1px solid #334155;
     }
     .custom-result-table td {
-        padding: 12px 16px;
-        font-size: 18px;
+        padding: 11px 16px;
+        font-size: 17px;
         border: 1px solid #334155;
         cursor: pointer;
-        position: relative;
         transition: background-color 0.15s ease;
     }
     .custom-result-table td:hover {
@@ -116,6 +121,12 @@ st.markdown(
         font-weight: bold;
         color: #38bdf8;
     }
+
+    /* 열 너비 균형 배분 */
+    .col-w-no { width: 8%; }
+    .col-w-id { width: 22%; }
+    .col-w-amt { width: 25%; }
+    .col-w-diff { width: 20%; }
 
     /* 복사 토스트 알림 메시지 스타일 */
     #copy-toast {
@@ -282,12 +293,16 @@ def round_half_up(value):
     return int(value + 0.5)
 
 def render_large_table(df):
-    """HTML 기반 18px 큼직한 표 + 셀 클릭 시 즉시 복사 스크립트 탑재"""
+    """빈 공간 없이 컴팩트한 너비 + 정밀 정렬 + 원클릭 복사 표"""
     headers = ["No."] + list(df.columns)
+    col_classes = ["col-w-no", "col-w-id", "col-w-amt", "col-w-amt", "col-w-diff"]
+    
     html = ['<div id="copy-toast">📋 복사되었습니다!</div>']
-    html.append('<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>')
-    for h in headers:
-        html.append(f'<th>{h}</th>')
+    html.append('<div class="table-container"><table class="custom-result-table"><thead><tr>')
+    
+    for idx, h in enumerate(headers):
+        c_class = col_classes[idx] if idx < len(col_classes) else ""
+        html.append(f'<th class="{c_class}">{h}</th>')
     html.append('</tr></thead><tbody>')
     
     for idx, row in df.iterrows():
@@ -302,7 +317,6 @@ def render_large_table(df):
         
     html.append('</tbody></table></div>')
 
-    # 클릭 즉시 복사 & 토스트 알림 JavaScript
     html.append("""
     <script>
     function copyCellText(el) {
@@ -317,7 +331,6 @@ def render_large_table(df):
                 setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
             }
         }).catch(err => {
-            // 구형 브라우저 대체 복사
             const temp = document.createElement("textarea");
             temp.value = text;
             document.body.appendChild(temp);
