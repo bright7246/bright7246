@@ -16,12 +16,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 카카오톡 미리보기(OG Tag) 메타데이터 및 브라우저 자동 번역 충돌 방지 태그
+# 카카오톡 미리보기(OG Tag) 메타데이터 (제목, 설명, 썸네일 이미지)
 st.markdown(
     """
     <head>
       <meta property="og:title" content="IRON WARRANTY">
       <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
+      <meta property="og:image" content="https://dummyimage.com/1200x630/0ea5e9/ffffff.png&text=IRON+WARRANTY">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
       <meta property="og:type" content="website">
       <meta name="google" content="notranslate">
     </head>
@@ -98,7 +101,6 @@ def share_modal():
     
     st.text_input("프로그램 접속 주소", value=APP_URL, disabled=True)
     
-    # 클릭 한 번으로 주소가 클립보드에 복사되는 HTML/JS 버튼
     copy_btn_html = f"""
     <div style="display: flex; justify-content: center; margin-top: 10px;">
         <button id="copy-btn" onclick="copyAppUrl()" style="
@@ -132,7 +134,6 @@ def share_modal():
     """
     st.components.v1.html(copy_btn_html, height=65)
 
-# 타이틀 및 아담한 크기의 공유 버튼
 head_col1, head_col2 = st.columns([8.5, 1.5])
 with head_col1:
     st.title("📊 아이언모터스 보증팀 지원 프로그램")
