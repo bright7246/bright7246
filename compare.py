@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] (한번에 25개 보이도록 1120px 설정)
+# 📊 [컴포넌트 렌더링] 3단계 색상 순환 클릭 복사 기능 적용
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -217,7 +217,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
             val_str = str(val)
             if c_idx in [0, 1] and not is_total and val_str != "-":
                 align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
-                main_tbody.append(f'<td class="{align_class}" onclick="copyCell(this)">{val_str}</td>')
+                main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
             else:
                 align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row)-1 else "col-amt")
                 main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
@@ -235,7 +235,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
                 diff_tbody.append(f'<td class="col-no">{idx}</td>')
                 
                 if not is_total:
-                    diff_tbody.append(f'<td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td>')
+                    diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
                 else:
                     diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
                     
@@ -286,6 +286,10 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .compact-table tbody td.copyable { cursor: pointer; }
       .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
       
+      /* 3단계 클릭 상태 색상 정의 */
+      .compact-table tbody td.state-1 { background-color: rgba(14, 165, 233, 0.45) !important; color: #ffffff !important; }
+      .compact-table tbody td.state-2 { background-color: rgba(239, 68, 68, 0.45) !important; color: #ffffff !important; }
+      
       .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
       .diff-red { color: #ef4444 !important; font-weight: bold; }
       .col-no { min-width: 48px; text-align: center; font-weight: bold; }
@@ -301,9 +305,11 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
     """
 
     js_code = """
-      function copyCell(el) {
+      function toggleCellColor(el) {
         const text = el.innerText.trim();
         if (!text || text === '-') return;
+
+        // 클립보드 복사 실행
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.position = 'fixed';
@@ -313,9 +319,20 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         try { document.execCommand('copy'); } catch(e) { navigator.clipboard.writeText(text); }
         document.body.removeChild(ta);
 
-        const origBg = el.style.backgroundColor;
-        el.style.backgroundColor = '#0ea5e9';
-        setTimeout(function() { el.style.backgroundColor = origBg; }, 200);
+        // 3단계 색상 토글 로직 (State 0 -> State 1(하늘색) -> State 2(연한 붉은색) -> State 0(원상태))
+        let currentState = el.getAttribute('data-click-state') || '0';
+        
+        if (currentState === '0') {
+          el.setAttribute('data-click-state', '1');
+          el.classList.add('state-1');
+        } else if (currentState === '1') {
+          el.setAttribute('data-click-state', '2');
+          el.classList.remove('state-1');
+          el.classList.add('state-2');
+        } else {
+          el.setAttribute('data-click-state', '0');
+          el.classList.remove('state-2');
+        }
 
         const toast = document.getElementById('toast');
         toast.innerText = '📋 복사 완료: ' + text;
@@ -825,7 +842,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.session_state.reset_trigger += 1
             st.rerun()
 
-    # 데이터 대조 및 우측 표 렌더링
+    # 데이터 연산 및 결과 출력을 통합 처리하여 NameError 원천 방지
     if f1 and f2:
         with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
             if is_mw:
@@ -948,32 +965,33 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             else:
                 diff_df = pd.DataFrame(columns=['주문번호' if is_mw else '차량번호', 'Claim Type', '제목', '차액'])
 
+        # 우측 상세표 출력
         with right_col:
-            if f1 and f2:
-                render_side_by_side_tables(res_df, diff_df)
-            else:
-                st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
+            render_side_by_side_tables(res_df, diff_df)
 
-        if f1 and f2:
-            with left_col:
-                st.divider()
-                st.subheader("📌 분석 요약 결과")
-                sub_c1, sub_c2 = st.columns(2)
-                sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
-                sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
-                
-                sub_c3, sub_c4 = st.columns(2)
-                sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
-                sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
-                
-                st.write("")
-                st.download_button(
-                    label=dl_label,
-                    data=excel_data,
-                    file_name=dl_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+        # 좌측 하단 요약 결과 및 다운로드 버튼 출력
+        with left_col:
+            st.divider()
+            st.subheader("📌 분석 요약 결과")
+            sub_c1, sub_c2 = st.columns(2)
+            sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
+            sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
+            
+            sub_c3, sub_c4 = st.columns(2)
+            sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
+            sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
+            
+            st.write("")
+            st.download_button(
+                label=dl_label,
+                data=excel_data,
+                file_name=dl_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+    else:
+        with right_col:
+            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
