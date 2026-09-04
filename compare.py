@@ -211,52 +211,71 @@ def get_col_by_idx_or_name(df, col_idx, possible_names):
 def round_half_up(value):
     return int(value + 0.5)
 
-# 영문 보증 용어 자동 한글 번역 함수
+# 정비/클레임 제목 영문 문장 및 용어 상세 한글 번역 함수
 def translate_to_korean(val):
     if pd.isna(val) or val is None or str(val).strip() == "" or str(val).strip() == "nan":
         return "-"
     
-    val_str = str(val).strip()
-    v_upper = val_str.upper()
+    res = str(val).strip()
 
-    trans_dict = {
-        "WARRANTY": "일반보증",
-        "EXTENDED WARRANTY": "연장보증",
-        "CAMPAIGN": "캠페인",
-        "SERVICE CAMPAIGN": "서비스 캠페인",
-        "RECALL": "리콜",
-        "GOODWILL": "선처보증(Goodwill)",
-        "PDI": "출고전점검(PDI)",
-        "POLICY": "특별보증",
-        "PART": "부품",
-        "PARTS": "부품",
-        "LABOR": "공임",
-        "LABOUR": "공임",
-        "SUBLET": "외주",
-        "PAINT": "도장",
-        "CORROSION": "부식보증",
-        "EMISSION": "배출가스보증",
-        "BATTERY": "배터리",
-        "REJECTED": "기각(반려)",
-        "ACCEPTED": "승인",
-        "PENDING": "보류",
-        "PAID": "지급완료"
+    # 문장 단위 정밀 매칭
+    sentence_dict = {
+        r"Driver'?s?\s+door\s+panel\s+tear\.?": "운전석 도어 패널 찢어짐",
+        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐",
+        r"Volvo\s+Original\s+Service": "볼보 순정 서비스",
+        r"Periodic\s+maintenance": "정기 점검",
+        r"Engine\s+oil\s+and\s+filter\s+replace": "엔진 오일 및 필터 교환",
+        r"Brake\s+pad\s+replace": "브레이크 패드 교환",
+        r"Check\s+engine\s+light\s+on": "엔진 경고등 점등",
+        r"Software\s+download": "소프트웨어 다운로드",
+        r"Software\s+upgrade": "소프트웨어 업그레이드",
+        r"Wheel\s+alignment": "휠 얼라인먼트",
+        r"Noise\s+from\s+front": "전방 소음 발생",
+        r"Noise\s+from\s+rear": "후방 소음 발생"
     }
-    
-    for en, ko in trans_dict.items():
-        if v_upper == en:
-            return ko
 
-    # 복합 문장 치환
-    result = val_str
-    for en, ko in sorted(trans_dict.items(), key=lambda x: -len(x[0])):
-        pattern = re.compile(re.escape(en), re.IGNORECASE)
-        result = pattern.sub(ko, result)
-        
-    return result
+    for pattern, kr in sentence_dict.items():
+        if re.search(pattern, res, re.IGNORECASE):
+            res = re.sub(pattern, kr, res, flags=re.IGNORECASE)
+
+    # 개별 단어 및 부품명 매칭
+    term_dict = {
+        r"\bDriver'?s?\b": "운전석",
+        r"\bPassenger'?s?\b": "동승석",
+        r"\bFront\b": "앞/전방",
+        r"\bRear\b": "뒤/후방",
+        r"\bDoor\s+panel\b": "도어 패널",
+        r"\bDoor\b": "도어",
+        r"\bPanel\b": "패널",
+        r"\bTear\b": "찢어짐",
+        r"\bBroken\b": "파손",
+        r"\bDamage\b": "손상",
+        r"\bLeak\b": "누유/누수",
+        r"\bNoise\b": "소음",
+        r"\bVibration\b": "떨림",
+        r"\bReplace\b": "교환",
+        r"\bReplacement\b": "교환",
+        r"\bRepair\b": "수리",
+        r"\bInspection\b": "점검",
+        r"\bOriginal\s+Service\b": "순정 서비스",
+        r"\bExtended\s+Warranty\b": "연장보증",
+        r"\bWarranty\b": "일반보증",
+        r"\bCampaign\b": "캠페인",
+        r"\bRecall\b": "리콜",
+        r"\bGoodwill\b": "선처보증(Goodwill)",
+        r"\bPart\b": "부품",
+        r"\bParts\b": "부품",
+        r"\bLabor\b": "공임",
+        r"\bLabour\b": "공임"
+    }
+
+    for en, kr in term_dict.items():
+        res = re.sub(en, kr, res, flags=re.IGNORECASE)
+
+    return res.strip()
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + R열/V열 지원
+# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + Claim Type / 제목 지원
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -409,8 +428,8 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .col-no {{ min-width: 48px; text-align: center; font-weight: bold; }}
       .col-id {{ min-width: 130px; text-align: center; }}
       .col-amt {{ min-width: 140px; text-align: right; }}
-      .col-type {{ min-width: 130px; text-align: center; color: #38bdf8; }}
-      .col-desc {{ min-width: 140px; text-align: center; }}
+      .col-type {{ min-width: 120px; text-align: center; color: #38bdf8; }}
+      .col-desc {{ min-width: 180px; text-align: left; }}
       .col-diff {{ min-width: 110px; text-align: right; }}
 
       #toast {{
@@ -496,7 +515,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
 # ────────────────────────────────────────────────────────
-# R열(인덱스 17: Claim Type), V열(인덱스 21: 내용)을 함께 추출
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     
@@ -514,7 +532,7 @@ def load_excel_mw(uploaded_file):
     df['Excel_Total'] = (df.get('공임청구액', 0) + df.get('공임청구부가세', 0) + 
                          df.get('부품청구액', 0) + df.get('부품청구부가세', 0)).apply(round_half_up)
     
-    # 엑셀 R열(인덱스 17) 및 V열(인덱스 21) 자동 식별
+    # 엑셀 R열(인덱스 17: Claim Type) 및 V열(인덱스 21: 제목)
     col_r = df.columns[17] if len(df.columns) > 17 else None
     col_v = df.columns[21] if len(df.columns) > 21 else None
 
@@ -522,11 +540,11 @@ def load_excel_mw(uploaded_file):
     for _, row in df.iterrows():
         claim_no = str(row.get(col_claim_no, '')).strip()
         if claim_no and claim_no != 'nan':
-            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
-                'claim_type': r_val,
+                'claim_type': r_val if r_val and r_val != 'nan' else '-',
                 'v_desc': v_val
             })
     return excel_groups
@@ -770,11 +788,11 @@ def load_excel_coupon_a(uploaded_file):
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
-            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
             a_groups[car_no].append({
                 'amount': int(row['Calc_Total']),
-                'claim_type': r_val,
+                'claim_type': r_val if r_val and r_val != 'nan' else '-',
                 'v_desc': v_val
             })
     return a_groups
@@ -792,11 +810,11 @@ def load_excel_coupon_b(uploaded_file):
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
-            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
             b_groups[car_no].append({
                 'amount': round_half_up(row[col_total]) if col_total else 0,
-                'claim_type': r_val,
+                'claim_type': r_val if r_val and r_val != 'nan' else '-',
                 'v_desc': v_val
             })
     return b_groups
@@ -1023,8 +1041,8 @@ if mode == "MW 보증 비교":
                         total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '주문번호': order_label,
-                            'Claim Type (R열)': r_val,
-                            '구분/내용 (V열)': v_val,
+                            'Claim Type': r_val,
+                            '제목': v_val,
                             '차액': f"{diff_val:,}원"
                         })
             
@@ -1065,14 +1083,14 @@ if mode == "MW 보증 비교":
                 diff_list_with_total = list(diff_over_100_results)
                 diff_list_with_total.append({
                     '주문번호': "★ 총합계",
-                    'Claim Type (R열)': "-",
-                    '구분/내용 (V열)': "-",
+                    'Claim Type': "-",
+                    '제목': "-",
                     '차액': f"{total_diff_100_sum:,}원"
                 })
                 diff_df = pd.DataFrame(diff_list_with_total)
                 diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
             else:
-                diff_df = pd.DataFrame(columns=['주문번호', 'Claim Type (R열)', '구분/내용 (V열)', '차액'])
+                diff_df = pd.DataFrame(columns=['주문번호', 'Claim Type', '제목', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
 
@@ -1151,8 +1169,8 @@ elif mode == "쿠폰 보증 비교":
                         total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '차량번호': car_label,
-                            'Claim Type (R열)': r_val,
-                            '구분/내용 (V열)': v_val,
+                            'Claim Type': r_val,
+                            '제목': v_val,
                             '차액': f"{diff_val:,}원"
                         })
             
@@ -1193,14 +1211,14 @@ elif mode == "쿠폰 보증 비교":
                 diff_list_with_total = list(diff_over_100_results)
                 diff_list_with_total.append({
                     '차량번호': "★ 총합계",
-                    'Claim Type (R열)': "-",
-                    '구분/내용 (V열)': "-",
+                    'Claim Type': "-",
+                    '제목': "-",
                     '차액': f"{total_diff_100_sum:,}원"
                 })
                 diff_df = pd.DataFrame(diff_list_with_total)
                 diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
             else:
-                diff_df = pd.DataFrame(columns=['차량번호', 'Claim Type (R열)', '구분/내용 (V열)', '차액'])
+                diff_df = pd.DataFrame(columns=['차량번호', 'Claim Type', '제목', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
 
@@ -1250,7 +1268,6 @@ else:
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                # 공임코드 비교 화면 렌더링
                 main_headers = ["No."] + list(df_dup.columns)
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
