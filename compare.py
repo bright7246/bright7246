@@ -8,9 +8,13 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
-import urllib.request
-import urllib.parse
-import json
+
+# deep-translator 라이브러리 임포트
+try:
+    from deep_translator import GoogleTranslator
+    HAS_TRANSLATOR = True
+except ImportError:
+    HAS_TRANSLATOR = False
 
 # 사이드바 초기 닫힘 상태로 설정
 st.set_page_config(
@@ -217,7 +221,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 🌐 [자동 번역 엔진] 구글 번역 API 직접 호출 (외부 모듈 의존 없음)
+# 🌐 [자동 번역 엔진] deep-translator 및 예비 사전 복합 연동
 # ────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def translate_to_korean_auto(text):
@@ -227,44 +231,64 @@ def translate_to_korean_auto(text):
     if raw == "" or raw.lower() == "nan" or raw == "-":
         return "-"
 
-    # 볼보 순정 서비스 고유 명칭 사전 매칭
+    # 볼보/폴스타 고유 서비스 명칭 우선 정규화
     if "volvo original service" in raw.lower():
         return re.sub(r'volvo\s+original\s+service', '볼보 순정 서비스', raw, flags=re.IGNORECASE)
+    if "ps original service" in raw.lower():
+        return re.sub(r'ps\s+original\s+service', '폴스타 순정 서비스', raw, flags=re.IGNORECASE)
 
-    # 영문 알파벳이 전혀 없는 경우 원문 반환
+    # 영문 알파벳이 아예 없는 경우 원문 그대로 반환
     if not re.search(r'[a-zA-Z]', raw):
         return raw
 
-    try:
-        url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&q=" + urllib.parse.quote(raw)
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=4) as response:
-            res_json = json.loads(response.read().decode('utf-8'))
-            translated_chunks = [item[0] for item in res_json[0] if item and item[0]]
-            res = "".join(translated_chunks)
-            if res:
-                return res
-    except Exception:
-        pass
+    # 1순위: deep-translator 라이브러리를 통한 실시간 번역
+    if HAS_TRANSLATOR:
+        try:
+            translated = GoogleTranslator(source='en', target='ko').translate(raw)
+            if translated and translated.strip():
+                return translated.strip()
+        except Exception:
+            pass
 
-    # 네트워크 지연/오류 시 예비 키워드 치환
+    # 2순위: 예비 정밀 번역 규칙 (통신 장애 또는 패키지 지연 시 동작)
     fallback_map = {
+        r"Engine won't start after turtle warning light comes on\.?": "거북이 경고등 점등 후 시동 불가",
+        r"Passenger side mirror operation malfunction\.?": "동승석 사이드 미러 작동 불량",
         r"Steering\s+occurs\.?": "조향 소음 발생",
-        r"Steering": "스티어링(조향)",
-        r"Engine\s+warning\s+light\s+illuminated\.?": "엔진 경고등 점등",
-        r"Battery\s+severe\s+charging\s+fault\s+message\s+illuminated\.?": "배터리 충전 결함 메시지 점등",
-        r"Engine\s+power\s+reduction\s+occurred\.?": "엔진 출력 저하 발생",
+        r"Steering\s+noise\s+occurs\.?": "조향 소음 발생",
+        r"Battery severe charging fault message illuminated\.?": "배터리 심각한 충전 결함 메시지 점등",
+        r"Engine power reduction occurred\.?": "엔진 출력 저하 발생",
+        r"Engine warning light illuminated\.?": "엔진 경고등 점등",
         r"Driver'?s?\s+door\s+panel\s+tear\.?": "운전석 도어 패널 찢어짐",
-        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐"
+        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐",
+        r"Check engine light on\.?": "엔진 경고등 점등",
+        r"Periodic maintenance": "정기 점검",
+        r"Wheel alignment": "휠 얼라인먼트"
     }
     res = raw
     for p, kr in fallback_map.items():
         if re.search(p, res, re.IGNORECASE):
             res = re.sub(p, kr, res, flags=re.IGNORECASE)
+            return res
+
+    # 3순위: 기본 단어별 치환
+    term_dict = {
+        r"\bSteering\b": "조향(스티어링)",
+        r"\bEngine\b": "엔진",
+        r"\bBattery\b": "배터리",
+        r"\bDoor\s+panel\b": "도어 패널",
+        r"\bTear\b": "찢어짐",
+        r"\bNoise\b": "소음",
+        r"\bOccurs\b": "발생",
+        r"\bMalfunction\b": "작동 불량",
+        r"\bIlluminated\b": "점등됨"
+    }
+    for en, kr in term_dict.items():
+        res = re.sub(en, kr, res, flags=re.IGNORECASE)
     return res
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링]
+# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + Claim Type / 제목 지원
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
