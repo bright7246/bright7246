@@ -35,7 +35,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 기본 UI 스타일링 (상단 탭, 주요 버튼, 공유 버튼)
+# 🎨 기본 UI 스타일링
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -211,8 +211,52 @@ def get_col_by_idx_or_name(df, col_idx, possible_names):
 def round_half_up(value):
     return int(value + 0.5)
 
+# 영문 보증 용어 자동 한글 번역 함수
+def translate_to_korean(val):
+    if pd.isna(val) or val is None or str(val).strip() == "" or str(val).strip() == "nan":
+        return "-"
+    
+    val_str = str(val).strip()
+    v_upper = val_str.upper()
+
+    trans_dict = {
+        "WARRANTY": "일반보증",
+        "EXTENDED WARRANTY": "연장보증",
+        "CAMPAIGN": "캠페인",
+        "SERVICE CAMPAIGN": "서비스 캠페인",
+        "RECALL": "리콜",
+        "GOODWILL": "선처보증(Goodwill)",
+        "PDI": "출고전점검(PDI)",
+        "POLICY": "특별보증",
+        "PART": "부품",
+        "PARTS": "부품",
+        "LABOR": "공임",
+        "LABOUR": "공임",
+        "SUBLET": "외주",
+        "PAINT": "도장",
+        "CORROSION": "부식보증",
+        "EMISSION": "배출가스보증",
+        "BATTERY": "배터리",
+        "REJECTED": "기각(반려)",
+        "ACCEPTED": "승인",
+        "PENDING": "보류",
+        "PAID": "지급완료"
+    }
+    
+    for en, ko in trans_dict.items():
+        if v_upper == en:
+            return ko
+
+    # 복합 문장 치환
+    result = val_str
+    for en, ko in sorted(trans_dict.items(), key=lambda x: -len(x[0])):
+        pattern = re.compile(re.escape(en), re.IGNORECASE)
+        result = pattern.sub(ko, result)
+        
+    return result
+
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + 좌측 밀착 나란히 배치 + 합계 지원
+# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + R열/V열 지원
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -240,8 +284,10 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
                 diff_tbody.append(f'<tr{tr_class}>')
                 diff_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
                 diff_tbody.append(f'<td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td>')
+                diff_tbody.append(f'<td class="col-type" onclick="copyCell(this)">{row.iloc[1]}</td>')
+                diff_tbody.append(f'<td class="col-desc" onclick="copyCell(this)">{row.iloc[2]}</td>')
                 diff_color = "" if is_total else " diff-red"
-                diff_tbody.append(f'<td class="col-diff{diff_color}" onclick="copyCell(this)">{row.iloc[1]}</td>')
+                diff_tbody.append(f'<td class="col-diff{diff_color}" onclick="copyCell(this)">{row.iloc[3]}</td>')
                 diff_tbody.append('</tr>')
             
             diff_section = f"""
@@ -253,7 +299,9 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
                             <tr>
                                 <th class="col-no">{diff_headers[0]}</th>
                                 <th class="col-id">{diff_headers[1]}</th>
-                                <th class="col-diff">{diff_headers[2]}</th>
+                                <th class="col-type">{diff_headers[2]}</th>
+                                <th class="col-desc">{diff_headers[3]}</th>
+                                <th class="col-diff">{diff_headers[4]}</th>
                             </tr>
                         </thead>
                         <tbody>{''.join(diff_tbody)}</tbody>
@@ -290,7 +338,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       }}
       .flex-container {{
         display: flex;
-        gap: 24px;
+        gap: 20px;
         align-items: flex-start;
         justify-content: flex-start;
       }}
@@ -359,8 +407,10 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         font-weight: bold;
       }}
       .col-no {{ min-width: 48px; text-align: center; font-weight: bold; }}
-      .col-id {{ min-width: 140px; text-align: center; }}
-      .col-amt {{ min-width: 145px; text-align: right; }}
+      .col-id {{ min-width: 130px; text-align: center; }}
+      .col-amt {{ min-width: 140px; text-align: right; }}
+      .col-type {{ min-width: 130px; text-align: center; color: #38bdf8; }}
+      .col-desc {{ min-width: 140px; text-align: center; }}
       .col-diff {{ min-width: 110px; text-align: right; }}
 
       #toast {{
@@ -446,11 +496,16 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
 # ────────────────────────────────────────────────────────
+# R열(인덱스 17: Claim Type), V열(인덱스 21: 내용)을 함께 추출
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
-    df.columns = df.columns.astype(str).str.strip().str.upper()
-    col_claim_no = 'CLAIM NO'
     
+    col_claim_no = 'CLAIM NO'
+    for col in df.columns:
+        if 'CLAIM' in str(col).upper() and 'NO' in str(col).upper():
+            col_claim_no = col
+            break
+            
     target_cols = ['공임청구액', '공임청구부가세', '부품청구액', '부품청구부가세']
     for col in target_cols:
         if col in df.columns:
@@ -459,11 +514,21 @@ def load_excel_mw(uploaded_file):
     df['Excel_Total'] = (df.get('공임청구액', 0) + df.get('공임청구부가세', 0) + 
                          df.get('부품청구액', 0) + df.get('부품청구부가세', 0)).apply(round_half_up)
     
+    # 엑셀 R열(인덱스 17) 및 V열(인덱스 21) 자동 식별
+    col_r = df.columns[17] if len(df.columns) > 17 else None
+    col_v = df.columns[21] if len(df.columns) > 21 else None
+
     excel_groups = defaultdict(list)
     for _, row in df.iterrows():
         claim_no = str(row.get(col_claim_no, '')).strip()
         if claim_no and claim_no != 'nan':
-            excel_groups[claim_no].append(int(row['Excel_Total']))
+            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            excel_groups[claim_no].append({
+                'amount': int(row['Excel_Total']),
+                'claim_type': r_val,
+                'v_desc': v_val
+            })
     return excel_groups
 
 def load_pdf_mw(uploaded_file):
@@ -697,11 +762,21 @@ def load_excel_coupon_a(uploaded_file):
     if col_labour: df[col_labour] = pd.to_numeric(df[col_labour], errors='coerce').fillna(0)
     
     df['Calc_Total'] = ((df[col_part] + df[col_labour]) * 1.1).apply(round_half_up)
+    
+    col_r = df.columns[17] if len(df.columns) > 17 else None
+    col_v = df.columns[21] if len(df.columns) > 21 else None
+
     a_groups = defaultdict(list)
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
-            a_groups[car_no].append(int(row['Calc_Total']))
+            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            a_groups[car_no].append({
+                'amount': int(row['Calc_Total']),
+                'claim_type': r_val,
+                'v_desc': v_val
+            })
     return a_groups
 
 def load_excel_coupon_b(uploaded_file):
@@ -710,11 +785,20 @@ def load_excel_coupon_b(uploaded_file):
     col_total = get_col_by_idx_or_name(df, 18, ['합계금액', '합계', 'TOTAL'])
     if col_total: df[col_total] = pd.to_numeric(df[col_total], errors='coerce').fillna(0)
     
+    col_r = df.columns[17] if len(df.columns) > 17 else None
+    col_v = df.columns[21] if len(df.columns) > 21 else None
+
     b_groups = defaultdict(list)
     for _, row in df.iterrows():
         car_no = str(row[col_car]).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
-            b_groups[car_no].append(round_half_up(row[col_total]) if col_total else 0)
+            r_val = translate_to_korean(row.get(col_r, '-')) if col_r else '-'
+            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            b_groups[car_no].append({
+                'amount': round_half_up(row[col_total]) if col_total else 0,
+                'claim_type': r_val,
+                'v_desc': v_val
+            })
     return b_groups
 
 def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff):
@@ -892,12 +976,16 @@ if mode == "MW 보증 비교":
             
             for order in all_orders:
                 p_amts = pdf_groups.get(order, [])
-                e_amts = excel_groups.get(order, [])
-                max_len = max(len(p_amts), len(e_amts))
+                e_items = excel_groups.get(order, [])
+                max_len = max(len(p_amts), len(e_items))
                 
                 for i in range(max_len):
                     p_amt = p_amts[i] if i < len(p_amts) else None
-                    e_amt = e_amts[i] if i < len(e_amts) else None
+                    e_item = e_items[i] if i < len(e_items) else None
+                    e_amt = e_item['amount'] if e_item else None
+                    r_val = e_item['claim_type'] if e_item else '-'
+                    v_val = e_item['v_desc'] if e_item else '-'
+                    
                     order_label = f"{order} ({i+1})" if max_len > 1 else order
                     
                     if p_amt is not None: total_pdf_sum += p_amt
@@ -935,6 +1023,8 @@ if mode == "MW 보증 비교":
                         total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '주문번호': order_label,
+                            'Claim Type (R열)': r_val,
+                            '구분/내용 (V열)': v_val,
                             '차액': f"{diff_val:,}원"
                         })
             
@@ -971,17 +1061,18 @@ if mode == "MW 보증 비교":
             )
             
             st.write("")
-            # 차액 리스트에 합계 행 추가
             if diff_over_100_results:
                 diff_list_with_total = list(diff_over_100_results)
                 diff_list_with_total.append({
                     '주문번호': "★ 총합계",
+                    'Claim Type (R열)': "-",
+                    '구분/내용 (V열)': "-",
                     '차액': f"{total_diff_100_sum:,}원"
                 })
                 diff_df = pd.DataFrame(diff_list_with_total)
                 diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
             else:
-                diff_df = pd.DataFrame(columns=['주문번호', '차액'])
+                diff_df = pd.DataFrame(columns=['주문번호', 'Claim Type (R열)', '구분/내용 (V열)', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
 
@@ -1011,13 +1102,19 @@ elif mode == "쿠폰 보증 비교":
             total_diff_100_sum = 0
             
             for car in all_cars:
-                a_amts = a_groups.get(car, [])
-                b_amts = b_groups.get(car, [])
-                max_len = max(len(a_amts), len(b_amts))
+                a_items = a_groups.get(car, [])
+                b_items = b_groups.get(car, [])
+                max_len = max(len(a_items), len(b_items))
                 
                 for i in range(max_len):
-                    a_amt = a_amts[i] if i < len(a_amts) else None
-                    b_amt = b_amts[i] if i < len(b_amts) else None
+                    a_item = a_items[i] if i < len(a_items) else None
+                    b_item = b_items[i] if i < len(b_items) else None
+                    a_amt = a_item['amount'] if a_item else None
+                    b_amt = b_item['amount'] if b_item else None
+                    
+                    r_val = b_item['claim_type'] if b_item else (a_item['claim_type'] if a_item else '-')
+                    v_val = b_item['v_desc'] if b_item else (a_item['v_desc'] if a_item else '-')
+                    
                     car_label = f"{car} ({i+1})" if max_len > 1 else car
                     
                     if a_amt is not None: total_a_sum += a_amt
@@ -1050,11 +1147,12 @@ elif mode == "쿠폰 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
-                    # +100원 이상 및 -100원 이하(절대값 100원 이상) 모두 감지
                     if abs(diff_val) >= 100:
                         total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '차량번호': car_label,
+                            'Claim Type (R열)': r_val,
+                            '구분/내용 (V열)': v_val,
                             '차액': f"{diff_val:,}원"
                         })
             
@@ -1091,17 +1189,18 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.write("")
-            # 쿠폰 차액 리스트에 합계 행 추가
             if diff_over_100_results:
                 diff_list_with_total = list(diff_over_100_results)
                 diff_list_with_total.append({
                     '차량번호': "★ 총합계",
+                    'Claim Type (R열)': "-",
+                    '구분/내용 (V열)': "-",
                     '차액': f"{total_diff_100_sum:,}원"
                 })
                 diff_df = pd.DataFrame(diff_list_with_total)
                 diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
             else:
-                diff_df = pd.DataFrame(columns=['차량번호', '차액'])
+                diff_df = pd.DataFrame(columns=['차량번호', 'Claim Type (R열)', '구분/내용 (V열)', '차액'])
 
             render_side_by_side_tables(res_df, diff_df)
 
@@ -1150,6 +1249,41 @@ else:
                     })
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
-                render_side_by_side_tables(df_dup, None)
+                
+                # 공임코드 비교 화면 렌더링
+                main_headers = ["No."] + list(df_dup.columns)
+                main_tbody = []
+                for idx, row in df_dup.iterrows():
+                    main_tbody.append(f'<tr><td class="col-no" onclick="copyCell(this)">{idx}</td><td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt" onclick="copyCell(this)">{row.iloc[1]}</td><td class="col-amt" onclick="copyCell(this)">{row.iloc[2]}</td></tr>')
+                
+                table_html = f"""
+                <!DOCTYPE html>
+                <html><head><meta charset="utf-8" /><style>
+                * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+                body {{ background-color: transparent; color: #f8fafc; }}
+                table {{ border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; }}
+                th {{ background-color: #1e293b; color: #fff; padding: 10px 12px; border: 1px solid #334155; text-align: center; }}
+                td {{ padding: 8px 12px; border: 1px solid #334155; cursor: pointer; }}
+                td:hover {{ background-color: rgba(14, 165, 233, 0.2) !important; }}
+                #toast {{ visibility: hidden; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #fff; padding: 8px 16px; border-radius: 6px; font-weight: bold; z-index: 99999; }}
+                #toast.show {{ visibility: visible; }}
+                </style></head><body>
+                <div id="toast">📋 복사 완료!</div>
+                <table><thead><tr><th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th></tr></thead>
+                <tbody>{''.join(main_tbody)}</tbody></table>
+                <script>
+                function copyCell(el) {{
+                  const text = el.innerText.trim();
+                  if (!text || text === '-') return;
+                  navigator.clipboard.writeText(text);
+                  const toast = document.getElementById('toast');
+                  toast.innerText = '📋 복사 완료: ' + text;
+                  toast.className = 'show';
+                  setTimeout(() => {{ toast.className = ''; }}, 1200);
+                }}
+                </script>
+                </body></html>
+                """
+                components.html(table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True)
             else:
                 st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
