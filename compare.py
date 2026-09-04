@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링]
+# 📊 [컴포넌트 렌더링] (한번에 25개 보이도록 1120px 설정)
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -825,6 +825,27 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.session_state.reset_trigger += 1
             st.rerun()
 
+        # 파일이 업로드된 경우 요약 결과 및 다운로드 버튼을 좌측 하단에 표시
+        if f1 and f2:
+            st.divider()
+            st.subheader("📌 분석 요약 결과")
+            sub_c1, sub_c2 = st.columns(2)
+            sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
+            sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
+            
+            sub_c3, sub_c4 = st.columns(2)
+            sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
+            sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
+            
+            st.write("")
+            st.download_button(
+                label=dl_label,
+                data=excel_data,
+                file_name=dl_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
     with right_col:
         if f1 and f2:
             with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
@@ -914,6 +935,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                             })
                 
                 total_diff_sum = total_1_sum - total_2_sum
+                total_cnt = len(matched_results)
+                
                 matched_results.append({
                     '주문번호' if is_mw else '차량번호': "★ 총합계",
                     'PDF 금액 (실 수령액)' if is_mw else '공지된 쿠폰 금액 ( 입금 금액 )': f"{total_1_sum:,}원",
@@ -924,6 +947,15 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 res_df = pd.DataFrame(matched_results)
                 res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
                 
+                if is_mw:
+                    excel_data, month_name = create_mw_excel_report(f2, total_cnt, total_1_sum, total_2_sum, total_diff_sum)
+                    dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
+                    dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
+                else:
+                    excel_data, month_name = create_coupon_excel_report(f1, f2, total_cnt, total_2_sum, total_1_sum, total_diff_sum)
+                    dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
+                    dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
+
                 if diff_over_100_results:
                     diff_list_with_total = list(diff_over_100_results)
                     diff_list_with_total.append({
@@ -940,27 +972,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 render_side_by_side_tables(res_df, diff_df)
         else:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
-
-    if f1 and f2:
-        with left_col:
-            st.divider()
-            st.subheader("📌 분석 요약 결과")
-            sub_c1, sub_c2 = st.columns(2)
-            sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
-            sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
-            
-            sub_c3, sub_c4 = st.columns(2)
-            sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
-            sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
-            
-            st.write("")
-            st.download_button(
-                label=dl_label,
-                data=excel_data,
-                file_name=dl_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
