@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 대형 표 스타일)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 대형 표 및 복사 툴팁 스타일)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -89,6 +89,7 @@ st.markdown(
         margin-top: 15px;
         margin-bottom: 25px;
         font-size: 18px !important;
+        user-select: text !important;
     }
     .custom-result-table th {
         background-color: #1e293b;
@@ -103,14 +104,48 @@ st.markdown(
         padding: 12px 16px;
         font-size: 18px;
         border: 1px solid #334155;
+        cursor: pointer;
+        position: relative;
+        transition: background-color 0.15s ease;
     }
-    .custom-result-table tr:hover {
-        background-color: rgba(14, 165, 233, 0.08);
+    .custom-result-table td:hover {
+        background-color: rgba(14, 165, 233, 0.18) !important;
     }
     .custom-result-table tr.total-row {
         background-color: #0f172a;
         font-weight: bold;
         color: #38bdf8;
+    }
+
+    /* 복사 토스트 알림 메시지 스타일 */
+    #copy-toast {
+        visibility: hidden;
+        min-width: 260px;
+        background-color: #0284c7;
+        color: #fff;
+        text-align: center;
+        border-radius: 8px;
+        padding: 12px 20px;
+        position: fixed;
+        z-index: 99999;
+        left: 50%;
+        bottom: 40px;
+        transform: translateX(-50%);
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    }
+    #copy-toast.show {
+        visibility: visible;
+        animation: toast-fadein 0.3s, toast-fadeout 0.4s 1.2s;
+    }
+    @keyframes toast-fadein {
+        from { bottom: 20px; opacity: 0; }
+        to { bottom: 40px; opacity: 1; }
+    }
+    @keyframes toast-fadeout {
+        from { bottom: 40px; opacity: 1; }
+        to { bottom: 20px; opacity: 0; }
     }
     </style>
     """,
@@ -247,9 +282,10 @@ def round_half_up(value):
     return int(value + 0.5)
 
 def render_large_table(df):
-    """HTML 기반으로 글씨가 큼직한(18px) 표 렌더링 함수"""
+    """HTML 기반 18px 큼직한 표 + 셀 클릭 시 즉시 복사 스크립트 탑재"""
     headers = ["No."] + list(df.columns)
-    html = ['<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>']
+    html = ['<div id="copy-toast">📋 복사되었습니다!</div>']
+    html.append('<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>')
     for h in headers:
         html.append(f'<th>{h}</th>')
     html.append('</tr></thead><tbody>')
@@ -258,13 +294,46 @@ def render_large_table(df):
         is_total = "총합계" in str(row.iloc[0])
         tr_class = ' class="total-row"' if is_total else ''
         html.append(f'<tr{tr_class}>')
-        html.append(f'<td style="text-align: center; font-weight: bold;">{idx}</td>')
+        html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사" style="text-align: center; font-weight: bold;">{idx}</td>')
         for col_idx, val in enumerate(row):
             align = "center" if col_idx == 0 else "right"
-            html.append(f'<td style="text-align: {align};">{val}</td>')
+            html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사" style="text-align: {align};">{val}</td>')
         html.append('</tr>')
         
     html.append('</tbody></table></div>')
+
+    # 클릭 즉시 복사 & 토스트 알림 JavaScript
+    html.append("""
+    <script>
+    function copyCellText(el) {
+        let text = el.innerText.trim();
+        if(!text || text === '-') return;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            let toast = document.getElementById("copy-toast");
+            if(toast) {
+                toast.innerText = "📋 복사 완료: " + text;
+                toast.className = "show";
+                setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
+            }
+        }).catch(err => {
+            // 구형 브라우저 대체 복사
+            const temp = document.createElement("textarea");
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand("copy");
+            document.body.removeChild(temp);
+            let toast = document.getElementById("copy-toast");
+            if(toast) {
+                toast.innerText = "📋 복사 완료: " + text;
+                toast.className = "show";
+                setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
+            }
+        });
+    }
+    </script>
+    """)
     st.markdown("".join(html), unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────
@@ -779,8 +848,7 @@ if mode == "MW 보증 비교":
                 use_container_width=True
             )
             
-            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            # 확실하게 글자 크기가 커지는 HTML 대형 테이블로 출력
+            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함 - 셀 클릭 시 즉시 복사)")
             render_large_table(res_df)
 
 elif mode == "쿠폰 보증 비교":
@@ -873,8 +941,7 @@ elif mode == "쿠폰 보증 비교":
                 use_container_width=True
             )
             
-            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            # 확실하게 글자 크기가 커지는 HTML 대형 테이블로 출력
+            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함 - 셀 클릭 시 즉시 복사)")
             render_large_table(res_df)
 
 else:
@@ -910,7 +977,7 @@ else:
             c3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
             
             if duplicate_codes:
-                st.markdown(f"### 🚨 중복 발견 내역 ({len(duplicate_codes)}건)")
+                st.markdown(f"### 🚨 중복 발견 내역 ({len(duplicate_codes)}건 - 셀 클릭 시 즉시 복사)")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
                     lines_a_str = " | ".join(map_a[code])
