@@ -385,7 +385,7 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -792,7 +792,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링 (우측 테이블 상단 밀착 정렬)
+# 🖥️ 본문 화면 렌더링 (안내 문구를 상단으로 올려 빈 공간 제거)
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     is_mw = (mode == "MW 보증 비교")
@@ -825,8 +825,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.session_state.reset_trigger += 1
             st.rerun()
 
+    with right_col:
         if f1 and f2:
-            st.divider()
             with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
                 if is_mw:
                     excel_groups = load_excel_mw(f2)
@@ -924,55 +924,44 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 res_df = pd.DataFrame(matched_results)
                 res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
                 
-                st.subheader("📌 분석 요약 결과")
-                sub_c1, sub_c2 = st.columns(2)
-                total_cnt = len(res_df) - 1
-                sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
-                sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
-                
-                sub_c3, sub_c4 = st.columns(2)
-                sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
-                sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
-                
-                if is_mw:
-                    excel_data, month_name = create_mw_excel_report(f2, total_cnt, total_1_sum, total_2_sum, total_diff_sum)
-                    dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
-                    dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
+                if diff_over_100_results:
+                    diff_list_with_total = list(diff_over_100_results)
+                    diff_list_with_total.append({
+                        '주문번호' if is_mw else '차량번호': "★ 총합계",
+                        'Claim Type': "-",
+                        '제목': "-",
+                        '차액': f"{total_diff_100_sum:,}원"
+                    })
+                    diff_df = pd.DataFrame(diff_list_with_total)
+                    diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
                 else:
-                    excel_data, month_name = create_coupon_excel_report(f1, f2, total_cnt, total_2_sum, total_1_sum, total_diff_sum)
-                    dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
-                    dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
-                
-                st.write("")
-                st.download_button(
-                    label=dl_label,
-                    data=excel_data,
-                    file_name=dl_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                    diff_df = pd.DataFrame(columns=['주문번호' if is_mw else '차량번호', 'Claim Type', '제목', '차액'])
 
-    with right_col:
-        # 상단 공백 상쇄용 마진 제거 스타일 적용 컨테이너
-        st.markdown('<div style="margin-top: -38px;">', unsafe_allow_html=True)
-        if f1 and f2:
-            if diff_over_100_results:
-                diff_list_with_total = list(diff_over_100_results)
-                diff_list_with_total.append({
-                    '주문번호' if is_mw else '차량번호': "★ 총합계",
-                    'Claim Type': "-",
-                    '제목': "-",
-                    '차액': f"{total_diff_100_sum:,}원"
-                })
-                diff_df = pd.DataFrame(diff_list_with_total)
-                diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-            else:
-                diff_df = pd.DataFrame(columns=['주문번호' if is_mw else '차량번호', 'Claim Type', '제목', '차액'])
-
-            render_side_by_side_tables(res_df, diff_df)
+                render_side_by_side_tables(res_df, diff_df)
         else:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
-        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 파일 업로드가 완료된 경우에만 분석 요약 및 다운로드 버튼을 좌측 하단에 별도 표시
+    if f1 and f2:
+        with left_col:
+            st.divider()
+            st.subheader("📌 분석 요약 결과")
+            sub_c1, sub_c2 = st.columns(2)
+            sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
+            sub_c2.metric("최종 총 차이 금액", f"{total_diff_sum:,}원", delta=f"{total_diff_sum:,}원" if total_diff_sum != 0 else None)
+            
+            sub_c3, sub_c4 = st.columns(2)
+            sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
+            sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
+            
+            st.write("")
+            st.download_button(
+                label=dl_label,
+                data=excel_data,
+                file_name=dl_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
