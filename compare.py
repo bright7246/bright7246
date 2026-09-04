@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링]
+# 📊 [컴포넌트 렌더링] 25개 기준 높이(1120px) 반영
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -275,7 +275,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .flex-container { display: flex; gap: 40px; align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; }
       .table-card { flex: 0 0 auto; }
       .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
-      .scroll-wrap { max-height: 850px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
+      .scroll-wrap { max-height: 1120px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
       .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
       .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
       .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -349,7 +349,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         '</body></html>'
     )
     
-    calc_height = min(900, max(300, len(df_main) * 44 + 100))
+    calc_height = min(1160, max(300, len(df_main) * 44 + 100))
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
@@ -792,7 +792,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링 (좌우 2단 배치 및 예시 문구 복원)
+# 🖥️ 본문 화면 렌더링 (우측 테이블 상단 밀착 정렬)
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     is_mw = (mode == "MW 보증 비교")
@@ -953,6 +953,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 )
 
     with right_col:
+        # 상단 공백 상쇄용 마진 제거 스타일 적용 컨테이너
+        st.markdown('<div style="margin-top: -38px;">', unsafe_allow_html=True)
         if f1 and f2:
             if diff_over_100_results:
                 diff_list_with_total = list(diff_over_100_results)
@@ -970,6 +972,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             render_side_by_side_tables(res_df, diff_df)
         else:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
