@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 좌측 밀착 대형 표)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 글자 길이에 맞춘 컴팩트 표)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -82,29 +82,31 @@ st.markdown(
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
 
-    /* 좌측 정렬 결과 표 스타일링 */
+    /* 글자 크기에 딱 맞춰 빈 공간을 없앤 컴팩트 표 */
     .custom-result-table {
-        width: 100%;
+        width: max-content !important;
         border-collapse: collapse;
-        font-size: 17px !important;
+        font-size: 16px !important;
         user-select: text !important;
         margin-top: 10px;
     }
     .custom-result-table th {
         background-color: #1e293b;
         color: #f8fafc;
-        padding: 12px 10px;
-        font-size: 16px;
+        padding: 10px 14px;
+        font-size: 15px;
         font-weight: bold;
         text-align: center;
         border: 1px solid #334155;
+        white-space: nowrap;
     }
     .custom-result-table td {
-        padding: 10px 12px;
+        padding: 9px 14px;
         font-size: 16px;
         border: 1px solid #334155;
         cursor: pointer;
         transition: background-color 0.15s ease;
+        white-space: nowrap;
     }
     .custom-result-table td:hover {
         background-color: rgba(14, 165, 233, 0.18) !important;
@@ -119,7 +121,13 @@ st.markdown(
         font-weight: bold;
     }
 
-    /* 복사 토스트 알림 메시지 스타일 */
+    /* 각 컬럼별 최적 폭 지정 (천만 단위 금액 여유 기준) */
+    .col-no { min-width: 50px; text-align: center; }
+    .col-id { min-width: 140px; text-align: center; }
+    .col-amount { min-width: 150px; text-align: right; }
+    .col-diff { min-width: 110px; text-align: right; }
+
+    /* 복사 토스트 알림 메시지 */
     #copy-toast {
         visibility: hidden;
         min-width: 260px;
@@ -284,27 +292,40 @@ def round_half_up(value):
     return int(value + 0.5)
 
 def render_html_table(df, is_diff_table=False):
-    """좌측 정렬 + 원클릭 복사 표 렌더링"""
+    """불필요한 공백을 완전히 없앤 밀착 표 렌더링 함수"""
     headers = ["No."] + list(df.columns)
     
-    html = ['<table class="custom-result-table"><thead><tr>']
-    for h in headers:
-        html.append(f'<th>{h}</th>')
+    html = ['<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>']
+    for idx, h in enumerate(headers):
+        if idx == 0:
+            c_class = "col-no"
+        elif idx == 1:
+            c_class = "col-id"
+        elif not is_diff_table and idx in [2, 3]:
+            c_class = "col-amount"
+        else:
+            c_class = "col-diff"
+        html.append(f'<th class="{c_class}">{h}</th>')
     html.append('</tr></thead><tbody>')
     
     for idx, row in df.iterrows():
         is_total = "총합계" in str(row.iloc[0])
         tr_class = ' class="total-row"' if is_total else ''
         html.append(f'<tr{tr_class}>')
-        html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사" style="text-align: center; font-weight: bold;">{idx}</td>')
+        html.append(f'<td class="col-no" onclick="copyCellText(this)" title="클릭하여 복사" style="font-weight: bold;">{idx}</td>')
         for col_idx, val in enumerate(row):
-            align = "center" if col_idx == 0 else "right"
             val_str = str(val)
-            val_class = ' class="diff-highlight"' if (is_diff_table and col_idx == len(row)-1) else ''
-            html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사"{val_class} style="text-align: {align};">{val_str}</td>')
+            if col_idx == 0:
+                c_class = "col-id"
+            elif not is_diff_table and col_idx in [1, 2]:
+                c_class = "col-amount"
+            else:
+                c_class = "col-diff diff-highlight" if is_diff_table else "col-diff"
+                
+            html.append(f'<td class="{c_class}" onclick="copyCellText(this)" title="클릭하여 복사">{val_str}</td>')
         html.append('</tr>')
         
-    html.append('</tbody></table>')
+    html.append('</tbody></table></div>')
     st.markdown("".join(html), unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────
@@ -627,7 +648,7 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
         cell.border = thin_border
 
     current_row = 4
-    for _, row in df_a_iterrows():
+    for _, row in df_a_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
         for col_idx, val in enumerate(row, 1):
             cell = ws.cell(row=current_row, column=col_idx)
@@ -729,7 +750,6 @@ def parse_labor_lines(text):
 # ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
-# 화면 상단 공통 토스트 알림 컨테이너 및 복사 JS 주입
 st.markdown("""
 <div id="copy-toast">📋 복사되었습니다!</div>
 <script>
@@ -825,7 +845,6 @@ if mode == "MW 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
-                    # 차액 절대값이 100원 이상인 건 필터링
                     if abs(diff_val) >= 100:
                         diff_over_100_results.append({
                             '주문번호': order_label,
@@ -865,8 +884,7 @@ if mode == "MW 보증 비교":
             )
             
             st.write("")
-            # 좌측: 전체 대조 내역 / 우측: 차액 100원 이상 리스트
-            table_col1, table_col2 = st.columns([6.8, 3.2], gap="large")
+            table_col1, table_col2 = st.columns([5.5, 4.5], gap="medium")
             with table_col1:
                 st.markdown("### 📋 상세 대조 내역")
                 render_html_table(res_df)
@@ -944,7 +962,6 @@ elif mode == "쿠폰 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
-                    # 차액 절대값이 100원 이상인 건 필터링
                     if abs(diff_val) >= 100:
                         diff_over_100_results.append({
                             '차량번호': car_label,
@@ -984,7 +1001,7 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.write("")
-            table_col1, table_col2 = st.columns([6.8, 3.2], gap="large")
+            table_col1, table_col2 = st.columns([5.5, 4.5], gap="medium")
             with table_col1:
                 st.markdown("### 📋 상세 대조 내역")
                 render_html_table(res_df)
