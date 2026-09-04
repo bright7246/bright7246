@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 3단계 색상 순환 클릭 복사 기능 적용
+# 📊 [컴포넌트 렌더링] (3단계 색상 순환 클릭 복사 + 차액 리스트 항상 노출)
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -224,50 +224,49 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         main_tbody.append('</tr>')
 
     diff_section = ""
-    if df_diff is not None:
+    if df_diff is not None and len(df_diff) > 0:
         diff_headers = ["No."] + list(df_diff.columns)
-        if len(df_diff) > 0:
-            diff_tbody = []
-            for idx, row in df_diff.iterrows():
-                is_total = "총합계" in str(row.iloc[0])
-                tr_class = ' class="total-row"' if is_total else ''
-                diff_tbody.append(f'<tr{tr_class}>')
-                diff_tbody.append(f'<td class="col-no">{idx}</td>')
-                
-                if not is_total:
-                    diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-                else:
-                    diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
-                    
-                diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-                diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-                diff_color = "" if is_total else " diff-red"
-                diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-                diff_tbody.append('</tr>')
+        diff_tbody = []
+        for idx, row in df_diff.iterrows():
+            is_total = "총합계" in str(row.iloc[0])
+            tr_class = ' class="total-row"' if is_total else ''
+            diff_tbody.append(f'<tr{tr_class}>')
+            diff_tbody.append(f'<td class="col-no">{idx}</td>')
             
-            diff_section = (
-                '<div class="table-card">'
-                f'<div class="card-title">{diff_title}</div>'
-                '<div class="scroll-wrap">'
-                '<table class="compact-table">'
-                '<thead><tr>'
-                f'<th class="col-no">{diff_headers[0]}</th>'
-                f'<th class="col-id">{diff_headers[1]}</th>'
-                f'<th class="col-type">{diff_headers[2]}</th>'
-                f'<th class="col-desc">{diff_headers[3]}</th>'
-                f'<th class="col-diff">{diff_headers[4]}</th>'
-                '</tr></thead>'
-                f'<tbody>{"".join(diff_tbody)}</tbody>'
-                '</table></div></div>'
-            )
-        else:
-            diff_section = (
-                '<div class="table-card">'
-                f'<div class="card-title">{diff_title}</div>'
-                '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">'
-                '✅ 차액 100원 이상 발생 항목이 없습니다.'
-                '</div></div>'
-            )
+            if not is_total:
+                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+            else:
+                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+                
+            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+            diff_color = "" if is_total else " diff-red"
+            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+            diff_tbody.append('</tr>')
+        
+        diff_section = (
+            '<div class="table-card">'
+            f'<div class="card-title">{diff_title}</div>'
+            '<div class="scroll-wrap">'
+            '<table class="compact-table">'
+            '<thead><tr>'
+            f'<th class="col-no">{diff_headers[0]}</th>'
+            f'<th class="col-id">{diff_headers[1]}</th>'
+            f'<th class="col-type">{diff_headers[2]}</th>'
+            f'<th class="col-desc">{diff_headers[3]}</th>'
+            f'<th class="col-diff">{diff_headers[4]}</th>'
+            '</tr></thead>'
+            f'<tbody>{"".join(diff_tbody)}</tbody>'
+            '</table></div></div>'
+        )
+    else:
+        diff_section = (
+            '<div class="table-card">'
+            f'<div class="card-title">{diff_title}</div>'
+            '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; min-width: 320px;">'
+            '✅ 차액 100원 이상 발생 항목이 없습니다.'
+            '</div></div>'
+        )
 
     css_code = """
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -286,7 +285,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .compact-table tbody td.copyable { cursor: pointer; }
       .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
       
-      /* 3단계 클릭 상태 색상 정의 */
       .compact-table tbody td.state-1 { background-color: rgba(14, 165, 233, 0.45) !important; color: #ffffff !important; }
       .compact-table tbody td.state-2 { background-color: rgba(239, 68, 68, 0.45) !important; color: #ffffff !important; }
       
@@ -309,7 +307,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         const text = el.innerText.trim();
         if (!text || text === '-') return;
 
-        // 클립보드 복사 실행
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.position = 'fixed';
@@ -319,7 +316,6 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         try { document.execCommand('copy'); } catch(e) { navigator.clipboard.writeText(text); }
         document.body.removeChild(ta);
 
-        // 3단계 색상 토글 로직 (State 0 -> State 1(하늘색) -> State 2(연한 붉은색) -> State 0(원상태))
         let currentState = el.getAttribute('data-click-state') || '0';
         
         if (currentState === '0') {
@@ -842,7 +838,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.session_state.reset_trigger += 1
             st.rerun()
 
-    # 데이터 연산 및 결과 출력을 통합 처리하여 NameError 원천 방지
     if f1 and f2:
         with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
             if is_mw:
@@ -965,11 +960,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             else:
                 diff_df = pd.DataFrame(columns=['주문번호' if is_mw else '차량번호', 'Claim Type', '제목', '차액'])
 
-        # 우측 상세표 출력
         with right_col:
             render_side_by_side_tables(res_df, diff_df)
 
-        # 좌측 하단 요약 결과 및 다운로드 버튼 출력
         with left_col:
             st.divider()
             st.subheader("📌 분석 요약 결과")
