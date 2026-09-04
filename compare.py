@@ -31,11 +31,12 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 하늘색 테마 스타일링 (상단 탭, 주요 버튼, 다운로드 버튼)
+# 🎨 하늘색 테마 스타일링 (상단 탭, 주요 버튼, 다운로드 버튼, 공유 버튼)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
+    /* 상단 메뉴 버튼 크기 */
     div[data-testid="stHorizontalBlock"] div.stButton > button {
         height: 65px !important;
         border-radius: 10px !important;
@@ -45,6 +46,22 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
+    
+    /* 공유 버튼 전용 크기 축소 스타일 */
+    div.share-btn-wrap div.stButton > button {
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 4px 12px !important;
+        border-radius: 8px !important;
+        margin-top: 6px !important;
+    }
+    div.share-btn-wrap div.stButton > button p {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        line-height: 1.2 !important;
+    }
+
+    /* 선택된 Primary 버튼 & 주요 액션 버튼을 하늘색으로 변경 */
     button[kind="primary"], div.stDownloadButton > button {
         background-color: #0ea5e9 !important;
         border-color: #0ea5e9 !important;
@@ -82,14 +99,15 @@ def share_modal():
     st.text_input("프로그램 접속 주소", value=APP_URL)
     st.caption("주소창 오른쪽 아이콘 또는 주소를 전체 복사하여 전달해 주세요.")
 
-# 타이틀 및 우측 공유 버튼
-head_col1, head_col2 = st.columns([8, 2])
+# 타이틀 및 아담한 크기의 공유 버튼
+head_col1, head_col2 = st.columns([8.5, 1.5])
 with head_col1:
     st.title("📊 아이언모터스 보증팀 지원 프로그램")
 with head_col2:
-    st.write("")
-    if st.button("🔗 프로그램 공유 / QR", use_container_width=True):
+    st.markdown('<div class="share-btn-wrap">', unsafe_allow_html=True)
+    if st.button("🔗 공유 / QR", use_container_width=True):
         share_modal()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────
 # 🗂️ 상단 가로 메뉴 버튼 UI
