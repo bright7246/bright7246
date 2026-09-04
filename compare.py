@@ -182,7 +182,7 @@ st.divider()
 mode = st.session_state.current_mode
 
 # ────────────────────────────────────────────────────────
-# 🛠️ [공통 함수]
+# 🛠️ [공통 함수] 헤더 행 지능형 검색 및 이름 기반 컬럼 매칭
 # ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
@@ -199,13 +199,16 @@ def read_excel_smart_header(uploaded_file):
     df = pd.read_excel(uploaded_file, header=header_row_idx)
     return df
 
-def get_col_by_idx_or_name(df, col_idx, possible_names):
-    if col_idx < len(df.columns):
-        return df.columns[col_idx]
-    for name in possible_names:
+# 헤더 글자(키워드 목록)를 기준으로 컬럼을 유연하게 찾는 함수
+def find_col_smart(df, keywords, fallback_idx=None):
+    for kw in keywords:
+        kw_clean = str(kw).replace(" ", "").upper()
         for col in df.columns:
-            if name.upper() in str(col).upper().strip():
+            col_clean = str(col).replace(" ", "").upper()
+            if kw_clean in col_clean:
                 return col
+    if fallback_idx is not None and fallback_idx < len(df.columns):
+        return df.columns[fallback_idx]
     return None
 
 def round_half_up(value):
@@ -218,7 +221,6 @@ def translate_to_korean(val):
     
     res = str(val).strip()
 
-    # 문장 단위 정밀 매칭
     sentence_dict = {
         r"Driver'?s?\s+door\s+panel\s+tear\.?": "운전석 도어 패널 찢어짐",
         r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐",
@@ -238,7 +240,6 @@ def translate_to_korean(val):
         if re.search(pattern, res, re.IGNORECASE):
             res = re.sub(pattern, kr, res, flags=re.IGNORECASE)
 
-    # 개별 단어 및 부품명 매칭
     term_dict = {
         r"\bDriver'?s?\b": "운전석",
         r"\bPassenger'?s?\b": "동승석",
@@ -518,27 +519,33 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     
-    col_claim_no = 'CLAIM NO'
-    for col in df.columns:
-        if 'CLAIM' in str(col).upper() and 'NO' in str(col).upper():
-            col_claim_no = col
-            break
+    col_claim_no = find_col_smart(df, ['CLAIM NO', 'CLAIM_NO', '클레임번호', '청구번호', 'CLAIM'], fallback_idx=0)
             
     target_cols = ['공임청구액', '공임청구부가세', '부품청구액', '부품청구부가세']
     for col in target_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        matched_col = find_col_smart(df, [col])
+        if matched_col:
+            df[matched_col] = pd.to_numeric(df[matched_col], errors='coerce').fillna(0)
             
-    df['Excel_Total'] = (df.get('공임청구액', 0) + df.get('공임청구부가세', 0) + 
-                         df.get('부품청구액', 0) + df.get('부품청구부가세', 0)).apply(round_half_up)
+    c_labor = find_col_smart(df, ['공임청구액'])
+    c_labor_vat = find_col_smart(df, ['공임청구부가세'])
+    c_part = find_col_smart(df, ['부품청구액'])
+    c_part_vat = find_col_smart(df, ['부품청구부가세'])
+
+    df['Excel_Total'] = (
+        (df[c_labor] if c_labor else 0) + 
+        (df[c_labor_vat] if c_labor_vat else 0) + 
+        (df[c_part] if c_part else 0) + 
+        (df[c_part_vat] if c_part_vat else 0)
+    ).apply(round_half_up)
     
-    # 엑셀 R열(인덱스 17: Claim Type) 및 V열(인덱스 21: 제목)
-    col_r = df.columns[17] if len(df.columns) > 17 else None
-    col_v = df.columns[21] if len(df.columns) > 21 else None
+    # 글자 키워드 기반으로 Claim Type 및 제목 열 유연하게 찾기
+    col_r = find_col_smart(df, ['CLAIM TYPE', 'CLAIMTYPE', '청구유형', '클레임유형', 'TYPE', '유형'], fallback_idx=17)
+    col_v = find_col_smart(df, ['제목', 'TITLE', 'SUBJECT', '내용', '작업내용', '수리내용', 'DESCRIPTION', 'REMARK', '비고'], fallback_idx=21)
 
     excel_groups = defaultdict(list)
     for _, row in df.iterrows():
-        claim_no = str(row.get(col_claim_no, '')).strip()
+        claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
@@ -609,18 +616,7 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     
     col_mapping = {}
     for th in target_headers:
-        found_col = None
-        possible_keywords = alias_dict.get(th, [th])
-        for col in df_mw_raw.columns:
-            clean_col = str(col).replace(" ", "").upper()
-            for kw in possible_keywords:
-                clean_kw = kw.replace(" ", "").upper()
-                if clean_kw in clean_col:
-                    found_col = col
-                    break
-            if found_col:
-                break
-        col_mapping[th] = found_col
+        col_mapping[th] = find_col_smart(df_mw_raw, alias_dict.get(th, [th]))
 
     month_str = "6월"
     file_name = getattr(uploaded_file_mw, 'name', '')
@@ -773,20 +769,21 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
 # ────────────────────────────────────────────────────────
 def load_excel_coupon_a(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
-    col_car = get_col_by_idx_or_name(df, 3, ['차량번호', 'CAR', 'VEHICLE'])
-    col_part = get_col_by_idx_or_name(df, 8, ['부품청구', '부품'])
-    col_labour = get_col_by_idx_or_name(df, 9, ['공임청구', '공임'])
+    col_car = find_col_smart(df, ['차량번호', 'CAR NO', 'CAR_NO', 'VEHICLE'], fallback_idx=3)
+    col_part = find_col_smart(df, ['부품청구', '부품'], fallback_idx=8)
+    col_labour = find_col_smart(df, ['공임청구', '공임'], fallback_idx=9)
+    
     if col_part: df[col_part] = pd.to_numeric(df[col_part], errors='coerce').fillna(0)
     if col_labour: df[col_labour] = pd.to_numeric(df[col_labour], errors='coerce').fillna(0)
     
-    df['Calc_Total'] = ((df[col_part] + df[col_labour]) * 1.1).apply(round_half_up)
+    df['Calc_Total'] = (((df[col_part] if col_part else 0) + (df[col_labour] if col_labour else 0)) * 1.1).apply(round_half_up)
     
-    col_r = df.columns[17] if len(df.columns) > 17 else None
-    col_v = df.columns[21] if len(df.columns) > 21 else None
+    col_r = find_col_smart(df, ['CLAIM TYPE', 'CLAIMTYPE', '청구유형', '클레임유형', 'TYPE', '유형'], fallback_idx=17)
+    col_v = find_col_smart(df, ['제목', 'TITLE', 'SUBJECT', '내용', '작업내용', '수리내용', 'DESCRIPTION', 'REMARK', '비고'], fallback_idx=21)
 
     a_groups = defaultdict(list)
     for _, row in df.iterrows():
-        car_no = str(row[col_car]).strip() if col_car else 'Unknown'
+        car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
@@ -799,16 +796,16 @@ def load_excel_coupon_a(uploaded_file):
 
 def load_excel_coupon_b(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
-    col_car = get_col_by_idx_or_name(df, 6, ['차량번호', 'CAR', 'VEHICLE'])
-    col_total = get_col_by_idx_or_name(df, 18, ['합계금액', '합계', 'TOTAL'])
+    col_car = find_col_smart(df, ['차량번호', 'CAR NO', 'CAR_NO', 'VEHICLE'], fallback_idx=6)
+    col_total = find_col_smart(df, ['합계금액', '합계', 'TOTAL'], fallback_idx=18)
     if col_total: df[col_total] = pd.to_numeric(df[col_total], errors='coerce').fillna(0)
     
-    col_r = df.columns[17] if len(df.columns) > 17 else None
-    col_v = df.columns[21] if len(df.columns) > 21 else None
+    col_r = find_col_smart(df, ['CLAIM TYPE', 'CLAIMTYPE', '청구유형', '클레임유형', 'TYPE', '유형'], fallback_idx=17)
+    col_v = find_col_smart(df, ['제목', 'TITLE', 'SUBJECT', '내용', '작업내용', '수리내용', 'DESCRIPTION', 'REMARK', '비고'], fallback_idx=21)
 
     b_groups = defaultdict(list)
     for _, row in df.iterrows():
-        car_no = str(row[col_car]).strip() if col_car else 'Unknown'
+        car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
             v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
