@@ -8,8 +8,12 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
-# 웹페이지 기본 설정
-st.set_page_config(page_title="아이언모터스 보증팀 지원 프로그램", layout="wide")
+# 사이드바 초기 닫힘 상태로 설정
+st.set_page_config(
+    page_title="아이언모터스 보증팀 지원 프로그램", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # 브라우저 자동 번역 충돌 방지 태그
 st.markdown(
@@ -23,21 +27,18 @@ st.markdown(
 st.title("📊 아이언모터스 보증팀 지원 프로그램")
 
 # ────────────────────────────────────────────────────────
-# 🗂️ 사이드바 큼직한 메뉴 버튼 UI
+# 🗂️ 상단 가로 메뉴 버튼 UI
 # ────────────────────────────────────────────────────────
-st.sidebar.header("⚙️ 작업 모드 선택")
-
-# 사이드바 버튼 내부 글자 크기 강제 확대 (20px, 굵게)
-st.sidebar.markdown(
+# 상단 메뉴 버튼 크기 및 텍스트 스타일링
+st.markdown(
     """
     <style>
-    div[data-testid="stSidebar"] div.stButton > button {
-        height: 70px !important;
-        margin-bottom: 12px !important;
+    div[data-testid="stHorizontalBlock"] div.stButton > button {
+        height: 65px !important;
         border-radius: 10px !important;
     }
-    div[data-testid="stSidebar"] div.stButton > button p {
-        font-size: 20px !important;
+    div[data-testid="stHorizontalBlock"] div.stButton > button p {
+        font-size: 18px !important;
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
@@ -50,32 +51,39 @@ st.sidebar.markdown(
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
 
-btn_mw = st.sidebar.button(
-    "📋 MW 보증 비교 (PDF vs 엑셀)", 
-    use_container_width=True, 
-    type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"
-)
-if btn_mw:
-    st.session_state.current_mode = "MW 보증 비교"
-    st.rerun()
+nav_col1, nav_col2, nav_col3 = st.columns(3)
 
-btn_coupon = st.sidebar.button(
-    "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)", 
-    use_container_width=True, 
-    type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"
-)
-if btn_coupon:
-    st.session_state.current_mode = "쿠폰 보증 비교"
-    st.rerun()
+with nav_col1:
+    btn_mw = st.button(
+        "📋 MW 보증 비교 (PDF vs 엑셀)", 
+        use_container_width=True, 
+        type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"
+    )
+    if btn_mw:
+        st.session_state.current_mode = "MW 보증 비교"
+        st.rerun()
 
-btn_labor = st.sidebar.button(
-    "🔧 공임코드 비교 (중복 작업 검증)", 
-    use_container_width=True, 
-    type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"
-)
-if btn_labor:
-    st.session_state.current_mode = "공임코드 비교"
-    st.rerun()
+with nav_col2:
+    btn_coupon = st.button(
+        "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)", 
+        use_container_width=True, 
+        type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"
+    )
+    if btn_coupon:
+        st.session_state.current_mode = "쿠폰 보증 비교"
+        st.rerun()
+
+with nav_col3:
+    btn_labor = st.button(
+        "🔧 공임코드 비교 (중복 작업 검증)", 
+        use_container_width=True, 
+        type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"
+    )
+    if btn_labor:
+        st.session_state.current_mode = "공임코드 비교"
+        st.rerun()
+
+st.divider()
 
 mode = st.session_state.current_mode
 
@@ -559,7 +567,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 화면 렌더링
+# 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
 if mode == "MW 보증 비교":
     st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
