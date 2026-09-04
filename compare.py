@@ -8,6 +8,9 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
+import urllib.request
+import urllib.parse
+import json
 
 # 사이드바 초기 닫힘 상태로 설정
 st.set_page_config(
@@ -199,7 +202,6 @@ def read_excel_smart_header(uploaded_file):
     df = pd.read_excel(uploaded_file, header=header_row_idx)
     return df
 
-# 헤더 글자(키워드 목록)를 기준으로 컬럼을 유연하게 찾는 함수
 def find_col_smart(df, keywords, fallback_idx=None):
     for kw in keywords:
         kw_clean = str(kw).replace(" ", "").upper()
@@ -214,69 +216,55 @@ def find_col_smart(df, keywords, fallback_idx=None):
 def round_half_up(value):
     return int(value + 0.5)
 
-# 정비/클레임 제목 영문 문장 및 용어 상세 한글 번역 함수
-def translate_to_korean(val):
-    if pd.isna(val) or val is None or str(val).strip() == "" or str(val).strip() == "nan":
+# ────────────────────────────────────────────────────────
+# 🌐 [자동 번역 엔진] 구글 번역 API 직접 호출 (외부 모듈 의존 없음)
+# ────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def translate_to_korean_auto(text):
+    if not text or pd.isna(text):
         return "-"
-    
-    res = str(val).strip()
+    raw = str(text).strip()
+    if raw == "" or raw.lower() == "nan" or raw == "-":
+        return "-"
 
-    sentence_dict = {
+    # 볼보 순정 서비스 고유 명칭 사전 매칭
+    if "volvo original service" in raw.lower():
+        return re.sub(r'volvo\s+original\s+service', '볼보 순정 서비스', raw, flags=re.IGNORECASE)
+
+    # 영문 알파벳이 전혀 없는 경우 원문 반환
+    if not re.search(r'[a-zA-Z]', raw):
+        return raw
+
+    try:
+        url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&q=" + urllib.parse.quote(raw)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            res_json = json.loads(response.read().decode('utf-8'))
+            translated_chunks = [item[0] for item in res_json[0] if item and item[0]]
+            res = "".join(translated_chunks)
+            if res:
+                return res
+    except Exception:
+        pass
+
+    # 네트워크 지연/오류 시 예비 키워드 치환
+    fallback_map = {
+        r"Steering\s+occurs\.?": "조향 소음 발생",
+        r"Steering": "스티어링(조향)",
+        r"Engine\s+warning\s+light\s+illuminated\.?": "엔진 경고등 점등",
+        r"Battery\s+severe\s+charging\s+fault\s+message\s+illuminated\.?": "배터리 충전 결함 메시지 점등",
+        r"Engine\s+power\s+reduction\s+occurred\.?": "엔진 출력 저하 발생",
         r"Driver'?s?\s+door\s+panel\s+tear\.?": "운전석 도어 패널 찢어짐",
-        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐",
-        r"Volvo\s+Original\s+Service": "볼보 순정 서비스",
-        r"Periodic\s+maintenance": "정기 점검",
-        r"Engine\s+oil\s+and\s+filter\s+replace": "엔진 오일 및 필터 교환",
-        r"Brake\s+pad\s+replace": "브레이크 패드 교환",
-        r"Check\s+engine\s+light\s+on": "엔진 경고등 점등",
-        r"Software\s+download": "소프트웨어 다운로드",
-        r"Software\s+upgrade": "소프트웨어 업그레이드",
-        r"Wheel\s+alignment": "휠 얼라인먼트",
-        r"Noise\s+from\s+front": "전방 소음 발생",
-        r"Noise\s+from\s+rear": "후방 소음 발생"
+        r"Passenger'?s?\s+door\s+panel\s+tear\.?": "동승석 도어 패널 찢어짐"
     }
-
-    for pattern, kr in sentence_dict.items():
-        if re.search(pattern, res, re.IGNORECASE):
-            res = re.sub(pattern, kr, res, flags=re.IGNORECASE)
-
-    term_dict = {
-        r"\bDriver'?s?\b": "운전석",
-        r"\bPassenger'?s?\b": "동승석",
-        r"\bFront\b": "앞/전방",
-        r"\bRear\b": "뒤/후방",
-        r"\bDoor\s+panel\b": "도어 패널",
-        r"\bDoor\b": "도어",
-        r"\bPanel\b": "패널",
-        r"\bTear\b": "찢어짐",
-        r"\bBroken\b": "파손",
-        r"\bDamage\b": "손상",
-        r"\bLeak\b": "누유/누수",
-        r"\bNoise\b": "소음",
-        r"\bVibration\b": "떨림",
-        r"\bReplace\b": "교환",
-        r"\bReplacement\b": "교환",
-        r"\bRepair\b": "수리",
-        r"\bInspection\b": "점검",
-        r"\bOriginal\s+Service\b": "순정 서비스",
-        r"\bExtended\s+Warranty\b": "연장보증",
-        r"\bWarranty\b": "일반보증",
-        r"\bCampaign\b": "캠페인",
-        r"\bRecall\b": "리콜",
-        r"\bGoodwill\b": "선처보증(Goodwill)",
-        r"\bPart\b": "부품",
-        r"\bParts\b": "부품",
-        r"\bLabor\b": "공임",
-        r"\bLabour\b": "공임"
-    }
-
-    for en, kr in term_dict.items():
-        res = re.sub(en, kr, res, flags=re.IGNORECASE)
-
-    return res.strip()
+    res = raw
+    for p, kr in fallback_map.items():
+        if re.search(p, res, re.IGNORECASE):
+            res = re.sub(p, kr, res, flags=re.IGNORECASE)
+    return res
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + Claim Type / 제목 지원
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -430,7 +418,7 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
       .col-id {{ min-width: 130px; text-align: center; }}
       .col-amt {{ min-width: 140px; text-align: right; }}
       .col-type {{ min-width: 120px; text-align: center; color: #38bdf8; }}
-      .col-desc {{ min-width: 180px; text-align: left; }}
+      .col-desc {{ min-width: 220px; text-align: left; }}
       .col-diff {{ min-width: 110px; text-align: right; }}
 
       #toast {{
@@ -539,7 +527,6 @@ def load_excel_mw(uploaded_file):
         (df[c_part_vat] if c_part_vat else 0)
     ).apply(round_half_up)
     
-    # 글자 키워드 기반으로 Claim Type 및 제목 열 유연하게 찾기
     col_r = find_col_smart(df, ['CLAIM TYPE', 'CLAIMTYPE', '청구유형', '클레임유형', 'TYPE', '유형'], fallback_idx=17)
     col_v = find_col_smart(df, ['제목', 'TITLE', 'SUBJECT', '내용', '작업내용', '수리내용', 'DESCRIPTION', 'REMARK', '비고'], fallback_idx=21)
 
@@ -548,7 +535,8 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            raw_v = row.get(col_v, '-') if col_v else '-'
+            v_val = translate_to_korean_auto(raw_v)
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -786,7 +774,8 @@ def load_excel_coupon_a(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            raw_v = row.get(col_v, '-') if col_v else '-'
+            v_val = translate_to_korean_auto(raw_v)
             a_groups[car_no].append({
                 'amount': int(row['Calc_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -808,7 +797,8 @@ def load_excel_coupon_b(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            v_val = translate_to_korean(row.get(col_v, '-')) if col_v else '-'
+            raw_v = row.get(col_v, '-') if col_v else '-'
+            v_val = translate_to_korean_auto(raw_v)
             b_groups[car_no].append({
                 'amount': round_half_up(row[col_total]) if col_total else 0,
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -977,7 +967,7 @@ if mode == "MW 보증 비교":
         excel_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key="mw_excel", label_visibility="collapsed")
         
     if pdf_file and excel_file:
-        with st.spinner("MW 보증 데이터 교차 대조 중..."):
+        with st.spinner("MW 보증 데이터 교차 대조 및 제목 실시간 한글 번역 중..."):
             excel_groups = load_excel_mw(excel_file)
             pdf_groups = load_pdf_mw(pdf_file)
             
@@ -1033,7 +1023,6 @@ if mode == "MW 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
-                    # +100원 이상 및 -100원 이하(절대값 100원 이상) 모두 감지
                     if abs(diff_val) >= 100:
                         total_diff_100_sum += diff_val
                         diff_over_100_results.append({
@@ -1104,7 +1093,7 @@ elif mode == "쿠폰 보증 비교":
         file_b = st.file_uploader("DMS 쿠폰파일 업로드", type=["xlsx"], key="cp_b", label_visibility="collapsed")
         
     if file_a and file_b:
-        with st.spinner("쿠폰 보증 엑셀 간 교차 대조 중..."):
+        with st.spinner("쿠폰 보증 엑셀 간 교차 대조 및 제목 실시간 한글 번역 중..."):
             a_groups = load_excel_coupon_a(file_a)
             b_groups = load_excel_coupon_b(file_b)
             
