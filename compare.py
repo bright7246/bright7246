@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import pdfplumber
 import re
@@ -34,12 +35,11 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 글자 길이에 맞춘 컴팩트 표)
+# 🎨 기본 UI 스타일링 (상단 탭, 주요 버튼, 공유 버튼)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
-    /* 상단 메뉴 버튼 크기 */
     div[data-testid="stHorizontalBlock"] div.stButton > button {
         height: 65px !important;
         border-radius: 10px !important;
@@ -49,8 +49,6 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
-    
-    /* 공유 버튼 전용 크기 축소 스타일 */
     div.share-btn-wrap div.stButton > button {
         height: 38px !important;
         min-height: 38px !important;
@@ -63,8 +61,6 @@ st.markdown(
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
-
-    /* 선택된 Primary 버튼 & 주요 액션 버튼을 하늘색으로 변경 */
     button[kind="primary"], div.stDownloadButton > button {
         background-color: #0ea5e9 !important;
         border-color: #0ea5e9 !important;
@@ -80,82 +76,6 @@ st.markdown(
         background-color: #0369a1 !important;
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
-    }
-
-    /* 글자 크기에 딱 맞춰 빈 공간을 없앤 컴팩트 표 */
-    .custom-result-table {
-        width: max-content !important;
-        border-collapse: collapse;
-        font-size: 16px !important;
-        user-select: text !important;
-        margin-top: 10px;
-    }
-    .custom-result-table th {
-        background-color: #1e293b;
-        color: #f8fafc;
-        padding: 10px 14px;
-        font-size: 15px;
-        font-weight: bold;
-        text-align: center;
-        border: 1px solid #334155;
-        white-space: nowrap;
-    }
-    .custom-result-table td {
-        padding: 9px 14px;
-        font-size: 16px;
-        border: 1px solid #334155;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-        white-space: nowrap;
-    }
-    .custom-result-table td:hover {
-        background-color: rgba(14, 165, 233, 0.18) !important;
-    }
-    .custom-result-table tr.total-row {
-        background-color: #0f172a;
-        font-weight: bold;
-        color: #38bdf8;
-    }
-    .diff-highlight {
-        color: #ef4444 !important;
-        font-weight: bold;
-    }
-
-    /* 각 컬럼별 최적 폭 지정 (천만 단위 금액 여유 기준) */
-    .col-no { min-width: 50px; text-align: center; }
-    .col-id { min-width: 140px; text-align: center; }
-    .col-amount { min-width: 150px; text-align: right; }
-    .col-diff { min-width: 110px; text-align: right; }
-
-    /* 복사 토스트 알림 메시지 */
-    #copy-toast {
-        visibility: hidden;
-        min-width: 260px;
-        background-color: #0284c7;
-        color: #fff;
-        text-align: center;
-        border-radius: 8px;
-        padding: 12px 20px;
-        position: fixed;
-        z-index: 99999;
-        left: 50%;
-        bottom: 40px;
-        transform: translateX(-50%);
-        font-size: 16px;
-        font-weight: bold;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-    }
-    #copy-toast.show {
-        visibility: visible;
-        animation: toast-fadein 0.3s, toast-fadeout 0.4s 1.2s;
-    }
-    @keyframes toast-fadein {
-        from { bottom: 20px; opacity: 0; }
-        to { bottom: 40px; opacity: 1; }
-    }
-    @keyframes toast-fadeout {
-        from { bottom: 40px; opacity: 1; }
-        to { bottom: 20px; opacity: 0; }
     }
     </style>
     """,
@@ -291,42 +211,234 @@ def get_col_by_idx_or_name(df, col_idx, possible_names):
 def round_half_up(value):
     return int(value + 0.5)
 
-def render_html_table(df, is_diff_table=False):
-    """불필요한 공백을 완전히 없앤 밀착 표 렌더링 함수"""
-    headers = ["No."] + list(df.columns)
+# ────────────────────────────────────────────────────────
+# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + 좌측 밀착 나란히 배치
+# ────────────────────────────────────────────────────────
+def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
+    main_headers = ["No."] + list(df_main.columns)
     
-    html = ['<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>']
-    for idx, h in enumerate(headers):
-        if idx == 0:
-            c_class = "col-no"
-        elif idx == 1:
-            c_class = "col-id"
-        elif not is_diff_table and idx in [2, 3]:
-            c_class = "col-amount"
-        else:
-            c_class = "col-diff"
-        html.append(f'<th class="{c_class}">{h}</th>')
-    html.append('</tr></thead><tbody>')
-    
-    for idx, row in df.iterrows():
+    main_tbody = []
+    for idx, row in df_main.iterrows():
         is_total = "총합계" in str(row.iloc[0])
         tr_class = ' class="total-row"' if is_total else ''
-        html.append(f'<tr{tr_class}>')
-        html.append(f'<td class="col-no" onclick="copyCellText(this)" title="클릭하여 복사" style="font-weight: bold;">{idx}</td>')
-        for col_idx, val in enumerate(row):
+        main_tbody.append(f'<tr{tr_class}>')
+        main_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
+        for c_idx, val in enumerate(row):
             val_str = str(val)
-            if col_idx == 0:
-                c_class = "col-id"
-            elif not is_diff_table and col_idx in [1, 2]:
-                c_class = "col-amount"
-            else:
-                c_class = "col-diff diff-highlight" if is_diff_table else "col-diff"
-                
-            html.append(f'<td class="{c_class}" onclick="copyCellText(this)" title="클릭하여 복사">{val_str}</td>')
-        html.append('</tr>')
-        
-    html.append('</tbody></table></div>')
-    st.markdown("".join(html), unsafe_allow_html=True)
+            align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row)-1 else "col-amt")
+            main_tbody.append(f'<td class="{align_class}" onclick="copyCell(this)">{val_str}</td>')
+        main_tbody.append('</tr>')
+
+    diff_section = ""
+    if df_diff is not None:
+        diff_headers = ["No."] + list(df_diff.columns)
+        if len(df_diff) > 0:
+            diff_tbody = []
+            for idx, row in df_diff.iterrows():
+                diff_tbody.append('<tr>')
+                diff_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
+                diff_tbody.append(f'<td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td>')
+                diff_tbody.append(f'<td class="col-diff diff-red" onclick="copyCell(this)">{row.iloc[1]}</td>')
+                diff_tbody.append('</tr>')
+            
+            diff_section = f"""
+            <div class="table-card">
+                <div class="card-title">{diff_title}</div>
+                <div class="scroll-wrap">
+                    <table class="compact-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">{diff_headers[0]}</th>
+                                <th class="col-id">{diff_headers[1]}</th>
+                                <th class="col-diff">{diff_headers[2]}</th>
+                            </tr>
+                        </thead>
+                        <tbody>{''.join(diff_tbody)}</tbody>
+                    </table>
+                </div>
+            </div>
+            """
+        else:
+            diff_section = f"""
+            <div class="table-card">
+                <div class="card-title">{diff_title}</div>
+                <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+                    ✅ 차액 100원 이상 발생 항목이 없습니다.
+                </div>
+            </div>
+            """
+
+    full_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8" />
+    <style>
+      * {{
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }}
+      body {{
+        background-color: transparent;
+        color: #f8fafc;
+        overflow-x: hidden;
+      }}
+      .flex-container {{
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+        justify-content: flex-start;
+      }}
+      .table-card {{
+        flex: 0 0 auto;
+      }}
+      .card-title {{
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #f1f5f9;
+      }}
+      .scroll-wrap {{
+        max-height: 640px;
+        overflow-y: auto;
+        border: 1px solid #334155;
+        border-radius: 6px;
+      }}
+      .scroll-wrap::-webkit-scrollbar {{
+        width: 8px;
+        height: 8px;
+      }}
+      .scroll-wrap::-webkit-scrollbar-track {{
+        background: #0f172a;
+      }}
+      .scroll-wrap::-webkit-scrollbar-thumb {{
+        background: #334155;
+        border-radius: 4px;
+      }}
+      .compact-table {{
+        border-collapse: collapse;
+        width: max-content;
+        font-size: 16px;
+        user-select: text;
+      }}
+      .compact-table thead th {{
+        position: sticky;
+        top: 0;
+        background-color: #1e293b;
+        color: #ffffff;
+        padding: 10px 14px;
+        font-weight: 700;
+        border-bottom: 2px solid #475569;
+        border-right: 1px solid #334155;
+        white-space: nowrap;
+        z-index: 2;
+      }}
+      .compact-table tbody td {{
+        padding: 9px 14px;
+        border-bottom: 1px solid #334155;
+        border-right: 1px solid #334155;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }}
+      .compact-table tbody td:hover {{
+        background-color: rgba(14, 165, 233, 0.25) !important;
+      }}
+      .total-row {{
+        background-color: #0f172a !important;
+        font-weight: bold;
+        color: #38bdf8 !important;
+      }}
+      .diff-red {{
+        color: #ef4444 !important;
+        font-weight: bold;
+      }}
+      .col-no {{ min-width: 48px; text-align: center; font-weight: bold; }}
+      .col-id {{ min-width: 140px; text-align: center; }}
+      .col-amt {{ min-width: 145px; text-align: right; }}
+      .col-diff {{ min-width: 110px; text-align: right; }}
+
+      #toast {{
+        visibility: hidden;
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #0284c7;
+        color: #ffffff;
+        padding: 9px 18px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 14px;
+        z-index: 999999;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      }}
+      #toast.show {{
+        visibility: visible;
+        animation: fadein 0.2s, fadeout 0.3s 1.1s;
+      }}
+      @keyframes fadein {{ from {{ opacity: 0; top: 0px; }} to {{ opacity: 1; top: 14px; }} }}
+      @keyframes fadeout {{ from {{ opacity: 1; top: 14px; }} to {{ opacity: 0; top: 0px; }} }}
+    </style>
+    </head>
+    <body>
+      <div id="toast">📋 복사 완료!</div>
+      <div class="flex-container">
+        <div class="table-card">
+          <div class="card-title">📋 상세 대조 내역</div>
+          <div class="scroll-wrap">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th class="col-no">{main_headers[0]}</th>
+                  <th class="col-id">{main_headers[1]}</th>
+                  <th class="col-amt">{main_headers[2]}</th>
+                  <th class="col-amt">{main_headers[3]}</th>
+                  <th class="col-diff">{main_headers[4]}</th>
+                </tr>
+              </thead>
+              <tbody>{''.join(main_tbody)}</tbody>
+            </table>
+          </div>
+        </div>
+        {diff_section}
+      </div>
+
+      <script>
+        function copyCell(el) {{
+          const text = el.innerText.trim();
+          if (!text || text === '-') return;
+          
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try {{
+            document.execCommand('copy');
+          }} catch(e) {{
+            navigator.clipboard.writeText(text);
+          }}
+          document.body.removeChild(ta);
+
+          const origBg = el.style.backgroundColor;
+          el.style.backgroundColor = '#0ea5e9';
+          setTimeout(() => {{ el.style.backgroundColor = origBg; }}, 200);
+
+          const toast = document.getElementById('toast');
+          toast.innerText = '📋 복사 완료: ' + text;
+          toast.className = 'show';
+          setTimeout(() => {{ toast.className = ''; }}, 1400);
+        }}
+      </script>
+    </body>
+    </html>
+    """
+    calc_height = min(680, max(260, len(df_main) * 44 + 90))
+    components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
@@ -750,37 +862,6 @@ def parse_labor_lines(text):
 # ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
-st.markdown("""
-<div id="copy-toast">📋 복사되었습니다!</div>
-<script>
-function copyCellText(el) {
-    let text = el.innerText.trim();
-    if(!text || text === '-') return;
-    navigator.clipboard.writeText(text).then(() => {
-        let toast = document.getElementById("copy-toast");
-        if(toast) {
-            toast.innerText = "📋 복사 완료: " + text;
-            toast.className = "show";
-            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
-        }
-    }).catch(err => {
-        const temp = document.createElement("textarea");
-        temp.value = text;
-        document.body.appendChild(temp);
-        temp.select();
-        document.execCommand("copy");
-        document.body.removeChild(temp);
-        let toast = document.getElementById("copy-toast");
-        if(toast) {
-            toast.innerText = "📋 복사 완료: " + text;
-            toast.className = "show";
-            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
-        }
-    });
-}
-</script>
-""", unsafe_allow_html=True)
-
 if mode == "MW 보증 비교":
     st.markdown("### 🔍 PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
     st.write("")
@@ -884,19 +965,10 @@ if mode == "MW 보증 비교":
             )
             
             st.write("")
-            table_col1, table_col2 = st.columns([5.5, 4.5], gap="medium")
-            with table_col1:
-                st.markdown("### 📋 상세 대조 내역")
-                render_html_table(res_df)
-                
-            with table_col2:
-                st.markdown("### 🚨 차액 리스트 (100원 이상)")
-                if diff_over_100_results:
-                    diff_df = pd.DataFrame(diff_over_100_results)
-                    diff_df.index = range(1, len(diff_df) + 1)
-                    render_html_table(diff_df, is_diff_table=True)
-                else:
-                    st.success("✅ 차액이 100원 이상 발생한 항목이 없습니다.")
+            diff_df = pd.DataFrame(diff_over_100_results)
+            if not diff_df.empty:
+                diff_df.index = range(1, len(diff_df) + 1)
+            render_side_by_side_tables(res_df, diff_df)
 
 elif mode == "쿠폰 보증 비교":
     st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
@@ -1001,19 +1073,10 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.write("")
-            table_col1, table_col2 = st.columns([5.5, 4.5], gap="medium")
-            with table_col1:
-                st.markdown("### 📋 상세 대조 내역")
-                render_html_table(res_df)
-                
-            with table_col2:
-                st.markdown("### 🚨 차액 리스트 (100원 이상)")
-                if diff_over_100_results:
-                    diff_df = pd.DataFrame(diff_over_100_results)
-                    diff_df.index = range(1, len(diff_df) + 1)
-                    render_html_table(diff_df, is_diff_table=True)
-                else:
-                    st.success("✅ 차액이 100원 이상 발생한 항목이 없습니다.")
+            diff_df = pd.DataFrame(diff_over_100_results)
+            if not diff_df.empty:
+                diff_df.index = range(1, len(diff_df) + 1)
+            render_side_by_side_tables(res_df, diff_df)
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
@@ -1060,6 +1123,6 @@ else:
                     })
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
-                render_html_table(df_dup)
+                render_side_by_side_tables(df_dup, None)
             else:
                 st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
