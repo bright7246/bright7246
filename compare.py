@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 컴팩트 대형 표)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 좌측 밀착 대형 표)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -82,33 +82,26 @@ st.markdown(
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
 
-    /* 컴팩트한 대형 결과 표 스타일링 */
-    .table-container {
-        display: flex;
-        justify-content: center;
-        width: 100%;
-        margin-top: 15px;
-        margin-bottom: 25px;
-    }
+    /* 좌측 정렬 결과 표 스타일링 */
     .custom-result-table {
         width: 100%;
-        max-width: 900px;
         border-collapse: collapse;
-        font-size: 18px !important;
+        font-size: 17px !important;
         user-select: text !important;
+        margin-top: 10px;
     }
     .custom-result-table th {
         background-color: #1e293b;
         color: #f8fafc;
-        padding: 12px 14px;
-        font-size: 17px;
+        padding: 12px 10px;
+        font-size: 16px;
         font-weight: bold;
         text-align: center;
         border: 1px solid #334155;
     }
     .custom-result-table td {
-        padding: 11px 16px;
-        font-size: 17px;
+        padding: 10px 12px;
+        font-size: 16px;
         border: 1px solid #334155;
         cursor: pointer;
         transition: background-color 0.15s ease;
@@ -121,12 +114,10 @@ st.markdown(
         font-weight: bold;
         color: #38bdf8;
     }
-
-    /* 열 너비 균형 배분 */
-    .col-w-no { width: 8%; }
-    .col-w-id { width: 22%; }
-    .col-w-amt { width: 25%; }
-    .col-w-diff { width: 20%; }
+    .diff-highlight {
+        color: #ef4444 !important;
+        font-weight: bold;
+    }
 
     /* 복사 토스트 알림 메시지 스타일 */
     #copy-toast {
@@ -292,17 +283,13 @@ def get_col_by_idx_or_name(df, col_idx, possible_names):
 def round_half_up(value):
     return int(value + 0.5)
 
-def render_large_table(df):
-    """빈 공간 없이 컴팩트한 너비 + 정밀 정렬 + 원클릭 복사 표"""
+def render_html_table(df, is_diff_table=False):
+    """좌측 정렬 + 원클릭 복사 표 렌더링"""
     headers = ["No."] + list(df.columns)
-    col_classes = ["col-w-no", "col-w-id", "col-w-amt", "col-w-amt", "col-w-diff"]
     
-    html = ['<div id="copy-toast">📋 복사되었습니다!</div>']
-    html.append('<div class="table-container"><table class="custom-result-table"><thead><tr>')
-    
-    for idx, h in enumerate(headers):
-        c_class = col_classes[idx] if idx < len(col_classes) else ""
-        html.append(f'<th class="{c_class}">{h}</th>')
+    html = ['<table class="custom-result-table"><thead><tr>']
+    for h in headers:
+        html.append(f'<th>{h}</th>')
     html.append('</tr></thead><tbody>')
     
     for idx, row in df.iterrows():
@@ -312,41 +299,12 @@ def render_large_table(df):
         html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사" style="text-align: center; font-weight: bold;">{idx}</td>')
         for col_idx, val in enumerate(row):
             align = "center" if col_idx == 0 else "right"
-            html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사" style="text-align: {align};">{val}</td>')
+            val_str = str(val)
+            val_class = ' class="diff-highlight"' if (is_diff_table and col_idx == len(row)-1) else ''
+            html.append(f'<td onclick="copyCellText(this)" title="클릭하여 복사"{val_class} style="text-align: {align};">{val_str}</td>')
         html.append('</tr>')
         
-    html.append('</tbody></table></div>')
-
-    html.append("""
-    <script>
-    function copyCellText(el) {
-        let text = el.innerText.trim();
-        if(!text || text === '-') return;
-        
-        navigator.clipboard.writeText(text).then(() => {
-            let toast = document.getElementById("copy-toast");
-            if(toast) {
-                toast.innerText = "📋 복사 완료: " + text;
-                toast.className = "show";
-                setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
-            }
-        }).catch(err => {
-            const temp = document.createElement("textarea");
-            temp.value = text;
-            document.body.appendChild(temp);
-            temp.select();
-            document.execCommand("copy");
-            document.body.removeChild(temp);
-            let toast = document.getElementById("copy-toast");
-            if(toast) {
-                toast.innerText = "📋 복사 완료: " + text;
-                toast.className = "show";
-                setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
-            }
-        });
-    }
-    </script>
-    """)
+    html.append('</tbody></table>')
     st.markdown("".join(html), unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────
@@ -669,7 +627,7 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
         cell.border = thin_border
 
     current_row = 4
-    for _, row in df_a_raw.iterrows():
+    for _, row in df_a_iterrows():
         ws.row_dimensions[current_row].height = 20
         for col_idx, val in enumerate(row, 1):
             cell = ws.cell(row=current_row, column=col_idx)
@@ -771,6 +729,38 @@ def parse_labor_lines(text):
 # ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
+# 화면 상단 공통 토스트 알림 컨테이너 및 복사 JS 주입
+st.markdown("""
+<div id="copy-toast">📋 복사되었습니다!</div>
+<script>
+function copyCellText(el) {
+    let text = el.innerText.trim();
+    if(!text || text === '-') return;
+    navigator.clipboard.writeText(text).then(() => {
+        let toast = document.getElementById("copy-toast");
+        if(toast) {
+            toast.innerText = "📋 복사 완료: " + text;
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
+        }
+    }).catch(err => {
+        const temp = document.createElement("textarea");
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+        let toast = document.getElementById("copy-toast");
+        if(toast) {
+            toast.innerText = "📋 복사 완료: " + text;
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 1500);
+        }
+    });
+}
+</script>
+""", unsafe_allow_html=True)
+
 if mode == "MW 보증 비교":
     st.markdown("### 🔍 PDF(홀수페이지)와 엑셀의 금액을 각각 계산 후 반올림 처리하여 순차 정렬 대조합니다.")
     st.write("")
@@ -789,6 +779,8 @@ if mode == "MW 보증 비교":
             pdf_groups = load_pdf_mw(pdf_file)
             
             matched_results = []
+            diff_over_100_results = []
+            
             all_orders = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
             total_pdf_sum = 0
             total_excel_sum = 0
@@ -806,27 +798,38 @@ if mode == "MW 보증 비교":
                     if p_amt is not None: total_pdf_sum += p_amt
                     if e_amt is not None: total_excel_sum += e_amt
                     
+                    diff_val = 0
                     if p_amt is not None and e_amt is not None:
-                        diff = p_amt - e_amt
-                        matched_results.append({
+                        diff_val = p_amt - e_amt
+                        row_dict = {
                             '주문번호': order_label,
                             'PDF 금액 (실 수령액)': f"{p_amt:,}원",
                             'DMS 금액 (청구 금액)': f"{e_amt:,}원",
-                            '차액': f"{diff:,}원" if diff != 0 else "0원"
-                        })
+                            '차액': f"{diff_val:,}원" if diff_val != 0 else "0원"
+                        }
                     elif p_amt is not None:
-                        matched_results.append({
+                        diff_val = p_amt
+                        row_dict = {
                             '주문번호': order_label,
                             'PDF 금액 (실 수령액)': f"{p_amt:,}원",
                             'DMS 금액 (청구 금액)': "-",
-                            '차액': f"{p_amt:,}원"
-                        })
+                            '차액': f"{diff_val:,}원"
+                        }
                     elif e_amt is not None:
-                        matched_results.append({
+                        diff_val = -e_amt
+                        row_dict = {
                             '주문번호': order_label,
                             'PDF 금액 (실 수령액)': "-",
                             'DMS 금액 (청구 금액)': f"{e_amt:,}원",
-                            '차액': f"{-e_amt:,}원"
+                            '차액': f"{diff_val:,}원"
+                        }
+                    matched_results.append(row_dict)
+                    
+                    # 차액 절대값이 100원 이상인 건 필터링
+                    if abs(diff_val) >= 100:
+                        diff_over_100_results.append({
+                            '주문번호': order_label,
+                            '차액': f"{diff_val:,}원"
                         })
             
             total_diff_sum = total_pdf_sum - total_excel_sum
@@ -861,8 +864,21 @@ if mode == "MW 보증 비교":
                 use_container_width=True
             )
             
-            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함 - 셀 클릭 시 즉시 복사)")
-            render_large_table(res_df)
+            st.write("")
+            # 좌측: 전체 대조 내역 / 우측: 차액 100원 이상 리스트
+            table_col1, table_col2 = st.columns([6.8, 3.2], gap="large")
+            with table_col1:
+                st.markdown("### 📋 상세 대조 내역")
+                render_html_table(res_df)
+                
+            with table_col2:
+                st.markdown("### 🚨 차액 리스트 (100원 이상)")
+                if diff_over_100_results:
+                    diff_df = pd.DataFrame(diff_over_100_results)
+                    diff_df.index = range(1, len(diff_df) + 1)
+                    render_html_table(diff_df, is_diff_table=True)
+                else:
+                    st.success("✅ 차액이 100원 이상 발생한 항목이 없습니다.")
 
 elif mode == "쿠폰 보증 비교":
     st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
@@ -882,6 +898,8 @@ elif mode == "쿠폰 보증 비교":
             b_groups = load_excel_coupon_b(file_b)
             
             matched_results = []
+            diff_over_100_results = []
+            
             all_cars = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
             total_a_sum = 0
             total_b_sum = 0
@@ -899,27 +917,38 @@ elif mode == "쿠폰 보증 비교":
                     if a_amt is not None: total_a_sum += a_amt
                     if b_amt is not None: total_b_sum += b_amt
                     
+                    diff_val = 0
                     if a_amt is not None and b_amt is not None:
-                        diff = a_amt - b_amt
-                        matched_results.append({
+                        diff_val = a_amt - b_amt
+                        row_dict = {
                             '차량번호': car_label,
                             '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
                             'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
-                            '차액': f"{diff:,}원" if diff != 0 else "0원"
-                        })
+                            '차액': f"{diff_val:,}원" if diff_val != 0 else "0원"
+                        }
                     elif a_amt is not None:
-                        matched_results.append({
+                        diff_val = a_amt
+                        row_dict = {
                             '차량번호': car_label,
                             '공지된 쿠폰 금액 ( 입금 금액 )': f"{a_amt:,}원",
                             'DMS 쿠폰파일 ( 청구 금액 ) ': "-",
-                            '차액': f"{a_amt:,}원"
-                        })
+                            '차액': f"{diff_val:,}원"
+                        }
                     elif b_amt is not None:
-                        matched_results.append({
+                        diff_val = -b_amt
+                        row_dict = {
                             '차량번호': car_label,
                             '공지된 쿠폰 금액 ( 입금 금액 )': "-",
                             'DMS 쿠폰파일 ( 청구 금액 ) ': f"{b_amt:,}원",
-                            '차액': f"{-b_amt:,}원"
+                            '차액': f"{diff_val:,}원"
+                        }
+                    matched_results.append(row_dict)
+                    
+                    # 차액 절대값이 100원 이상인 건 필터링
+                    if abs(diff_val) >= 100:
+                        diff_over_100_results.append({
+                            '차량번호': car_label,
+                            '차액': f"{diff_val:,}원"
                         })
             
             total_diff_sum = total_a_sum - total_b_sum
@@ -954,8 +983,20 @@ elif mode == "쿠폰 보증 비교":
                 use_container_width=True
             )
             
-            st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함 - 셀 클릭 시 즉시 복사)")
-            render_large_table(res_df)
+            st.write("")
+            table_col1, table_col2 = st.columns([6.8, 3.2], gap="large")
+            with table_col1:
+                st.markdown("### 📋 상세 대조 내역")
+                render_html_table(res_df)
+                
+            with table_col2:
+                st.markdown("### 🚨 차액 리스트 (100원 이상)")
+                if diff_over_100_results:
+                    diff_df = pd.DataFrame(diff_over_100_results)
+                    diff_df.index = range(1, len(diff_df) + 1)
+                    render_html_table(diff_df, is_diff_table=True)
+                else:
+                    st.success("✅ 차액이 100원 이상 발생한 항목이 없습니다.")
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
@@ -990,7 +1031,7 @@ else:
             c3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
             
             if duplicate_codes:
-                st.markdown(f"### 🚨 중복 발견 내역 ({len(duplicate_codes)}건 - 셀 클릭 시 즉시 복사)")
+                st.markdown("### 🚨 중복 발견 내역")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
                     lines_a_str = " | ".join(map_a[code])
@@ -1002,6 +1043,6 @@ else:
                     })
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
-                render_large_table(df_dup)
+                render_html_table(df_dup)
             else:
                 st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
