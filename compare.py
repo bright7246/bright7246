@@ -201,7 +201,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 세로 높이 확장 및 간격 반영
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -801,11 +801,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     st.markdown(f"### 🔍 {'PDF(홀수페이지)와 엑셀' if is_mw else '공지된 쿠폰 파일과 DMS 엑셀'}의 금액을 각각 계산 후 반올림 처리하여 대조합니다.")
     st.write("")
 
-    # 파일 업로드 전용 세션 상태 관리
     if "reset_trigger" not in st.session_state:
         st.session_state.reset_trigger = 0
 
-    # 좌우 2단 레이아웃 설정
     left_col, right_col = st.columns([4.2, 5.8], gap="large")
 
     with left_col:
@@ -818,9 +816,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
         st.write("")
         if st.button("🗑️ 첨부파일 초기화", use_container_width=True):
             st.session_state.reset_trigger += 1
-            st.rerurn()
+            st.rerun()
 
-        # 파일이 모두 업로드된 경우 분석 요약 정보를 좌측 하단에 표시
         if f1 and f2:
             st.divider()
             with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
@@ -968,7 +965,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    # 3️⃣ [모드 3] 공임코드 비교
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
     st.write("")
     
