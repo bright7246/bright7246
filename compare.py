@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
-st.set_page_config(page_title="보증금액 통합 비교 시스템", layout="wide")
+st.set_page_config(page_title="아이언모터스 보증팀 지원 프로그램", layout="wide")
 
 # 브라우저 자동 번역 충돌 방지 태그
 st.markdown(
@@ -19,7 +19,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 보증금액 교차 비교 시스템")
+st.title("📊 아이언모터스 보증팀 지원 프로그램")
 
 # ────────────────────────────────────────────────────────
 # 🗂️ 사이드바 큼직한 메뉴 버튼 UI
