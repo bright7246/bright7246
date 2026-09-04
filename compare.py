@@ -133,6 +133,10 @@ with head_col2:
 
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
+if "prev_mode" not in st.session_state:
+    st.session_state.prev_mode = st.session_state.current_mode
+if "reset_trigger" not in st.session_state:
+    st.session_state.reset_trigger = 0
 
 nav_col1, nav_col2, nav_col3 = st.columns(3)
 
@@ -143,8 +147,10 @@ with nav_col1:
         type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"
     )
     if btn_mw:
-        st.session_state.current_mode = "MW 보증 비교"
-        st.rerun()
+        if st.session_state.current_mode != "MW 보증 비교":
+            st.session_state.current_mode = "MW 보증 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 with nav_col2:
     btn_coupon = st.button(
@@ -153,8 +159,10 @@ with nav_col2:
         type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"
     )
     if btn_coupon:
-        st.session_state.current_mode = "쿠폰 보증 비교"
-        st.rerun()
+        if st.session_state.current_mode != "쿠폰 보증 비교":
+            st.session_state.current_mode = "쿠폰 보증 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 with nav_col3:
     btn_labor = st.button(
@@ -163,8 +171,10 @@ with nav_col3:
         type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"
     )
     if btn_labor:
-        st.session_state.current_mode = "공임코드 비교"
-        st.rerun()
+        if st.session_state.current_mode != "공임코드 비교":
+            st.session_state.current_mode = "공임코드 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 st.divider()
 
@@ -201,7 +211,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] (3단계 색상 순환 클릭 복사 + 차액 리스트 항상 노출)
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -224,49 +234,50 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         main_tbody.append('</tr>')
 
     diff_section = ""
-    if df_diff is not None and len(df_diff) > 0:
+    if df_diff is not None:
         diff_headers = ["No."] + list(df_diff.columns)
-        diff_tbody = []
-        for idx, row in df_diff.iterrows():
-            is_total = "총합계" in str(row.iloc[0])
-            tr_class = ' class="total-row"' if is_total else ''
-            diff_tbody.append(f'<tr{tr_class}>')
-            diff_tbody.append(f'<td class="col-no">{idx}</td>')
-            
-            if not is_total:
-                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-            else:
-                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+        if len(df_diff) > 0:
+            diff_tbody = []
+            for idx, row in df_diff.iterrows():
+                is_total = "총합계" in str(row.iloc[0])
+                tr_class = ' class="total-row"' if is_total else ''
+                diff_tbody.append(f'<tr{tr_class}>')
+                diff_tbody.append(f'<td class="col-no">{idx}</td>')
                 
-            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-            diff_color = "" if is_total else " diff-red"
-            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-            diff_tbody.append('</tr>')
-        
-        diff_section = (
-            '<div class="table-card">'
-            f'<div class="card-title">{diff_title}</div>'
-            '<div class="scroll-wrap">'
-            '<table class="compact-table">'
-            '<thead><tr>'
-            f'<th class="col-no">{diff_headers[0]}</th>'
-            f'<th class="col-id">{diff_headers[1]}</th>'
-            f'<th class="col-type">{diff_headers[2]}</th>'
-            f'<th class="col-desc">{diff_headers[3]}</th>'
-            f'<th class="col-diff">{diff_headers[4]}</th>'
-            '</tr></thead>'
-            f'<tbody>{"".join(diff_tbody)}</tbody>'
-            '</table></div></div>'
-        )
-    else:
-        diff_section = (
-            '<div class="table-card">'
-            f'<div class="card-title">{diff_title}</div>'
-            '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; min-width: 320px;">'
-            '✅ 차액 100원 이상 발생 항목이 없습니다.'
-            '</div></div>'
-        )
+                if not is_total:
+                    diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+                else:
+                    diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+                    
+                diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+                diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+                diff_color = "" if is_total else " diff-red"
+                diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+                diff_tbody.append('</tr>')
+            
+            diff_section = (
+                '<div class="table-card">'
+                f'<div class="card-title">{diff_title}</div>'
+                '<div class="scroll-wrap">'
+                '<table class="compact-table">'
+                '<thead><tr>'
+                f'<th class="col-no">{diff_headers[0]}</th>'
+                f'<th class="col-id">{diff_headers[1]}</th>'
+                f'<th class="col-type">{diff_headers[2]}</th>'
+                f'<th class="col-desc">{diff_headers[3]}</th>'
+                f'<th class="col-diff">{diff_headers[4]}</th>'
+                '</tr></thead>'
+                f'<tbody>{"".join(diff_tbody)}</tbody>'
+                '</table></div></div>'
+            )
+        else:
+            diff_section = (
+                '<div class="table-card">'
+                f'<div class="card-title">{diff_title}</div>'
+                '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">'
+                '✅ 차액 100원 이상 발생 항목이 없습니다.'
+                '</div></div>'
+            )
 
     css_code = """
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -813,9 +824,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     
     st.markdown(f"### 🔍 {'PDF(홀수페이지)와 엑셀' if is_mw else '공지된 쿠폰 파일과 DMS 엑셀'}의 금액을 각각 계산 후 반올림 처리하여 대조합니다.")
     st.write("")
-
-    if "reset_trigger" not in st.session_state:
-        st.session_state.reset_trigger = 0
 
     left_col, right_col = st.columns([4.2, 5.8], gap="large")
 
