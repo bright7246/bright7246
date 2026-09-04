@@ -556,7 +556,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 화면 렌더링 (업로드 라벨 글씨 확대 및 예시 변경 적용)
+# 🖥️ 화면 렌더링
 # ────────────────────────────────────────────────────────
 if mode == "MW 보증 비교":
     st.subheader("📋 MW 보증 비교 (PDF vs 엑셀)")
@@ -565,10 +565,12 @@ if mode == "MW 보증 비교":
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 1. PDF 파일을 선택하세요 (.pdf)")
+        # 1번 PDF 업로드 라벨 및 예시 문구 변경 적용
+        st.markdown("### 1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)")
         pdf_file = st.file_uploader("PDF 파일 업로드", type=["pdf"], key="mw_pdf", label_visibility="collapsed")
     with col2:
-        st.markdown("### 2. 엑셀 파일을 선택하세요 (.xlsx)")
+        # 2번 엑셀 업로드 라벨 및 예시 문구 변경 적용
+        st.markdown("### 2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)")
         excel_file = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key="mw_excel", label_visibility="collapsed")
         
     if pdf_file and excel_file:
@@ -660,11 +662,9 @@ elif mode == "쿠폰 보증 비교":
     
     col1, col2 = st.columns(2)
     with col1:
-        # 1번 파일 업로드 라벨 및 예시 문구 변경 적용
         st.markdown("### 1. 공지된 쿠폰 파일 (예시 : IR_JJ_Aug)")
         file_a = st.file_uploader("공지된 쿠폰 파일 업로드", type=["xlsx"], key="cp_a", label_visibility="collapsed")
     with col2:
-        # 2번 파일 업로드 라벨 및 예시 문구 변경 적용
         st.markdown("### 2. DMS 쿠폰파일 (예시 : 쿠폰청구관리_20260818085441)")
         file_b = st.file_uploader("DMS 쿠폰파일 업로드", type=["xlsx"], key="cp_b", label_visibility="collapsed")
         
