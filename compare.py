@@ -212,7 +212,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + 좌측 밀착 나란히 배치
+# 📊 [컴포넌트 렌더링] 클릭 복사 작동 + 좌측 밀착 나란히 배치 + 합계 지원
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -235,10 +235,13 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         if len(df_diff) > 0:
             diff_tbody = []
             for idx, row in df_diff.iterrows():
-                diff_tbody.append('<tr>')
+                is_total = "총합계" in str(row.iloc[0])
+                tr_class = ' class="total-row"' if is_total else ''
+                diff_tbody.append(f'<tr{tr_class}>')
                 diff_tbody.append(f'<td class="col-no" onclick="copyCell(this)">{idx}</td>')
                 diff_tbody.append(f'<td class="col-id" onclick="copyCell(this)">{row.iloc[0]}</td>')
-                diff_tbody.append(f'<td class="col-diff diff-red" onclick="copyCell(this)">{row.iloc[1]}</td>')
+                diff_color = "" if is_total else " diff-red"
+                diff_tbody.append(f'<td class="col-diff{diff_color}" onclick="copyCell(this)">{row.iloc[1]}</td>')
                 diff_tbody.append('</tr>')
             
             diff_section = f"""
@@ -885,6 +888,7 @@ if mode == "MW 보증 비교":
             all_orders = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
             total_pdf_sum = 0
             total_excel_sum = 0
+            total_diff_100_sum = 0
             
             for order in all_orders:
                 p_amts = pdf_groups.get(order, [])
@@ -926,7 +930,9 @@ if mode == "MW 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
+                    # +100원 이상 및 -100원 이하(절대값 100원 이상) 모두 감지
                     if abs(diff_val) >= 100:
+                        total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '주문번호': order_label,
                             '차액': f"{diff_val:,}원"
@@ -965,9 +971,18 @@ if mode == "MW 보증 비교":
             )
             
             st.write("")
-            diff_df = pd.DataFrame(diff_over_100_results)
-            if not diff_df.empty:
-                diff_df.index = range(1, len(diff_df) + 1)
+            # 차액 리스트에 합계 행 추가
+            if diff_over_100_results:
+                diff_list_with_total = list(diff_over_100_results)
+                diff_list_with_total.append({
+                    '주문번호': "★ 총합계",
+                    '차액': f"{total_diff_100_sum:,}원"
+                })
+                diff_df = pd.DataFrame(diff_list_with_total)
+                diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
+            else:
+                diff_df = pd.DataFrame(columns=['주문번호', '차액'])
+
             render_side_by_side_tables(res_df, diff_df)
 
 elif mode == "쿠폰 보증 비교":
@@ -993,6 +1008,7 @@ elif mode == "쿠폰 보증 비교":
             all_cars = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
             total_a_sum = 0
             total_b_sum = 0
+            total_diff_100_sum = 0
             
             for car in all_cars:
                 a_amts = a_groups.get(car, [])
@@ -1034,7 +1050,9 @@ elif mode == "쿠폰 보증 비교":
                         }
                     matched_results.append(row_dict)
                     
+                    # +100원 이상 및 -100원 이하(절대값 100원 이상) 모두 감지
                     if abs(diff_val) >= 100:
+                        total_diff_100_sum += diff_val
                         diff_over_100_results.append({
                             '차량번호': car_label,
                             '차액': f"{diff_val:,}원"
@@ -1073,9 +1091,18 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.write("")
-            diff_df = pd.DataFrame(diff_over_100_results)
-            if not diff_df.empty:
-                diff_df.index = range(1, len(diff_df) + 1)
+            # 쿠폰 차액 리스트에 합계 행 추가
+            if diff_over_100_results:
+                diff_list_with_total = list(diff_over_100_results)
+                diff_list_with_total.append({
+                    '차량번호': "★ 총합계",
+                    '차액': f"{total_diff_100_sum:,}원"
+                })
+                diff_df = pd.DataFrame(diff_list_with_total)
+                diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
+            else:
+                diff_df = pd.DataFrame(columns=['차량번호', '차액'])
+
             render_side_by_side_tables(res_df, diff_df)
 
 else:
