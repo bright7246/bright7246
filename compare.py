@@ -792,7 +792,7 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
-# 🖥️ 본문 화면 렌더링 (좌우 2단 배치 및 첨부파일 초기화 기능)
+# 🖥️ 본문 화면 렌더링 (좌우 2단 배치 및 예시 문구 복원)
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     is_mw = (mode == "MW 보증 비교")
@@ -807,11 +807,18 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     left_col, right_col = st.columns([4.2, 5.8], gap="large")
 
     with left_col:
-        st.markdown(f"### 1. {'PDF' if is_mw else '공지 쿠폰'} 파일을 선택하세요")
-        f1 = st.file_uploader("파일 업로드 1", type=["pdf"] if is_mw else ["xlsx"], key=f"file_1_{st.session_state.reset_trigger}", label_visibility="collapsed")
-        
-        st.markdown(f"### 2. {'엑셀' if is_mw else 'DMS 쿠폰'} 파일을 선택하세요")
-        f2 = st.file_uploader("파일 업로드 2", type=["xlsx"], key=f"file_2_{st.session_state.reset_trigger}", label_visibility="collapsed")
+        if is_mw:
+            st.markdown("### 1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)")
+            f1 = st.file_uploader("PDF 파일 업로드", type=["pdf"], key=f"file_1_{st.session_state.reset_trigger}", label_visibility="collapsed")
+            
+            st.markdown("### 2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)")
+            f2 = st.file_uploader("엑셀 파일 업로드", type=["xlsx"], key=f"file_2_{st.session_state.reset_trigger}", label_visibility="collapsed")
+        else:
+            st.markdown("### 1. 공지된 쿠폰 파일을 선택하세요 (예시 : IR_JJ_Aug)")
+            f1 = st.file_uploader("공지 쿠폰 파일 업로드", type=["xlsx"], key=f"file_1_{st.session_state.reset_trigger}", label_visibility="collapsed")
+            
+            st.markdown("### 2. DMS 쿠폰파일을 선택하세요 (예시 : 쿠폰청구관리_20260818085441)")
+            f2 = st.file_uploader("DMS 쿠폰 파일 업로드", type=["xlsx"], key=f"file_2_{st.session_state.reset_trigger}", label_visibility="collapsed")
 
         st.write("")
         if st.button("🗑️ 첨부파일 초기화", use_container_width=True):
