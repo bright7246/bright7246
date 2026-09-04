@@ -34,7 +34,7 @@ st.markdown(
 )
 
 # ────────────────────────────────────────────────────────
-# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 표 폰트 크기 확대)
+# 🎨 스타일링 (상단 탭, 주요 버튼, 공유 버튼, 대형 표 스타일)
 # ────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -82,9 +82,35 @@ st.markdown(
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
 
-    /* 상세 대조 내역 표(DataFrame) 내부 글자 크기 확대 */
-    div[data-testid="stDataFrame"] * {
-        font-size: 16px !important;
+    /* 큼직한 결과 표(HTML Table) 스타일링 */
+    .custom-result-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        margin-bottom: 25px;
+        font-size: 18px !important;
+    }
+    .custom-result-table th {
+        background-color: #1e293b;
+        color: #f8fafc;
+        padding: 14px 16px;
+        font-size: 18px;
+        font-weight: bold;
+        text-align: center;
+        border: 1px solid #334155;
+    }
+    .custom-result-table td {
+        padding: 12px 16px;
+        font-size: 18px;
+        border: 1px solid #334155;
+    }
+    .custom-result-table tr:hover {
+        background-color: rgba(14, 165, 233, 0.08);
+    }
+    .custom-result-table tr.total-row {
+        background-color: #0f172a;
+        font-weight: bold;
+        color: #38bdf8;
     }
     </style>
     """,
@@ -94,7 +120,7 @@ st.markdown(
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
 # ────────────────────────────────────────────────────────
-# 🔗 공유하기 다이얼로그 (QR 코드 + 주소창 + 원클릭 복사 버튼)
+# 🔗 공유하기 다이얼로그
 # ────────────────────────────────────────────────────────
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
@@ -219,6 +245,27 @@ def get_col_by_idx_or_name(df, col_idx, possible_names):
 
 def round_half_up(value):
     return int(value + 0.5)
+
+def render_large_table(df):
+    """HTML 기반으로 글씨가 큼직한(18px) 표 렌더링 함수"""
+    headers = ["No."] + list(df.columns)
+    html = ['<div style="overflow-x: auto;"><table class="custom-result-table"><thead><tr>']
+    for h in headers:
+        html.append(f'<th>{h}</th>')
+    html.append('</tr></thead><tbody>')
+    
+    for idx, row in df.iterrows():
+        is_total = "총합계" in str(row.iloc[0])
+        tr_class = ' class="total-row"' if is_total else ''
+        html.append(f'<tr{tr_class}>')
+        html.append(f'<td style="text-align: center; font-weight: bold;">{idx}</td>')
+        for col_idx, val in enumerate(row):
+            align = "center" if col_idx == 0 else "right"
+            html.append(f'<td style="text-align: {align};">{val}</td>')
+        html.append('</tr>')
+        
+    html.append('</tbody></table></div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
 
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
@@ -677,7 +724,6 @@ if mode == "MW 보증 비교":
                     if p_amt is not None: total_pdf_sum += p_amt
                     if e_amt is not None: total_excel_sum += e_amt
                     
-                    # 요청 반영: 주문번호 -> PDF금액 -> DMS금액 -> 차액 순서로 딕셔너리 키 배치
                     if p_amt is not None and e_amt is not None:
                         diff = p_amt - e_amt
                         matched_results.append({
@@ -734,7 +780,8 @@ if mode == "MW 보증 비교":
             )
             
             st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            st.dataframe(res_df, use_container_width=True)
+            # 확실하게 글자 크기가 커지는 HTML 대형 테이블로 출력
+            render_large_table(res_df)
 
 elif mode == "쿠폰 보증 비교":
     st.markdown("### 🔍 공지된 쿠폰 금액 과 DMS 에서 출력된 쿠폰 금액을 정밀 매칭합니다. (차량번호 기준)")
@@ -771,7 +818,6 @@ elif mode == "쿠폰 보증 비교":
                     if a_amt is not None: total_a_sum += a_amt
                     if b_amt is not None: total_b_sum += b_amt
                     
-                    # 차량번호 -> 공지 쿠폰금액 -> DMS 쿠폰금액 -> 차액 순서로 변경
                     if a_amt is not None and b_amt is not None:
                         diff = a_amt - b_amt
                         matched_results.append({
@@ -828,7 +874,8 @@ elif mode == "쿠폰 보증 비교":
             )
             
             st.markdown("### 📋 상세 대조 내역 (맨 아래 총합계 포함)")
-            st.dataframe(res_df, use_container_width=True)
+            # 확실하게 글자 크기가 커지는 HTML 대형 테이블로 출력
+            render_large_table(res_df)
 
 else:
     st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
@@ -869,12 +916,12 @@ else:
                     lines_a_str = " | ".join(map_a[code])
                     lines_b_str = " | ".join(map_b[code])
                     dup_rows.append({
-                        "No.": idx,
                         "중복 공임코드": code,
                         "A그룹 원본 내용": lines_a_str,
                         "B그룹 원본 내용": lines_b_str
                     })
-                df_dup = pd.DataFrame(dup_rows).set_index("No.")
-                st.dataframe(df_dup, use_container_width=True)
+                df_dup = pd.DataFrame(dup_rows)
+                df_dup.index = range(1, len(df_dup) + 1)
+                render_large_table(df_dup)
             else:
                 st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
