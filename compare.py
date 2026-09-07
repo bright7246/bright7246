@@ -797,7 +797,7 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     return output, month_str
 
 # ────────────────────────────────────────────────────────
-# 3️⃣ [모드 3] 공임코드 비교 (개편된 입력 UI 연동)
+# 3️⃣ [모드 3] 공임코드 비교
 # ────────────────────────────────────────────────────────
 def parse_labor_lines(text):
     code_map = defaultdict(list)
@@ -994,32 +994,38 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 공임코드와 작업내용을 입력한 뒤, **[비교진행]** 버튼을 눌러 중복 작업을 검증합니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
     st.write("")
     
-    # A그룹 및 B그룹 입력 폼 레이아웃 구성
     col_a, col_b = st.columns(2)
     with col_a:
-        st.markdown("### A 그룹 입력")
-        code_a = st.text_input("공임코드 (A)", placeholder="예시: 210-01", key="input_code_a")
-        desc_a = st.text_input("작업내용 (영어 50자 이내)", placeholder="예시: Engine adjustment with tension band", max_chars=50, key="input_desc_a")
+        st.markdown("#### A 그룹 입력")
+        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 256-01-K55", key="code_a")
+        input_desc_a = st.text_input("작업내용 (A, 최대 50자)", placeholder="Engine oil replacement", max_chars=50, key="desc_a")
+        text_a = st.text_area("A그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
     with col_b:
-        st.markdown("### B 그룹 입력")
-        code_b = st.text_input("공임코드 (B)", placeholder="예시: 210-01", key="input_code_b")
-        desc_b = st.text_input("작업내용 (영어 50자 이내)", placeholder="예시: Engine adjustment with tension band", max_chars=50, key="input_desc_b")
+        st.markdown("#### B 그룹 입력")
+        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 210-01-L1", key="code_b")
+        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="Engine adjustment with tension band", max_chars=50, key="desc_b")
+        text_b = st.text_area("B그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        # 입력된 값을 조합하여 기존 파싱 로직에 전달할 형식(공임코드 + 공백 + 작업내용)으로 구성
-        text_a = f"{code_a.strip()} {desc_a.strip()}" if code_a.strip() or desc_a.strip() else ""
-        text_b = f"{code_b.strip()} {desc_b.strip()}" if code_b.strip() or desc_b.strip() else ""
+        # 개별 입력된 내용이 있으면 자동으로 텍스트 상단에 조합 추가
+        combined_text_a = text_a
+        if input_code_a.strip():
+            combined_text_a = f"{input_code_a.strip()} {input_desc_a.strip()}\n" + combined_text_a
+            
+        combined_text_b = text_b
+        if input_code_b.strip():
+            combined_text_b = f"{input_code_b.strip()} {input_desc_b.strip()}\n" + combined_text_b
 
-        if not text_a.strip() and not text_b.strip():
-            st.warning("⚠️ A그룹 또는 B그룹에 공임코드와 작업내용을 입력해 주세요.")
+        if not combined_text_a.strip() and not combined_text_b.strip():
+            st.warning("⚠️ 공임코드 또는 내용을 입력하거나 붙여넣어 주세요.")
         else:
-            map_a = parse_labor_lines(text_a)
-            map_b = parse_labor_lines(text_b)
+            map_a = parse_labor_lines(combined_text_a)
+            map_b = parse_labor_lines(combined_text_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
