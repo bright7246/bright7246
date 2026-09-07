@@ -71,11 +71,17 @@ st.markdown(
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
-    /* Streamlit 입력 폼 라벨(텍스트) 크기를 소제목 수준(약 20px)으로 확대 */
+    /* Streamlit 입력 폼 라벨(텍스트) 크기를 소제목 수준(약 19px)으로 통일 */
     div[data-baseweb="input"] label p, div[data-baseweb="textarea"] label p, div.stTextInput label p, div.stTextArea label p {
         font-size: 19px !important;
         font-weight: 700 !important;
         color: #f1f5f9 !important;
+    }
+    .custom-sub-label {
+        font-size: 19px;
+        font-weight: 700;
+        color: #f1f5f9;
+        margin-bottom: 8px;
     }
     </style>
     """,
@@ -1020,7 +1026,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
   with left_col:
     if is_mw:
       st.markdown(
-          "### 1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)"
+          '<div class="custom-sub-label">1. PDF 파일을 선택하세요 (예시 :'
+          " DEALER_CREDITNOTE_6755)</div>",
+          unsafe_allow_html=True,
       )
       f1 = st.file_uploader(
           "PDF 파일 업로드",
@@ -1030,8 +1038,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       )
 
       st.markdown(
-          "### 2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능"
-          " ]_2026)"
+          '<div class="custom-sub-label">2. 엑셀 파일을 선택하세요 (예시 :'
+          " 보증청구현황 [ 항목 조정 가능 ]_2026)</div>",
+          unsafe_allow_html=True,
       )
       f2 = st.file_uploader(
           "엑셀 파일 업로드",
@@ -1040,7 +1049,11 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
           label_visibility="collapsed",
       )
     else:
-      st.markdown("### 1. 공지된 쿠폰 파일을 선택하세요 (예시 : IR_JJ_Aug)")
+      st.markdown(
+          '<div class="custom-sub-label">1. 공지된 쿠폰 파일을 선택하세요'
+          " (예시 : IR_JJ_Aug)</div>",
+          unsafe_allow_html=True,
+      )
       f1 = st.file_uploader(
           "공지 쿠폰 파일 업로드",
           type=["xlsx"],
@@ -1049,8 +1062,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       )
 
       st.markdown(
-          "### 2. DMS 쿠폰파일을 선택하세요 (예시 :"
-          " 쿠폰청구관리_20260818085441)"
+          '<div class="custom-sub-label">2. DMS 쿠폰파일을 선택하세요 (예시'
+          " : 쿠폰청구관리_20260818085441)</div>",
+          unsafe_allow_html=True,
       )
       f2 = st.file_uploader(
           "DMS 쿠폰 파일 업로드",
