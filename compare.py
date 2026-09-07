@@ -71,6 +71,12 @@ st.markdown(
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
+    /* Streamlit 입력 폼 라벨(텍스트) 크기를 소제목 수준(약 20px)으로 확대 */
+    div[data-baseweb="input"] label p, div[data-baseweb="textarea"] label p, div.stTextInput label p, div.stTextArea label p {
+        font-size: 19px !important;
+        font-weight: 700 !important;
+        color: #f1f5f9 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1302,8 +1308,8 @@ else:
             "공임내역", placeholder="예시: coolant drain", key="desc_a"
         )
       st.markdown(
-          "<div style='font-size: 14px; font-weight: 600; margin-top: 10px;"
-          " margin-bottom: 6px;'>공임상세내역</div>",
+          "<div style='font-size: 19px; font-weight: 700; margin-top: 10px;"
+          " margin-bottom: 6px; color: #f1f5f9;'>공임상세내역</div>",
           unsafe_allow_html=True,
       )
       text_a = st.text_area(
@@ -1322,8 +1328,8 @@ else:
         )
       with sub_b2:
         st.markdown(
-            "<div style='font-size: 14px; font-weight: 600; margin-bottom:"
-            " 6px;'>공임내역</div>",
+            "<div style='font-size: 19px; font-weight: 700; margin-bottom:"
+            " 6px; color: #f1f5f9;'>공임내역</div>",
             unsafe_allow_html=True,
         )
         input_desc_b = st.text_input(
@@ -1333,8 +1339,8 @@ else:
             key="desc_b",
         )
       st.markdown(
-          "<div style='font-size: 14px; font-weight: 600; margin-top: 10px;"
-          " margin-bottom: 6px;'>공임상세내역</div>",
+          "<div style='font-size: 19px; font-weight: 700; margin-top: 10px;"
+          " margin-bottom: 6px; color: #f1f5f9;'>공임상세내역</div>",
           unsafe_allow_html=True,
       )
       text_b = st.text_area(
@@ -1358,8 +1364,8 @@ else:
             "공임내역", placeholder="예시: coolant drain", key="desc_a"
         )
       st.markdown(
-          "<div style='font-size: 13px; font-weight: 600; margin-top: 8px;"
-          " margin-bottom: 4px;'>공임상세내역</div>",
+          "<div style='font-size: 19px; font-weight: 700; margin-top: 8px;"
+          " margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
           unsafe_allow_html=True,
       )
       text_a = st.text_area(
@@ -1378,8 +1384,8 @@ else:
         )
       with sub_b2:
         st.markdown(
-            "<div style='font-size: 13px; font-weight: 600; margin-bottom:"
-            " 4px;'>공임내역</div>",
+            "<div style='font-size: 19px; font-weight: 700; margin-bottom:"
+            " 4px; color: #f1f5f9;'>공임내역</div>",
             unsafe_allow_html=True,
         )
         input_desc_b = st.text_input(
@@ -1389,8 +1395,8 @@ else:
             key="desc_b",
         )
       st.markdown(
-          "<div style='font-size: 13px; font-weight: 600; margin-top: 8px;"
-          " margin-bottom: 4px;'>공임상세내역</div>",
+          "<div style='font-size: 19px; font-weight: 700; margin-top: 8px;"
+          " margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
           unsafe_allow_html=True,
       )
       text_b = st.text_area(
@@ -1409,8 +1415,8 @@ else:
         )
       with sub_c2:
         st.markdown(
-            "<div style='font-size: 13px; font-weight: 600; margin-bottom:"
-            " 4px;'>공임내역</div>",
+            "<div style='font-size: 19px; font-weight: 700; margin-bottom:"
+            " 4px; color: #f1f5f9;'>공임내역</div>",
             unsafe_allow_html=True,
         )
         input_desc_c = st.text_input(
@@ -1420,8 +1426,8 @@ else:
             key="desc_c",
         )
       st.markdown(
-          "<div style='font-size: 13px; font-weight: 600; margin-top: 8px;"
-          " margin-bottom: 4px;'>공임상세내역</div>",
+          "<div style='font-size: 19px; font-weight: 700; margin-top: 8px;"
+          " margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
           unsafe_allow_html=True,
       )
       text_c = st.text_area(
