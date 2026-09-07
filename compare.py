@@ -801,7 +801,6 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
 # 3️⃣ [모드 3] 공임코드 비교
 # ────────────────────────────────────────────────────────
 def parse_labor_lines(text):
-    # 등장한 순서(위쪽에서 발견된 순서)를 유지하기 위해 OrderedDict 사용
     code_map = OrderedDict()
     if not text:
         return code_map
@@ -1040,9 +1039,7 @@ else:
             map_a = parse_labor_lines(combined_text_a)
             map_b = parse_labor_lines(combined_text_b)
             
-            # 파싱된 순서(위쪽에서 발견된 순서)를 유지하면서 교집합(중복) 추출
             duplicate_codes = [code for code in map_a.keys() if code in map_b]
-            
             only_a = [code for code in map_a.keys() if code not in map_b]
             only_b = [code for code in map_b.keys() if code not in map_a]
             
@@ -1052,10 +1049,16 @@ else:
             
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                m1, m2, m3 = st.columns(3)
+                # 지표 카드 4개를 2x2 또는 수직/수평으로 깔끔하게 배치
+                m1, m2 = st.columns(2)
                 m1.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
-                m2.metric("A그룹 고유 항목", f"{len(only_a)} 건")
-                m3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
+                m2.metric("A그룹 총 건수", f"{len(map_a)} 건")
+                
+                m3, m4 = st.columns(2)
+                m3.metric("A그룹 고유", f"{len(only_a)} 건")
+                m4.metric("B그룹 총 건수", f"{len(map_b)} 건")
+                
+                st.metric("B그룹 고유", f"{len(only_b)} 건")
                 
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
