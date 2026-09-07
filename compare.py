@@ -409,7 +409,7 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -640,7 +640,7 @@ def load_excel_coupon_a(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
             a_groups[car_no].append({
                 'amount': int(row['Calc_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -662,7 +662,7 @@ def load_excel_coupon_b(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
             b_groups[car_no].append({
                 'amount': round_half_up(row[col_total]) if col_total else 0,
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -804,7 +804,6 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    # 3자리-2자리-1~4자리 또는 숫자 5자리(예: 26215)를 인식하도록 패턴 확장
     pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4}|[A-Za-z0-9]{5})')
     for line in text.split('\n'):
         line_clean = line.strip()
@@ -996,27 +995,33 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 공임코드를 입력하거나 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르세요.")
-    st.write("")
-    
     col_a, col_b = st.columns(2)
     with col_a:
-        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215 (숫자 5개 또는 3-2-1~4자리)", key="code_a")
-        text_a = st.text_area("A그룹 내용 붙여넣기", height=220, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        sub_a1, sub_a2 = st.columns([1.2, 1.8])
+        with sub_a1:
+            input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
+        with sub_a2:
+            input_desc_a = st.text_input("공임내역", placeholder="예시: coolant drain-refill/replace", key="desc_a")
+        text_a = st.text_area("A그룹 내용 붙여넣기", height=200, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
     with col_b:
-        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010 (숫자 5개 또는 3-2-1~4자리)", key="code_b")
-        text_b = st.text_area("B그룹 내용 붙여넣기", height=220, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        sub_b1, sub_b2 = st.columns([1.2, 1.8])
+        with sub_b1:
+            input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
+        with sub_b2:
+            st.markdown("<div style='font-size: 14px; font-weight: 600; margin-bottom: 6px;'>공임내역</div>", unsafe_allow_html=True)
+            input_desc_b = st.text_input("공임내역 (B)", placeholder="예시: coolant drain-refill/replace", label_visibility="collapsed", key="desc_b")
+        text_b = st.text_area("B그룹 내용 붙여넣기", height=200, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
         combined_text_a = text_a
         if input_code_a.strip():
-            combined_text_a = f"{input_code_a.strip()}\n" + combined_text_a
+            combined_text_a = f"{input_code_a.strip()} {input_desc_a.strip()}\n" + combined_text_a
             
         combined_text_b = text_b
         if input_code_b.strip():
-            combined_text_b = f"{input_code_b.strip()}\n" + combined_text_b
+            combined_text_b = f"{input_code_b.strip()} {input_desc_b.strip()}\n" + combined_text_b
 
         if not combined_text_a.strip() and not combined_text_b.strip():
             st.warning("⚠️ 공임코드를 입력하거나 내용을 붙여넣어 주세요.")
@@ -1039,8 +1044,13 @@ else:
                 st.markdown("### 🚨 중복 발견 내역")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
-                    lines_a_str = " | ".join(map_a[code])
-                    lines_b_str = " | ".join(map_b[code])
+                    # 상단에 직접 입력한 값이 있으면 그 값을 우선적으로 조합하여 표시
+                    val_a_custom = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else None
+                    val_b_custom = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else None
+                    
+                    lines_a_str = val_a_custom if val_a_custom else " | ".join(map_a[code])
+                    lines_b_str = val_b_custom if val_b_custom else " | ".join(map_b[code])
+                    
                     dup_rows.append({
                         "중복 공임코드": code,
                         "A그룹 원본 내용": lines_a_str,
@@ -1052,7 +1062,9 @@ else:
                 main_headers = ["No."] + list(df_dup.columns)
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
+                    final_val_a = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and row['중복 공임코드'] == input_code_a.strip().upper()) else row['A그룹 원본 내용']
+                    final_val_b = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and row['중복 공임코드'] == input_code_b.strip().upper()) else row['B그룹 원본 내용']
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_a}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_b}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
