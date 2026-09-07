@@ -409,7 +409,7 @@ def load_excel_mw(uploaded_file):
         claim_no = str(row.get(col_claim_no, '')).strip() if col_claim_no else ''
         if claim_no and claim_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             excel_groups[claim_no].append({
                 'amount': int(row['Excel_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -640,7 +640,7 @@ def load_excel_coupon_a(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             a_groups[car_no].append({
                 'amount': int(row['Calc_Total']),
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -662,7 +662,7 @@ def load_excel_coupon_b(uploaded_file):
         car_no = str(row.get(col_car, '')).strip() if col_car else 'Unknown'
         if car_no and car_no != 'nan':
             r_val = str(row.get(col_r, '-')).strip() if col_r else '-'
-            raw_v = str(row.get(col_v, '-')).strip() if raw_v else '-'
+            raw_v = str(row.get(col_v, '-')).strip() if col_v else '-'
             b_groups[car_no].append({
                 'amount': round_half_up(row[col_total]) if col_total else 0,
                 'claim_type': r_val if r_val and r_val != 'nan' else '-',
@@ -1044,13 +1044,8 @@ else:
                 st.markdown("### 🚨 중복 발견 내역")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
-                    # 상단에 직접 입력한 값이 있으면 그 값을 우선적으로 조합하여 표시
-                    val_a_custom = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else None
-                    val_b_custom = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else None
-                    
-                    lines_a_str = val_a_custom if val_a_custom else " | ".join(map_a[code])
-                    lines_b_str = val_b_custom if val_b_custom else " | ".join(map_b[code])
-                    
+                    lines_a_str = " | ".join(map_a[code])
+                    lines_b_str = " | ".join(map_b[code])
                     dup_rows.append({
                         "중복 공임코드": code,
                         "A그룹 원본 내용": lines_a_str,
@@ -1059,12 +1054,14 @@ else:
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                main_headers = ["No."] + list(df_dup.columns)
+                # 상단 빨간네모(A)와 노란네모(B)에 적은 내용으로 헤더 이름 동적 생성
+                header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 원본 내용"
+                header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 원본 내용"
+                
+                main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name]
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    final_val_a = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and row['중복 공임코드'] == input_code_a.strip().upper()) else row['A그룹 원본 내용']
-                    final_val_b = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and row['중복 공임코드'] == input_code_b.strip().upper()) else row['B그룹 원본 내용']
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_a}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_b}</td></tr>')
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
