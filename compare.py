@@ -1005,7 +1005,10 @@ else:
             input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
         with sub_a2:
             input_desc_a = st.text_input("공임내역", placeholder="예시: coolant drain-refill/replace", key="desc_a")
-        text_a = st.text_area("A그룹 내용 붙여넣기", height=200, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        
+        st.markdown("<div style='font-size: 14px; font-weight: 600; margin-top: 10px; margin-bottom: 6px;'>공임상세내역</div>", unsafe_allow_html=True)
+        text_a = st.text_area("공임상세내역 (A)", height=200, placeholder="예시 : 900-00-B   Engine hood open and close  1  7", label_visibility="collapsed", key="textarea_a")
+        
     with col_b:
         sub_b1, sub_b2 = st.columns([1.2, 1.8])
         with sub_b1:
@@ -1013,7 +1016,9 @@ else:
         with sub_b2:
             st.markdown("<div style='font-size: 14px; font-weight: 600; margin-bottom: 6px;'>공임내역</div>", unsafe_allow_html=True)
             input_desc_b = st.text_input("공임내역 (B)", placeholder="예시: coolant drain-refill/replace", label_visibility="collapsed", key="desc_b")
-        text_b = st.text_area("B그룹 내용 붙여넣기", height=200, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        
+        st.markdown("<div style='font-size: 14px; font-weight: 600; margin-top: 10px; margin-bottom: 6px;'>공임상세내역</div>", unsafe_allow_html=True)
+        text_b = st.text_area("공임상세내역 (B)", height=200, placeholder="예시 : 900-00-B   Engine hood open and close  1  7", label_visibility="collapsed", key="textarea_b")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
