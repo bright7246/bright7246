@@ -992,7 +992,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
     else:
         with right_col:
-            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시ведена습니다.")
+            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
     st.markdown("### 🔍 VF01 에서 확인된 2개의 공임코드의 중복값을 비교합니다.")
@@ -1043,14 +1043,15 @@ else:
             
             st.divider()
             
-            # 2번 사진 배치: 좌측 지표 카드, 우측 중복 발견 내역 테이블
             res_col_left, res_col_right = st.columns([3, 7], gap="large")
             
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
-                st.metric("A그룹 고유 항목", f"{len(only_a)} 건")
-                st.metric("B그룹 고유 항목", f"{len(only_b)} 건")
+                # 지표 카드 3개를 가로로 나란히 배치
+                m1, m2, m3 = st.columns(3)
+                m1.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
+                m2.metric("A그룹 고유 항목", f"{len(only_a)} 건")
+                m3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
                 
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
