@@ -133,8 +133,6 @@ with head_col2:
 
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
-if "prev_mode" not in st.session_state:
-    st.session_state.prev_mode = st.session_state.current_mode
 if "reset_trigger" not in st.session_state:
     st.session_state.reset_trigger = 0
 
@@ -211,7 +209,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링]
+# 📊 [컴포넌트 렌더링] (3단계 색상 순환 클릭 복사 + 차액 리스트 항상 노출)
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -234,50 +232,49 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         main_tbody.append('</tr>')
 
     diff_section = ""
-    if df_diff is not None:
+    if df_diff is not None and len(df_diff) > 0:
         diff_headers = ["No."] + list(df_diff.columns)
-        if len(df_diff) > 0:
-            diff_tbody = []
-            for idx, row in df_diff.iterrows():
-                is_total = "총합계" in str(row.iloc[0])
-                tr_class = ' class="total-row"' if is_total else ''
-                diff_tbody.append(f'<tr{tr_class}>')
-                diff_tbody.append(f'<td class="col-no">{idx}</td>')
-                
-                if not is_total:
-                    diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-                else:
-                    diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
-                    
-                diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-                diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-                diff_color = "" if is_total else " diff-red"
-                diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-                diff_tbody.append('</tr>')
+        diff_tbody = []
+        for idx, row in df_diff.iterrows():
+            is_total = "총합계" in str(row.iloc[0])
+            tr_class = ' class="total-row"' if is_total else ''
+            diff_tbody.append(f'<tr{tr_class}>')
+            diff_tbody.append(f'<td class="col-no">{idx}</td>')
             
-            diff_section = (
-                '<div class="table-card">'
-                f'<div class="card-title">{diff_title}</div>'
-                '<div class="scroll-wrap">'
-                '<table class="compact-table">'
-                '<thead><tr>'
-                f'<th class="col-no">{diff_headers[0]}</th>'
-                f'<th class="col-id">{diff_headers[1]}</th>'
-                f'<th class="col-type">{diff_headers[2]}</th>'
-                f'<th class="col-desc">{diff_headers[3]}</th>'
-                f'<th class="col-diff">{diff_headers[4]}</th>'
-                '</tr></thead>'
-                f'<tbody>{"".join(diff_tbody)}</tbody>'
-                '</table></div></div>'
-            )
-        else:
-            diff_section = (
-                '<div class="table-card">'
-                f'<div class="card-title">{diff_title}</div>'
-                '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">'
-                '✅ 차액 100원 이상 발생 항목이 없습니다.'
-                '</div></div>'
-            )
+            if not is_total:
+                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+            else:
+                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+                
+            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+            diff_color = "" if is_total else " diff-red"
+            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+            diff_tbody.append('</tr>')
+        
+        diff_section = (
+            '<div class="table-card">'
+            f'<div class="card-title">{diff_title}</div>'
+            '<div class="scroll-wrap">'
+            '<table class="compact-table">'
+            '<thead><tr>'
+            f'<th class="col-no">{diff_headers[0]}</th>'
+            f'<th class="col-id">{diff_headers[1]}</th>'
+            f'<th class="col-type">{diff_headers[2]}</th>'
+            f'<th class="col-desc">{diff_headers[3]}</th>'
+            f'<th class="col-diff">{diff_headers[4]}</th>'
+            '</tr></thead>'
+            f'<tbody>{"".join(diff_tbody)}</tbody>'
+            '</table></div></div>'
+        )
+    else:
+        diff_section = (
+            '<div class="table-card">'
+            f'<div class="card-title">{diff_title}</div>'
+            '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; min-width: 320px;">'
+            '✅ 차액 100원 이상 발생 항목이 없습니다.'
+            '</div></div>'
+        )
 
     css_code = """
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -995,25 +992,30 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 공임코드와 작업내용을 입력한 뒤 **[비교진행]** 버튼을 누르면 양 그룹 간의 공임코드 중복을 찾아냅니다.")
     st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        st.markdown("### A 그룹 내용 붙여넣기")
-        text_a = st.text_area("A그룹", height=280, placeholder="예시:\n900-00-B   Engine hood open and close   1   7", label_visibility="collapsed")
+        st.markdown("### A 그룹 입력")
+        code_a = st.text_input("공임코드 (A)", placeholder="공임코드 (예: 21001)", key="code_a")
+        desc_a = st.text_input("작업내용 (A)", placeholder="작업내용 (영어 50자 이내)", max_chars=50, key="desc_a")
     with col_b:
-        st.markdown("### B 그룹 내용 붙여넣기")
-        text_b = st.text_area("B그룹", height=280, placeholder="예시:\n211-13-G11   Cover over engine remove-install   1   12", label_visibility="collapsed")
+        st.markdown("### B 그룹 입력")
+        code_b = st.text_input("공임코드 (B)", placeholder="공임코드 (예: 21001)", key="code_b")
+        desc_b = st.text_input("작업내용 (B)", placeholder="작업내용 (영어 50자 이내)", max_chars=50, key="desc_b")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        if not text_a.strip() and not text_b.strip():
-            st.warning("⚠️ A그룹 또는 B그룹에 내용을 먼저 붙여넣어 주세요.")
+        formatted_a = f"{code_a.strip()} {desc_a.strip()}" if (code_a.strip() or desc_a.strip()) else ""
+        formatted_b = f"{code_b.strip()} {desc_b.strip()}" if (code_b.strip() or desc_b.strip()) else ""
+        
+        if not formatted_a and not formatted_b:
+            st.warning("⚠️ A그룹 또는 B그룹에 공임코드와 작업내용을 입력해 주세요.")
         else:
-            map_a = parse_labor_lines(text_a)
-            map_b = parse_labor_lines(text_b)
+            map_a = parse_labor_lines(formatted_a)
+            map_b = parse_labor_lines(formatted_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
