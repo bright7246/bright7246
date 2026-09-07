@@ -1385,7 +1385,7 @@ else:
       text_a = st.text_area(
           "공임상세내역 (A)",
           height=350,
-          placeholder="예시 코드",
+          placeholder="예시 : 900-00-B   Engine hood open 1 7",
           label_visibility="collapsed",
           key="textarea_a",
       )
@@ -1416,7 +1416,7 @@ else:
       text_b = st.text_area(
           "공임상세내역 (B)",
           height=350,
-          placeholder="예시 코드",
+          placeholder="예시 : 900-00-B   Engine hood open 1 7",
           label_visibility="collapsed",
           key="textarea_b",
       )
@@ -1447,7 +1447,7 @@ else:
       text_c = st.text_area(
           "공임상세내역 (C)",
           height=350,
-          placeholder="예시 코드",
+          placeholder="예시 : 900-00-B   Engine hood open 1 7",
           label_visibility="collapsed",
           key="textarea_c",
       )
