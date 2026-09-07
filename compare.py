@@ -133,6 +133,8 @@ with head_col2:
 
 if "current_mode" not in st.session_state:
     st.session_state.current_mode = "MW 보증 비교"
+if "prev_mode" not in st.session_state:
+    st.session_state.prev_mode = st.session_state.current_mode
 if "reset_trigger" not in st.session_state:
     st.session_state.reset_trigger = 0
 
@@ -209,7 +211,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링] (3단계 색상 순환 클릭 복사 + 차액 리스트 항상 노출)
+# 📊 [컴포넌트 렌더링]
 # ────────────────────────────────────────────────────────
 def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"):
     main_headers = ["No."] + list(df_main.columns)
@@ -795,7 +797,7 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     return output, month_str
 
 # ────────────────────────────────────────────────────────
-# 3️⃣ [모드 3] 공임코드 비교
+# 3️⃣ [모드 3] 공임코드 비교 (개편된 입력 UI 연동)
 # ────────────────────────────────────────────────────────
 def parse_labor_lines(text):
     code_map = defaultdict(list)
@@ -992,30 +994,32 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 공임코드와 작업내용을 입력한 뒤 **[비교진행]** 버튼을 누르면 양 그룹 간의 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 공임코드와 작업내용을 입력한 뒤, **[비교진행]** 버튼을 눌러 중복 작업을 검증합니다.")
     st.write("")
     
+    # A그룹 및 B그룹 입력 폼 레이아웃 구성
     col_a, col_b = st.columns(2)
     with col_a:
         st.markdown("### A 그룹 입력")
-        code_a = st.text_input("공임코드 (A)", placeholder="공임코드 (예: 21001)", key="code_a")
-        desc_a = st.text_input("작업내용 (A)", placeholder="작업내용 (영어 50자 이내)", max_chars=50, key="desc_a")
+        code_a = st.text_input("공임코드 (A)", placeholder="예시: 210-01", key="input_code_a")
+        desc_a = st.text_input("작업내용 (영어 50자 이내)", placeholder="예시: Engine adjustment with tension band", max_chars=50, key="input_desc_a")
     with col_b:
         st.markdown("### B 그룹 입력")
-        code_b = st.text_input("공임코드 (B)", placeholder="공임코드 (예: 21001)", key="code_b")
-        desc_b = st.text_input("작업내용 (B)", placeholder="작업내용 (영어 50자 이내)", max_chars=50, key="desc_b")
+        code_b = st.text_input("공임코드 (B)", placeholder="예시: 210-01", key="input_code_b")
+        desc_b = st.text_input("작업내용 (영어 50자 이내)", placeholder="예시: Engine adjustment with tension band", max_chars=50, key="input_desc_b")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        formatted_a = f"{code_a.strip()} {desc_a.strip()}" if (code_a.strip() or desc_a.strip()) else ""
-        formatted_b = f"{code_b.strip()} {desc_b.strip()}" if (code_b.strip() or desc_b.strip()) else ""
-        
-        if not formatted_a and not formatted_b:
+        # 입력된 값을 조합하여 기존 파싱 로직에 전달할 형식(공임코드 + 공백 + 작업내용)으로 구성
+        text_a = f"{code_a.strip()} {desc_a.strip()}" if code_a.strip() or desc_a.strip() else ""
+        text_b = f"{code_b.strip()} {desc_b.strip()}" if code_b.strip() or desc_b.strip() else ""
+
+        if not text_a.strip() and not text_b.strip():
             st.warning("⚠️ A그룹 또는 B그룹에 공임코드와 작업내용을 입력해 주세요.")
         else:
-            map_a = parse_labor_lines(formatted_a)
-            map_b = parse_labor_lines(formatted_b)
+            map_a = parse_labor_lines(text_a)
+            map_b = parse_labor_lines(text_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
