@@ -804,7 +804,7 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
+    pattern = re.compile(r'([A-Za-z0-9]{5}|[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
     for line in text.split('\n'):
         line_clean = line.strip()
         if not line_clean:
@@ -995,25 +995,23 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 각각 공임코드를 입력한 뒤, **[비교진행]** 버튼을 누르면 중복을 찾아냅니다.")
     st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        st.markdown("### A 그룹 내용 붙여넣기")
-        text_a = st.text_area("A그룹", height=280, placeholder="예시:\n900-00-B   Engine hood open and close   1   7", label_visibility="collapsed")
+        code_a = st.text_input("공임코드 :", placeholder="숫자 5개 입력 (예: 26215)", max_chars=5)
     with col_b:
-        st.markdown("### B 그룹 내용 붙여넣기")
-        text_b = st.text_area("B그룹", height=280, placeholder="예시:\n211-13-G11   Cover over engine remove-install   1   12", label_visibility="collapsed")
+        code_b = st.text_input("공임코드 :", placeholder="숫자 5개 입력 (예: 26010)", max_chars=5)
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        if not text_a.strip() and not text_b.strip():
-            st.warning("⚠️ A그룹 또는 B그룹에 내용을 먼저 붙여넣어 주세요.")
+        if not code_a.strip() and not code_b.strip():
+            st.warning("⚠️ A그룹 또는 B그룹에 공임코드를 입력해 주세요.")
         else:
-            map_a = parse_labor_lines(text_a)
-            map_b = parse_labor_lines(text_b)
+            map_a = parse_labor_lines(code_a)
+            map_b = parse_labor_lines(code_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
