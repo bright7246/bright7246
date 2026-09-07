@@ -234,49 +234,50 @@ def render_side_by_side_tables(df_main, df_diff=None, diff_title="🚨 차액 �
         main_tbody.append('</tr>')
 
     diff_section = ""
-    if df_diff is not None and len(df_diff) > 0:
+    if df_diff is not None:
         diff_headers = ["No."] + list(df_diff.columns)
-        diff_tbody = []
-        for idx, row in df_diff.iterrows():
-            is_total = "총합계" in str(row.iloc[0])
-            tr_class = ' class="total-row"' if is_total else ''
-            diff_tbody.append(f'<tr{tr_class}>')
-            diff_tbody.append(f'<td class="col-no">{idx}</td>')
-            
-            if not is_total:
-                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-            else:
-                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+        if len(df_diff) > 0:
+            diff_tbody = []
+            for idx, row in df_diff.iterrows():
+                is_total = "총합계" in str(row.iloc[0])
+                tr_class = ' class="total-row"' if is_total else ''
+                diff_tbody.append(f'<tr{tr_class}>')
+                diff_tbody.append(f'<td class="col-no">{idx}</td>')
                 
-            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-            diff_color = "" if is_total else " diff-red"
-            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-            diff_tbody.append('</tr>')
-        
-        diff_section = (
-            '<div class="table-card">'
-            f'<div class="card-title">{diff_title}</div>'
-            '<div class="scroll-wrap">'
-            '<table class="compact-table">'
-            '<thead><tr>'
-            f'<th class="col-no">{diff_headers[0]}</th>'
-            f'<th class="col-id">{diff_headers[1]}</th>'
-            f'<th class="col-type">{diff_headers[2]}</th>'
-            f'<th class="col-desc">{diff_headers[3]}</th>'
-            f'<th class="col-diff">{diff_headers[4]}</th>'
-            '</tr></thead>'
-            f'<tbody>{"".join(diff_tbody)}</tbody>'
-            '</table></div></div>'
-        )
-    else:
-        diff_section = (
-            '<div class="table-card">'
-            f'<div class="card-title">{diff_title}</div>'
-            '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; min-width: 320px;">'
-            '✅ 차액 100원 이상 발생 항목이 없습니다.'
-            '</div></div>'
-        )
+                if not is_total:
+                    diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+                else:
+                    diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+                    
+                diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+                diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+                diff_color = "" if is_total else " diff-red"
+                diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+                diff_tbody.append('</tr>')
+            
+            diff_section = (
+                '<div class="table-card">'
+                f'<div class="card-title">{diff_title}</div>'
+                '<div class="scroll-wrap">'
+                '<table class="compact-table">'
+                '<thead><tr>'
+                f'<th class="col-no">{diff_headers[0]}</th>'
+                f'<th class="col-id">{diff_headers[1]}</th>'
+                f'<th class="col-type">{diff_headers[2]}</th>'
+                f'<th class="col-desc">{diff_headers[3]}</th>'
+                f'<th class="col-diff">{diff_headers[4]}</th>'
+                '</tr></thead>'
+                f'<tbody>{"".join(diff_tbody)}</tbody>'
+                '</table></div></div>'
+            )
+        else:
+            diff_section = (
+                '<div class="table-card">'
+                f'<div class="card-title">{diff_title}</div>'
+                '<div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">'
+                '✅ 차액 100원 이상 발생 항목이 없습니다.'
+                '</div></div>'
+            )
 
     css_code = """
       * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -803,7 +804,7 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4}|[A-Za-z0-9]{5})')
+    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
     for line in text.split('\n'):
         line_clean = line.strip()
         if not line_clean:
@@ -994,37 +995,25 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
     st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        st.markdown("### A 그룹 입력")
-        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
-        input_desc_a = st.text_input("작업내용 (A, 최대 50자)", placeholder="Thermostat replace", max_chars=50, key="desc_a")
-        text_a = st.text_area("A그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        st.markdown("### A 그룹 내용 붙여넣기")
+        text_a = st.text_area("A그룹", height=280, placeholder="예시:\n900-00-B   Engine hood open and close   1   7", label_visibility="collapsed")
     with col_b:
-        st.markdown("### B 그룹 입력")
-        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
-        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="Coolant drain-refill/replace", max_chars=50, key="desc_b")
-        text_b = st.text_area("B그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
+        st.markdown("### B 그룹 내용 붙여넣기")
+        text_b = st.text_area("B그룹", height=280, placeholder="예시:\n211-13-G11   Cover over engine remove-install   1   12", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        combined_text_a = text_a
-        if input_code_a.strip():
-            combined_text_a = f"{input_code_a.strip()} {input_desc_a.strip()}\n" + combined_text_a
-            
-        combined_text_b = text_b
-        if input_code_b.strip():
-            combined_text_b = f"{input_code_b.strip()} {input_desc_b.strip()}\n" + combined_text_b
-
-        if not combined_text_a.strip() and not combined_text_b.strip():
-            st.warning("⚠️ 공임코드 또는 내용을 입력하거나 붙여넣어 주세요.")
+        if not text_a.strip() and not text_b.strip():
+            st.warning("⚠️ A그룹 또는 B그룹에 내용을 먼저 붙여넣어 주세요.")
         else:
-            map_a = parse_labor_lines(combined_text_a)
-            map_b = parse_labor_lines(combined_text_b)
+            map_a = parse_labor_lines(text_a)
+            map_b = parse_labor_lines(text_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
@@ -1041,26 +1030,20 @@ else:
                 st.markdown("### 🚨 중복 발견 내역")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
-                    val_a_custom = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else None
-                    val_b_custom = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else None
-                    
-                    lines_a_str = val_a_custom if val_a_custom else " | ".join(map_a[code])
-                    lines_b_str = val_b_custom if val_b_custom else " | ".join(map_b[code])
-                    
+                    lines_a_str = " | ".join(map_a[code])
+                    lines_b_str = " | ".join(map_b[code])
                     dup_rows.append({
                         "중복 공임코드": code,
-                        "A그룹 입력 내용": lines_a_str,
-                        "B그룹 입력 내용": lines_b_str
+                        "A그룹 원본 내용": lines_a_str,
+                        "B그룹 원본 내용": lines_b_str
                     })
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                main_headers = ["No.", "중복 공임코드", "A그룹 입력 내용", "B그룹 입력 내용"]
+                main_headers = ["No."] + list(df_dup.columns)
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    final_val_a = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and row['중복 공임코드'] == input_code_a.strip().upper()) else row['A그룹 입력 내용']
-                    final_val_b = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and row['중복 공임코드'] == input_code_b.strip().upper()) else row['B그룹 입력 내용']
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_a}</td><td class="col-amt copyable" onclick="copyCell(this)">{final_val_b}</td></tr>')
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
