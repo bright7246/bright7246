@@ -1049,16 +1049,12 @@ else:
             
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                # 지표 카드 4개를 2x2 또는 수직/수평으로 깔끔하게 배치
-                m1, m2 = st.columns(2)
-                m1.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
-                m2.metric("A그룹 총 건수", f"{len(map_a)} 건")
-                
-                m3, m4 = st.columns(2)
-                m3.metric("A그룹 고유", f"{len(only_a)} 건")
-                m4.metric("B그룹 총 건수", f"{len(map_b)} 건")
-                
+                # 순서 변경: A그룹 총 건수 -> A그룹 고유 -> B그룹 총 건수 -> B그룹 고유 -> 중복된 공임코드
+                st.metric("A그룹 총 건수", f"{len(map_a)} 건")
+                st.metric("A그룹 고유", f"{len(only_a)} 건")
+                st.metric("B그룹 총 건수", f"{len(map_b)} 건")
                 st.metric("B그룹 고유", f"{len(only_b)} 건")
+                st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
                 
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
