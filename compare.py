@@ -1006,7 +1006,7 @@ else:
     with col_b:
         st.markdown("### B 그룹 입력")
         input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
-        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="WATER PUMP", max_chars=50, key="desc_b")
+        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="Coolant drain-refill/replace", max_chars=50, key="desc_b")
         text_b = st.text_area("B그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
@@ -1051,10 +1051,13 @@ else:
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                main_headers = ["No."] + list(df_dup.columns)
+                main_headers = ["No.", "중복 공임코드", f"A그룹 입력 내용 ({input_code_a} {input_desc_a})".strip() if input_code_a.strip() else "A그룹 입력 내용", f"B그룹 입력 내용 ({input_code_b} {input_desc_b})".strip() if input_code_b.strip() else "B그룹 입력 내용"]
+                
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
+                    val_a = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else row.iloc[1]
+                    val_b = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else row.iloc[2]
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_a}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_b}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -1085,7 +1088,7 @@ else:
                     f'<style>{css_dup}</style></head><body>'
                     '<div id="toast">📋 복사 완료!</div>'
                     '<table><thead><tr>'
-                    f'<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th>'
+                    f'<th>No.</th><th>중복 공임코드</th><th>A그룹 입력 내용</th><th>B그룹 입력 내용</th>'
                     '</tr></thead>'
                     f'<tbody>{"".join(main_tbody)}</tbody></table>'
                     f'<script>{js_dup}</script>'
