@@ -804,7 +804,8 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    pattern = re.compile(r'([A-Za-z0-9]{5}|[A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
+    # 3자리-2자리-1~4자리 또는 숫자 5자리(예: 26215)를 인식하도록 패턴 확장
+    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4}|[A-Za-z0-9]{5})')
     for line in text.split('\n'):
         line_clean = line.strip()
         if not line_clean:
@@ -995,23 +996,33 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 각각 공임코드를 입력한 뒤, **[비교진행]** 버튼을 누르면 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 공임코드를 입력하거나 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르세요.")
     st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        code_a = st.text_input("공임코드 :", placeholder="숫자 5개 입력 (예: 26215)", max_chars=5)
+        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215 (숫자 5개 또는 3-2-1~4자리)", key="code_a")
+        text_a = st.text_area("A그룹 내용 붙여넣기", height=220, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
     with col_b:
-        code_b = st.text_input("공임코드 :", placeholder="숫자 5개 입력 (예: 26010)", max_chars=5)
+        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010 (숫자 5개 또는 3-2-1~4자리)", key="code_b")
+        text_b = st.text_area("B그룹 내용 붙여넣기", height=220, placeholder="또는 기존처럼 공임 내역 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        if not code_a.strip() and not code_b.strip():
-            st.warning("⚠️ A그룹 또는 B그룹에 공임코드를 입력해 주세요.")
+        combined_text_a = text_a
+        if input_code_a.strip():
+            combined_text_a = f"{input_code_a.strip()}\n" + combined_text_a
+            
+        combined_text_b = text_b
+        if input_code_b.strip():
+            combined_text_b = f"{input_code_b.strip()}\n" + combined_text_b
+
+        if not combined_text_a.strip() and not combined_text_b.strip():
+            st.warning("⚠️ 공임코드를 입력하거나 내용을 붙여넣어 주세요.")
         else:
-            map_a = parse_labor_lines(code_a)
-            map_b = parse_labor_lines(code_b)
+            map_a = parse_labor_lines(combined_text_a)
+            map_b = parse_labor_lines(combined_text_b)
             
             duplicate_codes = sorted(list(set(map_a.keys()) & set(map_b.keys())))
             only_a = sorted(list(set(map_a.keys()) - set(map_b.keys())))
