@@ -1041,8 +1041,13 @@ else:
                 st.markdown("### 🚨 중복 발견 내역")
                 dup_rows = []
                 for idx, code in enumerate(duplicate_codes, 1):
-                    lines_a_str = " | ".join(map_a[code])
-                    lines_b_str = " | ".join(map_b[code])
+                    # 상단에 직접 입력한 값이 있으면 그 값을 우선적으로 조합하여 표시
+                    val_a_custom = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else None
+                    val_b_custom = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else None
+                    
+                    lines_a_str = val_a_custom if val_a_custom else " | ".join(map_a[code])
+                    lines_b_str = val_b_custom if val_b_custom else " | ".join(map_b[code])
+                    
                     dup_rows.append({
                         "중복 공임코드": code,
                         "A그룹 입력 내용": lines_a_str,
@@ -1051,13 +1056,10 @@ else:
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                main_headers = ["No.", "중복 공임코드", f"A그룹 입력 내용 ({input_code_a} {input_desc_a})".strip() if input_code_a.strip() else "A그룹 입력 내용", f"B그룹 입력 내용 ({input_code_b} {input_desc_b})".strip() if input_code_b.strip() else "B그룹 입력 내용"]
-                
+                main_headers = ["No.", "중복 공임코드", "A그룹 입력 내용", "B그룹 입력 내용"]
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    val_a = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and code == input_code_a.strip().upper()) else row.iloc[1]
-                    val_b = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and code == input_code_b.strip().upper()) else row.iloc[2]
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_a}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_b}</td></tr>')
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{row.iloc[1]}</td><td class="col-amt copyable" onclick="copyCell(this)">{row.iloc[2]}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -1088,7 +1090,7 @@ else:
                     f'<style>{css_dup}</style></head><body>'
                     '<div id="toast">📋 복사 완료!</div>'
                     '<table><thead><tr>'
-                    f'<th>No.</th><th>중복 공임코드</th><th>A그룹 입력 내용</th><th>B그룹 입력 내용</th>'
+                    f'<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th>'
                     '</tr></thead>'
                     f'<tbody>{"".join(main_tbody)}</tbody></table>'
                     f'<script>{js_dup}</script>'
