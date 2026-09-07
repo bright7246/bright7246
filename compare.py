@@ -1059,7 +1059,9 @@ else:
                 main_headers = ["No.", "중복 공임코드", "A그룹 입력 내용", "B그룹 입력 내용"]
                 main_tbody = []
                 for idx, row in df_dup.iterrows():
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{row.iloc[1]}</td><td class="col-amt copyable" onclick="copyCell(this)">{row.iloc[2]}</td></tr>')
+                    val_a_display = f"{input_code_a.strip()} {input_desc_a.strip()}" if (input_code_a.strip() and row['중복 공임코드'] == input_code_a.strip().upper()) else row['A그룹 입력 내용']
+                    val_b_display = f"{input_code_b.strip()} {input_desc_b.strip()}" if (input_code_b.strip() and row['중복 공임코드'] == input_code_b.strip().upper()) else row['B그룹 입력 내용']
+                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_a_display}</td><td class="col-amt copyable" onclick="copyCell(this)">{val_b_display}</td></tr>')
                 
                 css_dup = """
                   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
