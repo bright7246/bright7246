@@ -804,7 +804,8 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4}|[A-Za-z0-9]{5})')
+    # 변경된 공임코드 형식: 1~4자리 - 1~4자리 - 1~4자리
+    pattern = re.compile(r'([A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4})')
     for line in text.split('\n'):
         line_clean = line.strip()
         if not line_clean:
