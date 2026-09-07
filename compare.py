@@ -1049,11 +1049,21 @@ else:
             
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                # 순서 변경: A그룹 총 건수 -> A그룹 고유 -> B그룹 총 건수 -> B그룹 고유 -> 중복된 공임코드
-                st.metric("A그룹 총 건수", f"{len(map_a)} 건")
-                st.metric("A그룹 고유", f"{len(only_a)} 건")
-                st.metric("B그룹 총 건수", f"{len(map_b)} 건")
-                st.metric("B그룹 고유", f"{len(only_b)} 건")
+                
+                # 2열(Grid) 배치 적용
+                sum_col1, sum_col2 = st.columns(2)
+                with sum_col1:
+                    st.metric("A그룹 총 건수", f"{len(map_a)} 건")
+                with sum_col2:
+                    st.metric("A그룹 고유", f"{len(only_a)} 건")
+                    
+                sum_col3, sum_col4 = st.columns(2)
+                with sum_col3:
+                    st.metric("B그룹 총 건수", f"{len(map_b)} 건")
+                with sum_col4:
+                    st.metric("B그룹 고유", f"{len(only_b)} 건")
+                    
+                st.write("") # 간격 조정
                 st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
                 
             with res_col_right:
