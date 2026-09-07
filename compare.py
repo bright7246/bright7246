@@ -803,7 +803,7 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4})')
+    pattern = re.compile(r'([A-Za-z0-9]{3}-[A-Za-z0-9]{2}-[A-Za-z0-9]{1,4}|[A-Za-z0-9]{5})')
     for line in text.split('\n'):
         line_clean = line.strip()
         if not line_clean:
@@ -994,25 +994,24 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
-    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 `3자리-2자리-1~4자리` 형태의 공임코드 중복을 찾아냅니다.")
+    st.markdown("### 🔍 A 그룹과 B 그룹에 복사한 공임 텍스트를 붙여넣은 뒤, **[비교진행]** 버튼을 누르면 공임코드 중복을 찾아냅니다.")
     st.write("")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        st.markdown("#### A 그룹 입력")
-        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 256-01-K55", key="code_a")
-        input_desc_a = st.text_input("작업내용 (A, 최대 50자)", placeholder="Engine oil replacement", max_chars=50, key="desc_a")
+        st.markdown("### A 그룹 입력")
+        input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
+        input_desc_a = st.text_input("작업내용 (A, 최대 50자)", placeholder="Thermostat replace", max_chars=50, key="desc_a")
         text_a = st.text_area("A그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
     with col_b:
-        st.markdown("#### B 그룹 입력")
-        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 210-01-L1", key="code_b")
-        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="Engine adjustment with tension band", max_chars=50, key="desc_b")
+        st.markdown("### B 그룹 입력")
+        input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
+        input_desc_b = st.text_input("작업내용 (B, 최대 50자)", placeholder="WATER PUMP", max_chars=50, key="desc_b")
         text_b = st.text_area("B그룹 통째로 붙여넣기", height=200, placeholder="또는 기존처럼 텍스트를 통째로 붙여넣으세요", label_visibility="collapsed")
         
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
     
     if start_compare:
-        # 개별 입력된 내용이 있으면 자동으로 텍스트 상단에 조합 추가
         combined_text_a = text_a
         if input_code_a.strip():
             combined_text_a = f"{input_code_a.strip()} {input_desc_a.strip()}\n" + combined_text_a
@@ -1046,8 +1045,8 @@ else:
                     lines_b_str = " | ".join(map_b[code])
                     dup_rows.append({
                         "중복 공임코드": code,
-                        "A그룹 원본 내용": lines_a_str,
-                        "B그룹 원본 내용": lines_b_str
+                        "A그룹 입력 내용": lines_a_str,
+                        "B그룹 입력 내용": lines_b_str
                     })
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
