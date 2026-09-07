@@ -1271,12 +1271,13 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       )
 
 else:
-  st.markdown("### 🔍 VF01 에서 확인된 공임코드들의 중복값을 비교합니다.")
-  st.write("")
-
-  # 그룹 추가/제거 버튼 제어 상단 바
-  ctrl_c1, ctrl_c2 = st.columns([2, 8])
-  with ctrl_c1:
+  # 소제목과 버튼을 가로로 나란히 배치하기 위한 상단 레이아웃 분할
+  top_col1, top_col2 = st.columns([7.5, 2.5])
+  with top_col1:
+    st.markdown(
+        "### 🔍 VF01 에서 확인된 공임코드들의 중복값을 비교합니다."
+    )
+  with top_col2:
     if not st.session_state.show_group_c:
       if st.button("➕ 그룹 C 추가하기", use_container_width=True):
         st.session_state.show_group_c = True
@@ -1467,7 +1468,6 @@ else:
       )
 
       if st.session_state.show_group_c:
-        # 3개 그룹 비교 (A, B, C 중 2개 이상 혹은 전체 중복 코드 추출)
         all_codes = set(
             list(map_a.keys()) + list(map_b.keys()) + list(map_c.keys())
         )
