@@ -804,7 +804,6 @@ def parse_labor_lines(text):
     code_map = defaultdict(list)
     if not text:
         return code_map
-    # 변경된 공임코드 형식: 1~4자리 - 1~4자리 - 1~4자리
     pattern = re.compile(r'([A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4})')
     for line in text.split('\n'):
         line_clean = line.strip()
@@ -993,7 +992,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
     else:
         with right_col:
-            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
+            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시ведена습니다.")
 
 else:
     st.markdown("### 🔍 VF01 에서 확인된 2개의 공임코드의 중복값을 비교합니다.")
@@ -1043,69 +1042,74 @@ else:
             only_b = sorted(list(set(map_b.keys()) - set(map_a.keys())))
             
             st.divider()
-            st.subheader("📌 비교 요약 결과")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
-            c2.metric("A그룹 고유 항목", f"{len(only_a)} 건")
-            c3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
             
-            if duplicate_codes:
+            # 2번 사진 배치: 좌측 지표 카드, 우측 중복 발견 내역 테이블
+            res_col_left, res_col_right = st.columns([3, 7], gap="large")
+            
+            with res_col_left:
+                st.markdown("### 📌 비교 요약 결과")
+                st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
+                st.metric("A그룹 고유 항목", f"{len(only_a)} 건")
+                st.metric("B그룹 고유 항목", f"{len(only_b)} 건")
+                
+            with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
-                dup_rows = []
-                for idx, code in enumerate(duplicate_codes, 1):
-                    lines_a_str = " | ".join(map_a[code])
-                    lines_b_str = " | ".join(map_b[code])
-                    dup_rows.append({
-                        "중복 공임코드": code,
-                        "A그룹 원본 내용": lines_a_str,
-                        "B그룹 원본 내용": lines_b_str
-                    })
-                df_dup = pd.DataFrame(dup_rows)
-                df_dup.index = range(1, len(df_dup) + 1)
-                
-                header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 원본 내용"
-                header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 원본 내용"
-                
-                main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name]
-                main_tbody = []
-                for idx, row in df_dup.iterrows():
-                    main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
-                
-                css_dup = """
-                  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-                  body { background-color: transparent; color: #f8fafc; }
-                  table { border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; }
-                  th { background-color: #1e293b; color: #fff; padding: 10px 12px; border: 1px solid #334155; text-align: center; }
-                  td { padding: 8px 12px; border: 1px solid #334155; }
-                  td.copyable { cursor: pointer; }
-                  td.copyable:hover { background-color: rgba(14, 165, 233, 0.2) !important; }
-                  #toast { visibility: hidden; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #fff; padding: 8px 16px; border-radius: 6px; font-weight: bold; z-index: 99999; }
-                  #toast.show { visibility: visible; }
-                """
-                
-                js_dup = """
-                  function copyCell(el) {
-                    const text = el.innerText.trim();
-                    if (!text || text === '-') return;
-                    navigator.clipboard.writeText(text);
-                    const toast = document.getElementById('toast');
-                    toast.innerText = '📋 복사 완료: ' + text;
-                    toast.className = 'show';
-                    setTimeout(function() { toast.className = ''; }, 1200);
-                  }
-                """
-                
-                table_html = (
-                    '<!DOCTYPE html><html><head><meta charset="utf-8" />'
-                    f'<style>{css_dup}</style></head><body>'
-                    '<div id="toast">📋 복사 완료!</div>'
-                    '<table><thead><tr>'
-                    f'<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th>'
-                    '</tr></thead>'
-                    f'<tbody>{"".join(main_tbody)}</tbody></table>'
-                    f'<script>{js_dup}</script>'
-                    '</body></html>'
-                )
-                components.html(table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True)
-            else:
-                st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
+                if duplicate_codes:
+                    dup_rows = []
+                    for idx, code in enumerate(duplicate_codes, 1):
+                        lines_a_str = " | ".join(map_a[code])
+                        lines_b_str = " | ".join(map_b[code])
+                        dup_rows.append({
+                            "중복 공임코드": code,
+                            "A그룹 원본 내용": lines_a_str,
+                            "B그룹 원본 내용": lines_b_str
+                        })
+                    df_dup = pd.DataFrame(dup_rows)
+                    df_dup.index = range(1, len(df_dup) + 1)
+                    
+                    header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 원본 내용"
+                    header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 원본 내용"
+                    
+                    main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name]
+                    main_tbody = []
+                    for idx, row in df_dup.iterrows():
+                        main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
+                    
+                    css_dup = """
+                      * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+                      body { background-color: transparent; color: #f8fafc; }
+                      table { border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; }
+                      th { background-color: #1e293b; color: #fff; padding: 10px 12px; border: 1px solid #334155; text-align: center; }
+                      td { padding: 8px 12px; border: 1px solid #334155; }
+                      td.copyable { cursor: pointer; }
+                      td.copyable:hover { background-color: rgba(14, 165, 233, 0.2) !important; }
+                      #toast { visibility: hidden; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #fff; padding: 8px 16px; border-radius: 6px; font-weight: bold; z-index: 99999; }
+                      #toast.show { visibility: visible; }
+                    """
+                    
+                    js_dup = """
+                      function copyCell(el) {
+                        const text = el.innerText.trim();
+                        if (!text || text === '-') return;
+                        navigator.clipboard.writeText(text);
+                        const toast = document.getElementById('toast');
+                        toast.innerText = '📋 복사 완료: ' + text;
+                        toast.className = 'show';
+                        setTimeout(function() { toast.className = ''; }, 1200);
+                      }
+                    """
+                    
+                    table_html = (
+                        '<!DOCTYPE html><html><head><meta charset="utf-8" />'
+                        f'<style>{css_dup}</style></head><body>'
+                        '<div id="toast">📋 복사 완료!</div>'
+                        '<table><thead><tr>'
+                        f'<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th>'
+                        '</tr></thead>'
+                        f'<tbody>{"".join(main_tbody)}</tbody></table>'
+                        f'<script>{js_dup}</script>'
+                        '</body></html>'
+                    )
+                    components.html(table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True)
+                else:
+                    st.success("✅ A그룹과 B그룹 간에 중복된 공임코드가 없습니다.")
