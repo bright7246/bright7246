@@ -1047,11 +1047,9 @@ else:
             
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                # 지표 카드 3개를 가로로 나란히 배치
-                m1, m2, m3 = st.columns(3)
-                m1.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
-                m2.metric("A그룹 고유 항목", f"{len(only_a)} 건")
-                m3.metric("B그룹 고유 항목", f"{len(only_b)} 건")
+                st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta="중복 발견" if duplicate_codes else None)
+                st.metric("A그룹 고유 항목", f"{len(only_a)} 건")
+                st.metric("B그룹 고유 항목", f"{len(only_b)} 건")
                 
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
@@ -1069,21 +1067,23 @@ else:
                     df_dup.index = range(1, len(df_dup) + 1)
                     
                     header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 원본 내용"
-                    header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 원본 내용"
+                    header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_code_b.strip() else "B그룹 원본 내용"
                     
                     main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name]
                     main_tbody = []
                     for idx, row in df_dup.iterrows():
                         main_tbody.append(f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>')
                     
+                    # 다크/라이트 모드 상관없이 글자가 또렷하게 보이도록 CSS 고정
                     css_dup = """
                       * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-                      body { background-color: transparent; color: #f8fafc; }
-                      table { border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; }
-                      th { background-color: #1e293b; color: #fff; padding: 10px 12px; border: 1px solid #334155; text-align: center; }
-                      td { padding: 8px 12px; border: 1px solid #334155; }
+                      body { background-color: #ffffff !important; color: #1e293b !important; }
+                      table { border-collapse: collapse; width: 100%; font-size: 15px; user-select: text; background-color: #ffffff !important; }
+                      th { background-color: #1e293b !important; color: #ffffff !important; padding: 10px 12px; border: 1px solid #cbd5e1; text-align: center; }
+                      td { padding: 8px 12px; border: 1px solid #cbd5e1; color: #1e293b !important; background-color: #ffffff !important; }
+                      tr:nth-child(even) td { background-color: #f8fafc !important; }
                       td.copyable { cursor: pointer; }
-                      td.copyable:hover { background-color: rgba(14, 165, 233, 0.2) !important; }
+                      td.copyable:hover { background-color: rgba(14, 165, 233, 0.15) !important; }
                       #toast { visibility: hidden; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #fff; padding: 8px 16px; border-radius: 6px; font-weight: bold; z-index: 99999; }
                       #toast.show { visibility: visible; }
                     """
