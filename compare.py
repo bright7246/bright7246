@@ -995,6 +995,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 else:
+    st.markdown("### 🔍 VF01 에서 확인된 2개의 공임코드의 중복값을 비교합니다.")
+    st.write("")
+    
     col_a, col_b = st.columns(2)
     with col_a:
         sub_a1, sub_a2 = st.columns([1.2, 1.8])
@@ -1054,7 +1057,6 @@ else:
                 df_dup = pd.DataFrame(dup_rows)
                 df_dup.index = range(1, len(df_dup) + 1)
                 
-                # 상단 빨간네모(A)와 노란네모(B)에 적은 내용으로 헤더 이름 동적 생성
                 header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 원본 내용"
                 header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 원본 내용"
                 
