@@ -214,13 +214,15 @@ if "cal_month" not in st.session_state:
 if "calendar_events" not in st.session_state:
   st.session_state.calendar_events = [
       {
-          "date": "2026-09-10",
+          "start_date": "2026-09-10",
+          "end_date": "2026-09-10",
           "title": "MW 보증 청구 마감",
           "category": "MW 마감",
           "memo": "DMS 및 PDF 대조 완료 확인",
       },
       {
-          "date": "2026-09-20",
+          "start_date": "2026-09-20",
+          "end_date": "2026-09-20",
           "title": "쿠폰 보증 정산",
           "category": "쿠폰 정산",
           "memo": "공지 파일 차액 리스트 송부",
@@ -1807,7 +1809,18 @@ elif mode == "캘린더":
 
   events_by_date = defaultdict(list)
   for ev in st.session_state.calendar_events:
-    events_by_date[ev["date"]].append(ev)
+    start_str = ev.get("start_date") or ev.get("date")
+    end_str = ev.get("end_date") or start_str
+    try:
+      s_date = datetime.datetime.strptime(start_str, "%Y-%m-%d").date()
+      e_date = datetime.datetime.strptime(end_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+      continue
+
+    curr_d = s_date
+    while curr_d <= e_date:
+      events_by_date[curr_d.strftime("%Y-%m-%d")].append(ev)
+      curr_d += datetime.timedelta(days=1)
 
   cal_inner_css = """
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -1954,21 +1967,22 @@ elif mode == "캘린더":
   with bottom_col_left:
     st.markdown("#### ✏️ 일정 등록 / 관리")
     with st.expander("➕ 새 일정 등록하기", expanded=True):
-      selected_input_date = st.date_input(
-          "날짜 선택",
-          value=datetime.date(
-              st.session_state.cal_year,
-              st.session_state.cal_month,
-              min(datetime.date.today().day, 28),
-          ),
-          key="cal_add_date",
+      default_selected_date = datetime.date(
+          st.session_state.cal_year,
+          st.session_state.cal_month,
+          min(datetime.date.today().day, 28),
+      )
+      selected_dates = st.date_input(
+          "날짜 선택 (하루 클릭 또는 시작/종료 2개 클릭)",
+          value=(default_selected_date,),
+          key="cal_add_dates",
       )
       new_title = st.text_input(
-          "일정 제목", placeholder="예: 9월 쿠폰 정산 마감", key="cal_add_title"
+          "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산 마감", key="cal_add_title"
       )
       new_cat = st.selectbox(
           "업무 구분",
-          ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"],
+          ["휴가/당직", "MW 마감", "쿠폰 정산", "본사 청구", "기타"],
           key="cal_add_cat",
       )
       new_memo = st.text_area(
@@ -1976,28 +1990,49 @@ elif mode == "캘린더":
       )
 
       if st.button("등록하기", type="primary", use_container_width=True):
-        if new_title.strip():
+        if not new_title.strip():
+          st.warning("⚠️ 일정 제목을 입력해 주세요.")
+        else:
+          if isinstance(selected_dates, (tuple, list)):
+            if len(selected_dates) == 1:
+              s_date = selected_dates[0]
+              e_date = selected_dates[0]
+            elif len(selected_dates) >= 2:
+              s_date = min(selected_dates[0], selected_dates[1])
+              e_date = max(selected_dates[0], selected_dates[1])
+            else:
+              s_date = default_selected_date
+              e_date = default_selected_date
+          else:
+            s_date = selected_dates
+            e_date = selected_dates
+
           st.session_state.calendar_events.append({
-              "date": selected_input_date.strftime("%Y-%m-%d"),
+              "start_date": s_date.strftime("%Y-%m-%d"),
+              "end_date": e_date.strftime("%Y-%m-%d"),
               "title": new_title.strip(),
               "category": new_cat,
               "memo": new_memo.strip(),
           })
           st.success("✅ 일정이 등록되었습니다!")
           st.rerun()
-        else:
-          st.warning("⚠️ 일정 제목을 입력해 주세요.")
 
   with bottom_col_right:
     current_month_prefix = (
         f"{st.session_state.cal_year:04d}-{st.session_state.cal_month:02d}"
     )
+
+    def is_in_current_month(ev):
+      s_d = ev.get("start_date") or ev.get("date", "")
+      e_d = ev.get("end_date") or s_d
+      return s_d.startswith(current_month_prefix) or e_d.startswith(current_month_prefix)
+
     month_events = [
         (idx, ev)
         for idx, ev in enumerate(st.session_state.calendar_events)
-        if ev["date"].startswith(current_month_prefix)
+        if is_in_current_month(ev)
     ]
-    month_events.sort(key=lambda x: x[1]["date"])
+    month_events.sort(key=lambda x: (x[1].get("start_date") or x[1].get("date", "")))
 
     st.markdown(
         f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록"
@@ -2021,6 +2056,10 @@ elif mode == "캘린더":
                   "기타": "⬜",
               }.get(ev.get("category"), "📌")
 
+              s_str = ev.get("start_date") or ev.get("date", "")
+              e_str = ev.get("end_date") or s_str
+              date_display = s_str if s_str == e_str else f"{s_str} ~ {e_str}"
+
               memo_txt = ev.get("memo", "").strip()
               memo_html = (
                   f'<div class="event-card-memo">{memo_txt}</div>'
@@ -2032,7 +2071,7 @@ elif mode == "캘린더":
                   f"""
                   <div class="event-card">
                     <div class="event-card-title">
-                      {category_icon} <span>{ev['date']}</span> <span style="color:#94a3b8;">|</span> <span>[{ev['category']}] {ev['title']}</span>
+                      {category_icon} <span>{date_display}</span> <span style="color:#94a3b8;">|</span> <span>[{ev['category']}] {ev['title']}</span>
                     </div>
                     {memo_html}
                   </div>
