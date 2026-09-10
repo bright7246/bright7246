@@ -73,7 +73,6 @@ st.markdown(
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
-    /* Streamlit 입력 폼 라벨 크기 통일 */
     div[data-baseweb="input"] label p, div[data-baseweb="textarea"] label p, div.stTextInput label p, div.stTextArea label p, div.stSelectbox label p, div.stDateInput label p {
         font-size: 19px !important;
         font-weight: 700 !important;
@@ -85,71 +84,6 @@ st.markdown(
         color: #f1f5f9;
         margin-bottom: 8px;
     }
-    /* 캘린더 스타일 */
-    .cal-container {
-        border: 1px solid #334155;
-        border-radius: 8px;
-        overflow: hidden;
-        background-color: #0b0f19;
-    }
-    .cal-header-row {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        background-color: #1e293b;
-        border-bottom: 1px solid #334155;
-        text-align: center;
-        font-weight: bold;
-        padding: 10px 0;
-        color: #cbd5e1;
-        font-size: 16px;
-    }
-    .cal-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-    }
-    .cal-cell {
-        min-height: 105px;
-        border-right: 1px solid #334155;
-        border-bottom: 1px solid #334155;
-        padding: 8px;
-        background-color: #0b0f19;
-    }
-    .cal-cell.other-month {
-        background-color: #07090e;
-        color: #475569;
-    }
-    .cal-day-num {
-        font-size: 15px;
-        font-weight: bold;
-        margin-bottom: 6px;
-        display: inline-block;
-    }
-    .cal-today {
-        background-color: #0284c7;
-        color: #ffffff;
-        border-radius: 50%;
-        width: 26px;
-        height: 26px;
-        text-align: center;
-        line-height: 26px;
-    }
-    .cal-sun { color: #f87171; }
-    .cal-sat { color: #60a5fa; }
-    .event-chip {
-        font-size: 11px;
-        padding: 3px 6px;
-        border-radius: 4px;
-        margin-bottom: 3px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        font-weight: 600;
-    }
-    .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
-    .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
-    .chip-claim { background-color: rgba(234, 179, 8, 0.25); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
-    .chip-vacation { background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
-    .chip-etc { background-color: rgba(148, 163, 184, 0.25); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -220,7 +154,6 @@ if "reset_trigger" not in st.session_state:
 if "show_group_c" not in st.session_state:
   st.session_state.show_group_c = False
 
-# 캘린더 기본 상태 초기화
 if "cal_year" not in st.session_state:
   st.session_state.cal_year = 2026
 if "cal_month" not in st.session_state:
@@ -231,24 +164,27 @@ if "calendar_events" not in st.session_state:
           "date": "2026-09-10",
           "title": "MW 보증 청구 마감",
           "category": "MW 마감",
-          "memo": "DMS 및 PDF 대조 완료 확인"
+          "memo": "DMS 및 PDF 대조 완료 확인",
       },
       {
           "date": "2026-09-20",
           "title": "쿠폰 보증 정산",
           "category": "쿠폰 정산",
-          "memo": "공지 파일 차액 리스트 송부"
-      }
+          "memo": "공지 파일 차액 리스트 송부",
+      },
   ]
 
-# 4개 탭 네비게이션
 nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
 
 with nav_col1:
   btn_mw = st.button(
       "📋 MW 보증 비교\n(PDF vs 엑셀)",
       use_container_width=True,
-      type=("primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"),
+      type=(
+          "primary"
+          if st.session_state.current_mode == "MW 보증 비교"
+          else "secondary"
+      ),
   )
   if btn_mw:
     if st.session_state.current_mode != "MW 보증 비교":
@@ -260,7 +196,11 @@ with nav_col2:
   btn_coupon = st.button(
       "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)",
       use_container_width=True,
-      type=("primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"),
+      type=(
+          "primary"
+          if st.session_state.current_mode == "쿠폰 보증 비교"
+          else "secondary"
+      ),
   )
   if btn_coupon:
     if st.session_state.current_mode != "쿠폰 보증 비교":
@@ -272,7 +212,11 @@ with nav_col3:
   btn_labor = st.button(
       "🔧 공임코드 비교\n(중복 작업 검증)",
       use_container_width=True,
-      type=("primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"),
+      type=(
+          "primary"
+          if st.session_state.current_mode == "공임코드 비교"
+          else "secondary"
+      ),
   )
   if btn_labor:
     if st.session_state.current_mode != "공임코드 비교":
@@ -284,7 +228,9 @@ with nav_col4:
   btn_cal = st.button(
       "📅 캘린더\n(보증/업무 일정 관리)",
       use_container_width=True,
-      type=("primary" if st.session_state.current_mode == "캘린더" else "secondary"),
+      type=(
+          "primary" if st.session_state.current_mode == "캘린더" else "secondary"
+      ),
   )
   if btn_cal:
     if st.session_state.current_mode != "캘린더":
@@ -1377,7 +1323,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       )
 
 elif mode == "공임코드 비교":
-  # 소제목과 버튼을 가로로 나란히 배치하기 위한 상단 레이아웃 분할
   top_col1, top_col2 = st.columns([7.5, 2.5])
   with top_col1:
     st.markdown(
@@ -1758,7 +1703,6 @@ elif mode == "캘린더":
   st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
   st.write("")
 
-  # 상단 월 이동 네비게이션
   ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.5, 4, 1.5, 3])
   with ctrl_c1:
     if st.button("◀ 이전 달", use_container_width=True):
@@ -1774,7 +1718,7 @@ elif mode == "캘린더":
         f"<h3 style='text-align: center; margin: 0; color: #f1f5f9;'>"
         f"{st.session_state.cal_year}년 {st.session_state.cal_month}월"
         f"</h3>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
   with ctrl_c3:
@@ -1794,7 +1738,6 @@ elif mode == "캘린더":
 
   st.write("")
 
-  # 좌측: 캘린더 표 / 우측: 일정 등록 및 목록
   cal_main_col, cal_side_col = st.columns([6.8, 3.2], gap="large")
 
   category_styles = {
@@ -1802,24 +1745,112 @@ elif mode == "캘린더":
       "쿠폰 정산": "chip-coupon",
       "본사 청구": "chip-claim",
       "휴가/당직": "chip-vacation",
-      "기타": "chip-etc"
+      "기타": "chip-etc",
   }
 
   with cal_main_col:
-    # 캘린더 그리드 HTML 직접 구현
-    month_cal = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
+    month_cal = calendar.monthcalendar(
+        st.session_state.cal_year, st.session_state.cal_month
+    )
     today = datetime.date.today()
 
     events_by_date = defaultdict(list)
     for ev in st.session_state.calendar_events:
       events_by_date[ev["date"]].append(ev)
 
-    cal_html = ['<div class="cal-container">']
-    cal_html.append('<div class="cal-header-row">')
-    days_labels = ['<span class="cal-sun">일</span>', '월', '화', '수', '목', '금', '<span class="cal-sat">토</span>']
+    cal_inner_css = """
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      body { background-color: transparent; color: #f8fafc; }
+      .cal-container {
+        width: 100%;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: #0b0f19;
+      }
+      .cal-header-row {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        background-color: #1e293b;
+        border-bottom: 1px solid #334155;
+        text-align: center;
+        font-weight: bold;
+        padding: 10px 0;
+        color: #cbd5e1;
+        font-size: 16px;
+      }
+      .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+      }
+      .cal-cell {
+        min-height: 105px;
+        border-right: 1px solid #334155;
+        border-bottom: 1px solid #334155;
+        padding: 8px;
+        background-color: #0b0f19;
+      }
+      .cal-cell:nth-child(7n) {
+        border-right: none;
+      }
+      .cal-cell.other-month {
+        background-color: #07090e;
+        color: #475569;
+      }
+      .cal-day-num {
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 6px;
+        display: inline-block;
+      }
+      .cal-today {
+        background-color: #0284c7;
+        color: #ffffff;
+        border-radius: 50%;
+        width: 26px;
+        height: 26px;
+        text-align: center;
+        line-height: 26px;
+      }
+      .cal-sun { color: #f87171; }
+      .cal-sat { color: #60a5fa; }
+      .event-chip {
+        font-size: 11px;
+        padding: 3px 6px;
+        border-radius: 4px;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 600;
+        display: block;
+      }
+      .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
+      .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+      .chip-claim { background-color: rgba(234, 179, 8, 0.25); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
+      .chip-vacation { background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
+      .chip-etc { background-color: rgba(148, 163, 184, 0.25); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
+    """
+
+    cal_html = [
+        '<!DOCTYPE html><html><head><meta charset="utf-8" />',
+        f"<style>{cal_inner_css}</style></head><body>",
+        '<div class="cal-container">',
+        '<div class="cal-header-row">',
+    ]
+
+    days_labels = [
+        '<span class="cal-sun">일</span>',
+        "월",
+        "화",
+        "수",
+        "목",
+        "금",
+        '<span class="cal-sat">토</span>',
+    ]
     for dl in days_labels:
-      cal_html.append(f'<div>{dl}</div>')
-    cal_html.append('</div>')
+      cal_html.append(f"<div>{dl}</div>")
+    cal_html.append("</div>")
 
     cal_html.append('<div class="cal-grid">')
     for week in month_cal:
@@ -1827,9 +1858,11 @@ elif mode == "캘린더":
         if day_num == 0:
           cal_html.append('<div class="cal-cell other-month"></div>')
         else:
-          current_d = datetime.date(st.session_state.cal_year, st.session_state.cal_month, day_num)
+          current_d = datetime.date(
+              st.session_state.cal_year, st.session_state.cal_month, day_num
+          )
           date_str = current_d.strftime("%Y-%m-%d")
-          
+
           if current_d == today:
             num_html = f'<div class="cal-day-num cal-today">{day_num}</div>'
           elif day_idx == 0:
@@ -1845,34 +1878,52 @@ elif mode == "캘린더":
             chips_html.append(
                 f'<div class="event-chip {cat_cls}" title="{ev.get("memo", "")}">'
                 f'[{ev.get("category")}] {ev.get("title")}'
-                f'</div>'
+                "</div>"
             )
 
-          cal_html.append(f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>')
-    cal_html.append('</div></div>')
+          cal_html.append(
+              f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>'
+          )
+    cal_html.append("</div></div></body></html>")
 
-    components.html("".join(cal_html), height=550, scrolling=False)
+    num_weeks = len(month_cal)
+    calc_iframe_height = max(620, num_weeks * 115 + 60)
+    components.html(
+        "".join(cal_html), height=calc_iframe_height, scrolling=False
+    )
 
   with cal_side_col:
     st.markdown("#### ✏️ 일정 등록 / 관리")
-    
+
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       selected_input_date = st.date_input(
           "날짜 선택",
-          value=datetime.date(st.session_state.cal_year, st.session_state.cal_month, min(datetime.date.today().day, 28)),
-          key="cal_add_date"
+          value=datetime.date(
+              st.session_state.cal_year,
+              st.session_state.cal_month,
+              min(datetime.date.today().day, 28),
+          ),
+          key="cal_add_date",
       )
-      new_title = st.text_input("일정 제목", placeholder="예: 9월 쿠폰 정산 마감", key="cal_add_title")
-      new_cat = st.selectbox("업무 구분", ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"], key="cal_add_cat")
-      new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo")
-      
+      new_title = st.text_input(
+          "일정 제목", placeholder="예: 9월 쿠폰 정산 마감", key="cal_add_title"
+      )
+      new_cat = st.selectbox(
+          "업무 구분",
+          ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"],
+          key="cal_add_cat",
+      )
+      new_memo = st.text_area(
+          "상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo"
+      )
+
       if st.button("등록하기", type="primary", use_container_width=True):
         if new_title.strip():
           st.session_state.calendar_events.append({
               "date": selected_input_date.strftime("%Y-%m-%d"),
               "title": new_title.strip(),
               "category": new_cat,
-              "memo": new_memo.strip()
+              "memo": new_memo.strip(),
           })
           st.success("✅ 일정이 등록되었습니다!")
           st.rerun()
@@ -1881,10 +1932,13 @@ elif mode == "캘린더":
 
     st.write("")
     st.markdown(f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록")
-    
-    current_month_prefix = f"{st.session_state.cal_year:04d}-{st.session_state.cal_month:02d}"
+
+    current_month_prefix = (
+        f"{st.session_state.cal_year:04d}-{st.session_state.cal_month:02d}"
+    )
     month_events = [
-        (idx, ev) for idx, ev in enumerate(st.session_state.calendar_events)
+        (idx, ev)
+        for idx, ev in enumerate(st.session_state.calendar_events)
         if ev["date"].startswith(current_month_prefix)
     ]
     month_events.sort(key=lambda x: x[1]["date"])
@@ -1896,13 +1950,20 @@ elif mode == "캘린더":
           with c_info:
             st.markdown(
                 f"**📅 {ev['date']} | [{ev['category']}] {ev['title']}**\n\n"
-                f"<span style='color: #94a3b8; font-size: 13px;'>{ev.get('memo', '-')}</span>",
-                unsafe_allow_html=True
+                f"<span style='color: #94a3b8;"
+                f" font-size: 13px;'>{ev.get('memo', '-')}</span>",
+                unsafe_allow_html=True,
             )
           with c_del:
-            if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
+            if st.button(
+                "삭제", key=f"del_ev_{orig_idx}", use_container_width=True
+            ):
               st.session_state.calendar_events.pop(orig_idx)
               st.rerun()
-          st.markdown("<hr style='border: 0; border-top: 1px solid #334155; margin: 8px 0;'>", unsafe_allow_html=True)
+          st.markdown(
+              "<hr style='border: 0; border-top: 1px solid #334155; margin:"
+              " 8px 0;'>",
+              unsafe_allow_html=True,
+          )
     else:
       st.info("해당 월에 등록된 일정이 없습니다.")
