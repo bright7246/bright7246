@@ -85,57 +85,65 @@ st.markdown(
         color: #f1f5f9;
         margin-bottom: 8px;
     }
-    /* 캘린더 커스텀 테이블 스타일 */
-    .cal-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        table-layout: fixed;
-    }
-    .cal-table th {
-        background-color: #1e293b;
-        color: #cbd5e1;
-        padding: 10px 4px;
-        text-align: center;
-        font-size: 16px;
+    /* 캘린더 스타일 */
+    .cal-container {
         border: 1px solid #334155;
-    }
-    .cal-table td {
-        height: 95px;
-        vertical-align: top;
-        padding: 6px 8px;
-        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
         background-color: #0b0f19;
-        position: relative;
     }
-    .cal-table td.other-month {
+    .cal-header-row {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        background-color: #1e293b;
+        border-bottom: 1px solid #334155;
+        text-align: center;
+        font-weight: bold;
+        padding: 10px 0;
+        color: #cbd5e1;
+        font-size: 16px;
+    }
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+    }
+    .cal-cell {
+        min-height: 105px;
+        border-right: 1px solid #334155;
+        border-bottom: 1px solid #334155;
+        padding: 8px;
+        background-color: #0b0f19;
+    }
+    .cal-cell.other-month {
         background-color: #07090e;
         color: #475569;
     }
     .cal-day-num {
         font-size: 15px;
         font-weight: bold;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         display: inline-block;
     }
     .cal-today {
-        background-color: #0284c7 !important;
-        color: #ffffff !important;
+        background-color: #0284c7;
+        color: #ffffff;
         border-radius: 50%;
-        padding: 2px 7px;
+        width: 26px;
+        height: 26px;
+        text-align: center;
+        line-height: 26px;
     }
     .cal-sun { color: #f87171; }
     .cal-sat { color: #60a5fa; }
     .event-chip {
         font-size: 11px;
-        padding: 2px 6px;
+        padding: 3px 6px;
         border-radius: 4px;
         margin-bottom: 3px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         font-weight: 600;
-        display: block;
     }
     .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
     .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
@@ -214,21 +222,19 @@ if "show_group_c" not in st.session_state:
 
 # 캘린더 기본 상태 초기화
 if "cal_year" not in st.session_state:
-  st.session_state.cal_year = datetime.date.today().year
+  st.session_state.cal_year = 2026
 if "cal_month" not in st.session_state:
-  st.session_state.cal_month = datetime.date.today().month
-if "cal_selected_date" not in st.session_state:
-  st.session_state.cal_selected_date = datetime.date.today()
+  st.session_state.cal_month = 9
 if "calendar_events" not in st.session_state:
   st.session_state.calendar_events = [
       {
-          "date": datetime.date(st.session_state.cal_year, st.session_state.cal_month, 10).strftime("%Y-%m-%d"),
+          "date": "2026-09-10",
           "title": "MW 보증 청구 마감",
           "category": "MW 마감",
           "memo": "DMS 및 PDF 대조 완료 확인"
       },
       {
-          "date": datetime.date(st.session_state.cal_year, st.session_state.cal_month, 20).strftime("%Y-%m-%d"),
+          "date": "2026-09-20",
           "title": "쿠폰 보증 정산",
           "category": "쿠폰 정산",
           "memo": "공지 파일 차액 리스트 송부"
@@ -1752,7 +1758,7 @@ elif mode == "캘린더":
   st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
   st.write("")
 
-  # 캘린더 네비게이션 (월 이동)
+  # 상단 월 이동 네비게이션
   ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.5, 4, 1.5, 3])
   with ctrl_c1:
     if st.button("◀ 이전 달", use_container_width=True):
@@ -1784,12 +1790,11 @@ elif mode == "캘린더":
     if st.button("📌 오늘 날짜로 이동", use_container_width=True):
       st.session_state.cal_year = datetime.date.today().year
       st.session_state.cal_month = datetime.date.today().month
-      st.session_state.cal_selected_date = datetime.date.today()
       st.rerun()
 
   st.write("")
 
-  # 좌측: 캘린더 화면 / 우측: 일정 등록 및 일자별 상세 내역
+  # 좌측: 캘린더 표 / 우측: 일정 등록 및 목록
   cal_main_col, cal_side_col = st.columns([6.8, 3.2], gap="large")
 
   category_styles = {
@@ -1801,41 +1806,38 @@ elif mode == "캘린더":
   }
 
   with cal_main_col:
-    # 캘린더 HTML 테이블 생성
+    # 캘린더 그리드 HTML 직접 구현
     month_cal = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
     today = datetime.date.today()
 
-    # 이벤트 매핑 (YYYY-MM-DD -> list)
     events_by_date = defaultdict(list)
     for ev in st.session_state.calendar_events:
       events_by_date[ev["date"]].append(ev)
 
-    cal_html = ['<table class="cal-table">']
-    cal_html.append('<thead><tr>')
+    cal_html = ['<div class="cal-container">']
+    cal_html.append('<div class="cal-header-row">')
     days_labels = ['<span class="cal-sun">일</span>', '월', '화', '수', '목', '금', '<span class="cal-sat">토</span>']
     for dl in days_labels:
-      cal_html.append(f'<th>{dl}</th>')
-    cal_html.append('</tr></thead><tbody>')
+      cal_html.append(f'<div>{dl}</div>')
+    cal_html.append('</div>')
 
+    cal_html.append('<div class="cal-grid">')
     for week in month_cal:
-      cal_html.append('<tr>')
       for day_idx, day_num in enumerate(week):
         if day_num == 0:
-          cal_html.append('<td class="other-month"></td>')
+          cal_html.append('<div class="cal-cell other-month"></div>')
         else:
           current_d = datetime.date(st.session_state.cal_year, st.session_state.cal_month, day_num)
           date_str = current_d.strftime("%Y-%m-%d")
           
-          # 일자 색상 (일: 빨강, 토: 파랑, 오늘: 하이라이트)
-          day_cls = "cal-day-num"
           if current_d == today:
-            num_html = f'<span class="cal-day-num cal-today">{day_num}</span>'
+            num_html = f'<div class="cal-day-num cal-today">{day_num}</div>'
           elif day_idx == 0:
-            num_html = f'<span class="cal-day-num cal-sun">{day_num}</span>'
+            num_html = f'<div class="cal-day-num cal-sun">{day_num}</div>'
           elif day_idx == 6:
-            num_html = f'<span class="cal-day-num cal-sat">{day_num}</span>'
+            num_html = f'<div class="cal-day-num cal-sat">{day_num}</div>'
           else:
-            num_html = f'<span class="cal-day-num">{day_num}</span>'
+            num_html = f'<div class="cal-day-num">{day_num}</div>'
 
           chips_html = []
           for ev in events_by_date.get(date_str, []):
@@ -1846,12 +1848,10 @@ elif mode == "캘린더":
                 f'</div>'
             )
 
-          cal_html.append(f'<td>{num_html}{"".join(chips_html)}</td>')
-      cal_html.append('</tr>')
+          cal_html.append(f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>')
+    cal_html.append('</div></div>')
 
-    cal_html.append('</tbody></table>')
-
-    components.html("".join(cal_html), height=640, scrolling=False)
+    components.html("".join(cal_html), height=550, scrolling=False)
 
   with cal_side_col:
     st.markdown("#### ✏️ 일정 등록 / 관리")
@@ -1862,9 +1862,9 @@ elif mode == "캘린더":
           value=datetime.date(st.session_state.cal_year, st.session_state.cal_month, min(datetime.date.today().day, 28)),
           key="cal_add_date"
       )
-      new_title = st.text_input("일정 제목", placeholder="예: 8월 쿠폰 정산 마감", key="cal_add_title")
+      new_title = st.text_input("일정 제목", placeholder="예: 9월 쿠폰 정산 마감", key="cal_add_title")
       new_cat = st.selectbox("업무 구분", ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"], key="cal_add_cat")
-      new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항이나 전달내용 입력", key="cal_add_memo")
+      new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo")
       
       if st.button("등록하기", type="primary", use_container_width=True):
         if new_title.strip():
