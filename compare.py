@@ -84,6 +84,59 @@ st.markdown(
         color: #f1f5f9;
         margin-bottom: 8px;
     }
+    div[data-testid="stExpander"] div[data-testid="stButton"] > button {
+        height: 48px !important;
+    }
+    div[data-testid="stExpander"] div[data-testid="stButton"] > button p {
+        font-size: 16px !important;
+        font-weight: 700 !important;
+    }
+    .event-card {
+        background-color: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+        min-height: 72px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .event-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .event-card-memo {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .del-btn-wrap div[data-testid="stButton"] > button {
+        height: 72px !important;
+        min-height: 72px !important;
+        border-radius: 8px !important;
+        background-color: #1e293b !important;
+        border: 1px solid #475569 !important;
+        color: #ef4444 !important;
+        padding: 0 !important;
+        margin-bottom: 8px !important;
+    }
+    .del-btn-wrap div[data-testid="stButton"] > button p {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+    }
+    .del-btn-wrap div[data-testid="stButton"] > button:hover {
+        background-color: #7f1d1d !important;
+        border-color: #ef4444 !important;
+        color: #ffffff !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1732,13 +1785,12 @@ elif mode == "캘린더":
 
   with ctrl_c4:
     if st.button("📌 오늘 날짜로 이동", use_container_width=True):
-      st.session_state.cal_year = datetime.date.today().year
-      st.session_state.cal_month = datetime.date.today().month
+      today_now = datetime.date.today()
+      st.session_state.cal_year = today_now.year
+      st.session_state.cal_month = today_now.month
       st.rerun()
 
   st.write("")
-
-  cal_main_col, cal_side_col = st.columns([6.8, 3.2], gap="large")
 
   category_styles = {
       "MW 마감": "chip-mw",
@@ -1748,153 +1800,159 @@ elif mode == "캘린더":
       "기타": "chip-etc",
   }
 
-  with cal_main_col:
-    month_cal = calendar.monthcalendar(
-        st.session_state.cal_year, st.session_state.cal_month
-    )
-    today = datetime.date.today()
+  month_cal = calendar.monthcalendar(
+      st.session_state.cal_year, st.session_state.cal_month
+  )
+  today = datetime.date.today()
 
-    events_by_date = defaultdict(list)
-    for ev in st.session_state.calendar_events:
-      events_by_date[ev["date"]].append(ev)
+  events_by_date = defaultdict(list)
+  for ev in st.session_state.calendar_events:
+    events_by_date[ev["date"]].append(ev)
 
-    cal_inner_css = """
-      * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-      body { background-color: transparent; color: #f8fafc; }
-      .cal-container {
-        width: 100%;
-        border: 1px solid #334155;
-        border-radius: 8px;
-        overflow: hidden;
-        background-color: #0b0f19;
-      }
-      .cal-header-row {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        background-color: #1e293b;
-        border-bottom: 1px solid #334155;
-        text-align: center;
-        font-weight: bold;
-        padding: 10px 0;
-        color: #cbd5e1;
-        font-size: 16px;
-      }
-      .cal-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-      }
-      .cal-cell {
-        min-height: 105px;
-        border-right: 1px solid #334155;
-        border-bottom: 1px solid #334155;
-        padding: 8px;
-        background-color: #0b0f19;
-      }
-      .cal-cell:nth-child(7n) {
-        border-right: none;
-      }
-      .cal-cell.other-month {
-        background-color: #07090e;
-        color: #475569;
-      }
-      .cal-day-num {
-        font-size: 15px;
-        font-weight: bold;
-        margin-bottom: 6px;
-        display: inline-block;
-      }
-      .cal-today {
-        background-color: #0284c7;
-        color: #ffffff;
-        border-radius: 50%;
-        width: 26px;
-        height: 26px;
-        text-align: center;
-        line-height: 26px;
-      }
-      .cal-sun { color: #f87171; }
-      .cal-sat { color: #60a5fa; }
-      .event-chip {
-        font-size: 11px;
-        padding: 3px 6px;
-        border-radius: 4px;
-        margin-bottom: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        font-weight: 600;
-        display: block;
-      }
-      .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
-      .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
-      .chip-claim { background-color: rgba(234, 179, 8, 0.25); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
-      .chip-vacation { background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
-      .chip-etc { background-color: rgba(148, 163, 184, 0.25); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
-    """
+  cal_inner_css = """
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: transparent; color: #f8fafc; overflow: hidden; }
+    .cal-container {
+      width: 100%;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: #0b0f19;
+    }
+    .cal-header-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      background-color: #1e293b;
+      border-bottom: 1px solid #334155;
+      text-align: center;
+      font-weight: bold;
+      padding: 9px 0;
+      color: #cbd5e1;
+      font-size: 15px;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+    .cal-cell {
+      min-height: 85px;
+      max-height: 95px;
+      border-right: 1px solid #334155;
+      border-bottom: 1px solid #334155;
+      padding: 6px;
+      background-color: #0b0f19;
+      overflow-y: auto;
+    }
+    .cal-cell::-webkit-scrollbar { width: 4px; }
+    .cal-cell::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .cal-cell:nth-child(7n) {
+      border-right: none;
+    }
+    .cal-cell.other-month {
+      background-color: #07090e;
+      color: #475569;
+    }
+    .cal-day-num {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+    .cal-today {
+      background-color: #0284c7;
+      color: #ffffff;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      text-align: center;
+      line-height: 22px;
+    }
+    .cal-sun { color: #f87171; }
+    .cal-sat { color: #60a5fa; }
+    .event-chip {
+      font-size: 11px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 600;
+      display: block;
+    }
+    .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
+    .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+    .chip-claim { background-color: rgba(234, 179, 8, 0.25); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
+    .chip-vacation { background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
+    .chip-etc { background-color: rgba(148, 163, 184, 0.25); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
+  """
 
-    cal_html = [
-        '<!DOCTYPE html><html><head><meta charset="utf-8" />',
-        f"<style>{cal_inner_css}</style></head><body>",
-        '<div class="cal-container">',
-        '<div class="cal-header-row">',
-    ]
+  cal_html = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8" />',
+      f"<style>{cal_inner_css}</style></head><body>",
+      '<div class="cal-container">',
+      '<div class="cal-header-row">',
+  ]
 
-    days_labels = [
-        '<span class="cal-sun">일</span>',
-        "월",
-        "화",
-        "수",
-        "목",
-        "금",
-        '<span class="cal-sat">토</span>',
-    ]
-    for dl in days_labels:
-      cal_html.append(f"<div>{dl}</div>")
-    cal_html.append("</div>")
+  days_labels = [
+      '<span class="cal-sun">일</span>',
+      "월",
+      "화",
+      "수",
+      "목",
+      "금",
+      '<span class="cal-sat">토</span>',
+  ]
+  for dl in days_labels:
+    cal_html.append(f"<div>{dl}</div>")
+  cal_html.append("</div>")
 
-    cal_html.append('<div class="cal-grid">')
-    for week in month_cal:
-      for day_idx, day_num in enumerate(week):
-        if day_num == 0:
-          cal_html.append('<div class="cal-cell other-month"></div>')
+  cal_html.append('<div class="cal-grid">')
+  for week in month_cal:
+    for day_idx, day_num in enumerate(week):
+      if day_num == 0:
+        cal_html.append('<div class="cal-cell other-month"></div>')
+      else:
+        current_d = datetime.date(
+            st.session_state.cal_year, st.session_state.cal_month, day_num
+        )
+        date_str = current_d.strftime("%Y-%m-%d")
+
+        if current_d == today:
+          num_html = f'<div class="cal-day-num cal-today">{day_num}</div>'
+        elif day_idx == 0:
+          num_html = f'<div class="cal-day-num cal-sun">{day_num}</div>'
+        elif day_idx == 6:
+          num_html = f'<div class="cal-day-num cal-sat">{day_num}</div>'
         else:
-          current_d = datetime.date(
-              st.session_state.cal_year, st.session_state.cal_month, day_num
+          num_html = f'<div class="cal-day-num">{day_num}</div>'
+
+        chips_html = []
+        for ev in events_by_date.get(date_str, []):
+          cat_cls = category_styles.get(ev.get("category", "기타"), "chip-etc")
+          chips_html.append(
+              f'<div class="event-chip {cat_cls}" title="{ev.get("memo", "")}">'
+              f'[{ev.get("category")}] {ev.get("title")}'
+              "</div>"
           )
-          date_str = current_d.strftime("%Y-%m-%d")
 
-          if current_d == today:
-            num_html = f'<div class="cal-day-num cal-today">{day_num}</div>'
-          elif day_idx == 0:
-            num_html = f'<div class="cal-day-num cal-sun">{day_num}</div>'
-          elif day_idx == 6:
-            num_html = f'<div class="cal-day-num cal-sat">{day_num}</div>'
-          else:
-            num_html = f'<div class="cal-day-num">{day_num}</div>'
+        cal_html.append(
+            f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>'
+        )
+  cal_html.append("</div></div></body></html>")
 
-          chips_html = []
-          for ev in events_by_date.get(date_str, []):
-            cat_cls = category_styles.get(ev.get("category", "기타"), "chip-etc")
-            chips_html.append(
-                f'<div class="event-chip {cat_cls}" title="{ev.get("memo", "")}">'
-                f'[{ev.get("category")}] {ev.get("title")}'
-                "</div>"
-            )
+  num_weeks = len(month_cal)
+  calc_iframe_height = num_weeks * 95 + 50
+  components.html(
+      "".join(cal_html), height=calc_iframe_height, scrolling=False
+  )
 
-          cal_html.append(
-              f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>'
-          )
-    cal_html.append("</div></div></body></html>")
+  st.divider()
 
-    num_weeks = len(month_cal)
-    calc_iframe_height = max(620, num_weeks * 115 + 60)
-    components.html(
-        "".join(cal_html), height=calc_iframe_height, scrolling=False
-    )
+  bottom_col_left, bottom_col_right = st.columns([3.2, 6.8], gap="large")
 
-  with cal_side_col:
+  with bottom_col_left:
     st.markdown("#### ✏️ 일정 등록 / 관리")
-
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       selected_input_date = st.date_input(
           "날짜 선택",
@@ -1930,9 +1988,7 @@ elif mode == "캘린더":
         else:
           st.warning("⚠️ 일정 제목을 입력해 주세요.")
 
-    st.write("")
-    st.markdown(f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록")
-
+  with bottom_col_right:
     current_month_prefix = (
         f"{st.session_state.cal_year:04d}-{st.session_state.cal_month:02d}"
     )
@@ -1943,27 +1999,53 @@ elif mode == "캘린더":
     ]
     month_events.sort(key=lambda x: x[1]["date"])
 
-    if month_events:
-      for orig_idx, ev in month_events:
-        with st.container():
-          c_info, c_del = st.columns([8, 2])
-          with c_info:
-            st.markdown(
-                f"**📅 {ev['date']} | [{ev['category']}] {ev['title']}**\n\n"
-                f"<span style='color: #94a3b8;"
-                f" font-size: 13px;'>{ev.get('memo', '-')}</span>",
-                unsafe_allow_html=True,
-            )
-          with c_del:
-            if st.button(
-                "삭제", key=f"del_ev_{orig_idx}", use_container_width=True
-            ):
-              st.session_state.calendar_events.pop(orig_idx)
-              st.rerun()
-          st.markdown(
-              "<hr style='border: 0; border-top: 1px solid #334155; margin:"
-              " 8px 0;'>",
-              unsafe_allow_html=True,
-          )
-    else:
-      st.info("해당 월에 등록된 일정이 없습니다.")
+    st.markdown(
+        f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록"
+        f" <span style='font-size: 15px; color: #38bdf8; font-weight: normal; margin-left: 8px;'>({len(month_events)}건)</span>",
+        unsafe_allow_html=True,
+    )
+
+    with st.container(height=360):
+      if month_events:
+        grid_col1, grid_col2 = st.columns(2, gap="medium")
+        for i, (orig_idx, ev) in enumerate(month_events):
+          target_col = grid_col1 if i % 2 == 0 else grid_col2
+          with target_col:
+            c_card, c_del = st.columns([8.2, 1.8])
+            with c_card:
+              category_icon = {
+                  "MW 마감": "🟦",
+                  "쿠폰 정산": "🟩",
+                  "본사 청구": "🟨",
+                  "휴가/당직": "🟥",
+                  "기타": "⬜",
+              }.get(ev.get("category"), "📌")
+
+              memo_txt = ev.get("memo", "").strip()
+              memo_html = (
+                  f'<div class="event-card-memo">{memo_txt}</div>'
+                  if memo_txt
+                  else '<div class="event-card-memo">-</div>'
+              )
+
+              st.markdown(
+                  f"""
+                  <div class="event-card">
+                    <div class="event-card-title">
+                      {category_icon} <span>{ev['date']}</span> <span style="color:#94a3b8;">|</span> <span>[{ev['category']}] {ev['title']}</span>
+                    </div>
+                    {memo_html}
+                  </div>
+                  """,
+                  unsafe_allow_html=True,
+              )
+            with c_del:
+              st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
+              if st.button(
+                  "삭제", key=f"del_ev_{orig_idx}", use_container_width=True
+              ):
+                st.session_state.calendar_events.pop(orig_idx)
+                st.rerun()
+              st.markdown("</div>", unsafe_allow_html=True)
+      else:
+        st.info("해당 월에 등록된 일정이 없습니다.")
