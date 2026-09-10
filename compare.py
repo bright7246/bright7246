@@ -1,4 +1,6 @@
 from collections import OrderedDict, defaultdict
+import datetime
+import calendar
 import io
 import re
 import openpyxl
@@ -71,8 +73,8 @@ st.markdown(
         border-color: #0369a1 !important;
         box-shadow: 0 0 0 0.2rem rgba(14, 165, 233, 0.4) !important;
     }
-    /* Streamlit 입력 폼 라벨(텍스트) 크기를 소제목 수준(약 19px)으로 통일 */
-    div[data-baseweb="input"] label p, div[data-baseweb="textarea"] label p, div.stTextInput label p, div.stTextArea label p {
+    /* Streamlit 입력 폼 라벨 크기 통일 */
+    div[data-baseweb="input"] label p, div[data-baseweb="textarea"] label p, div.stTextInput label p, div.stTextArea label p, div.stSelectbox label p, div.stDateInput label p {
         font-size: 19px !important;
         font-weight: 700 !important;
         color: #f1f5f9 !important;
@@ -83,6 +85,63 @@ st.markdown(
         color: #f1f5f9;
         margin-bottom: 8px;
     }
+    /* 캘린더 커스텀 테이블 스타일 */
+    .cal-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        table-layout: fixed;
+    }
+    .cal-table th {
+        background-color: #1e293b;
+        color: #cbd5e1;
+        padding: 10px 4px;
+        text-align: center;
+        font-size: 16px;
+        border: 1px solid #334155;
+    }
+    .cal-table td {
+        height: 95px;
+        vertical-align: top;
+        padding: 6px 8px;
+        border: 1px solid #334155;
+        background-color: #0b0f19;
+        position: relative;
+    }
+    .cal-table td.other-month {
+        background-color: #07090e;
+        color: #475569;
+    }
+    .cal-day-num {
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 4px;
+        display: inline-block;
+    }
+    .cal-today {
+        background-color: #0284c7 !important;
+        color: #ffffff !important;
+        border-radius: 50%;
+        padding: 2px 7px;
+    }
+    .cal-sun { color: #f87171; }
+    .cal-sat { color: #60a5fa; }
+    .event-chip {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-bottom: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 600;
+        display: block;
+    }
+    .chip-mw { background-color: rgba(14, 165, 233, 0.25); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); }
+    .chip-coupon { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }
+    .chip-claim { background-color: rgba(234, 179, 8, 0.25); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4); }
+    .chip-vacation { background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
+    .chip-etc { background-color: rgba(148, 163, 184, 0.25); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -93,9 +152,7 @@ APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
-  st.write(
-      "스마트폰 카메라로 아래 QR 코드를 비추면 즉시 접속할 수 있습니다."
-  )
+  st.write("스마트폰 카메라로 아래 QR 코드를 비추면 즉시 접속할 수 있습니다.")
   qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={APP_URL}"
   col_img1, col_img2, col_img3 = st.columns([1, 2, 1])
   with col_img2:
@@ -155,17 +212,37 @@ if "reset_trigger" not in st.session_state:
 if "show_group_c" not in st.session_state:
   st.session_state.show_group_c = False
 
-nav_col1, nav_col2, nav_col3 = st.columns(3)
+# 캘린더 기본 상태 초기화
+if "cal_year" not in st.session_state:
+  st.session_state.cal_year = datetime.date.today().year
+if "cal_month" not in st.session_state:
+  st.session_state.cal_month = datetime.date.today().month
+if "cal_selected_date" not in st.session_state:
+  st.session_state.cal_selected_date = datetime.date.today()
+if "calendar_events" not in st.session_state:
+  st.session_state.calendar_events = [
+      {
+          "date": datetime.date(st.session_state.cal_year, st.session_state.cal_month, 10).strftime("%Y-%m-%d"),
+          "title": "MW 보증 청구 마감",
+          "category": "MW 마감",
+          "memo": "DMS 및 PDF 대조 완료 확인"
+      },
+      {
+          "date": datetime.date(st.session_state.cal_year, st.session_state.cal_month, 20).strftime("%Y-%m-%d"),
+          "title": "쿠폰 보증 정산",
+          "category": "쿠폰 정산",
+          "memo": "공지 파일 차액 리스트 송부"
+      }
+  ]
+
+# 4개 탭 네비게이션
+nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
 
 with nav_col1:
   btn_mw = st.button(
-      "📋 MW 보증 비교 (PDF vs 엑셀)",
+      "📋 MW 보증 비교\n(PDF vs 엑셀)",
       use_container_width=True,
-      type=(
-          "primary"
-          if st.session_state.current_mode == "MW 보증 비교"
-          else "secondary"
-      ),
+      type=("primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary"),
   )
   if btn_mw:
     if st.session_state.current_mode != "MW 보증 비교":
@@ -175,13 +252,9 @@ with nav_col1:
 
 with nav_col2:
   btn_coupon = st.button(
-      "🚗 쿠폰 보증 비교 (엑셀 vs 엑셀)",
+      "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)",
       use_container_width=True,
-      type=(
-          "primary"
-          if st.session_state.current_mode == "쿠폰 보증 비교"
-          else "secondary"
-      ),
+      type=("primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary"),
   )
   if btn_coupon:
     if st.session_state.current_mode != "쿠폰 보증 비교":
@@ -191,18 +264,25 @@ with nav_col2:
 
 with nav_col3:
   btn_labor = st.button(
-      "🔧 공임코드 비교 (중복 작업 검증)",
+      "🔧 공임코드 비교\n(중복 작업 검증)",
       use_container_width=True,
-      type=(
-          "primary"
-          if st.session_state.current_mode == "공임코드 비교"
-          else "secondary"
-      ),
+      type=("primary" if st.session_state.current_mode == "공임코드 비교" else "secondary"),
   )
   if btn_labor:
     if st.session_state.current_mode != "공임코드 비교":
       st.session_state.current_mode = "공임코드 비교"
       st.session_state.reset_trigger += 1
+      st.rerun()
+
+with nav_col4:
+  btn_cal = st.button(
+      "📅 캘린더\n(보증/업무 일정 관리)",
+      use_container_width=True,
+      type=("primary" if st.session_state.current_mode == "캘린더" else "secondary"),
+  )
+  if btn_cal:
+    if st.session_state.current_mode != "캘린더":
+      st.session_state.current_mode = "캘린더"
       st.rerun()
 
 st.divider()
@@ -1290,7 +1370,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
           " 리스트가 표시됩니다."
       )
 
-else:
+elif mode == "공임코드 비교":
   # 소제목과 버튼을 가로로 나란히 배치하기 위한 상단 레이아웃 분할
   top_col1, top_col2 = st.columns([7.5, 2.5])
   with top_col1:
@@ -1667,3 +1747,162 @@ else:
           )
         else:
           st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
+
+elif mode == "캘린더":
+  st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
+  st.write("")
+
+  # 캘린더 네비게이션 (월 이동)
+  ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.5, 4, 1.5, 3])
+  with ctrl_c1:
+    if st.button("◀ 이전 달", use_container_width=True):
+      if st.session_state.cal_month == 1:
+        st.session_state.cal_month = 12
+        st.session_state.cal_year -= 1
+      else:
+        st.session_state.cal_month -= 1
+      st.rerun()
+
+  with ctrl_c2:
+    st.markdown(
+        f"<h3 style='text-align: center; margin: 0; color: #f1f5f9;'>"
+        f"{st.session_state.cal_year}년 {st.session_state.cal_month}월"
+        f"</h3>",
+        unsafe_allow_html=True
+    )
+
+  with ctrl_c3:
+    if st.button("다음 달 ▶", use_container_width=True):
+      if st.session_state.cal_month == 12:
+        st.session_state.cal_month = 1
+        st.session_state.cal_year += 1
+      else:
+        st.session_state.cal_month += 1
+      st.rerun()
+
+  with ctrl_c4:
+    if st.button("📌 오늘 날짜로 이동", use_container_width=True):
+      st.session_state.cal_year = datetime.date.today().year
+      st.session_state.cal_month = datetime.date.today().month
+      st.session_state.cal_selected_date = datetime.date.today()
+      st.rerun()
+
+  st.write("")
+
+  # 좌측: 캘린더 화면 / 우측: 일정 등록 및 일자별 상세 내역
+  cal_main_col, cal_side_col = st.columns([6.8, 3.2], gap="large")
+
+  category_styles = {
+      "MW 마감": "chip-mw",
+      "쿠폰 정산": "chip-coupon",
+      "본사 청구": "chip-claim",
+      "휴가/당직": "chip-vacation",
+      "기타": "chip-etc"
+  }
+
+  with cal_main_col:
+    # 캘린더 HTML 테이블 생성
+    month_cal = calendar.monthcalendar(st.session_state.cal_year, st.session_state.cal_month)
+    today = datetime.date.today()
+
+    # 이벤트 매핑 (YYYY-MM-DD -> list)
+    events_by_date = defaultdict(list)
+    for ev in st.session_state.calendar_events:
+      events_by_date[ev["date"]].append(ev)
+
+    cal_html = ['<table class="cal-table">']
+    cal_html.append('<thead><tr>')
+    days_labels = ['<span class="cal-sun">일</span>', '월', '화', '수', '목', '금', '<span class="cal-sat">토</span>']
+    for dl in days_labels:
+      cal_html.append(f'<th>{dl}</th>')
+    cal_html.append('</tr></thead><tbody>')
+
+    for week in month_cal:
+      cal_html.append('<tr>')
+      for day_idx, day_num in enumerate(week):
+        if day_num == 0:
+          cal_html.append('<td class="other-month"></td>')
+        else:
+          current_d = datetime.date(st.session_state.cal_year, st.session_state.cal_month, day_num)
+          date_str = current_d.strftime("%Y-%m-%d")
+          
+          # 일자 색상 (일: 빨강, 토: 파랑, 오늘: 하이라이트)
+          day_cls = "cal-day-num"
+          if current_d == today:
+            num_html = f'<span class="cal-day-num cal-today">{day_num}</span>'
+          elif day_idx == 0:
+            num_html = f'<span class="cal-day-num cal-sun">{day_num}</span>'
+          elif day_idx == 6:
+            num_html = f'<span class="cal-day-num cal-sat">{day_num}</span>'
+          else:
+            num_html = f'<span class="cal-day-num">{day_num}</span>'
+
+          chips_html = []
+          for ev in events_by_date.get(date_str, []):
+            cat_cls = category_styles.get(ev.get("category", "기타"), "chip-etc")
+            chips_html.append(
+                f'<div class="event-chip {cat_cls}" title="{ev.get("memo", "")}">'
+                f'[{ev.get("category")}] {ev.get("title")}'
+                f'</div>'
+            )
+
+          cal_html.append(f'<td>{num_html}{"".join(chips_html)}</td>')
+      cal_html.append('</tr>')
+
+    cal_html.append('</tbody></table>')
+
+    components.html("".join(cal_html), height=640, scrolling=False)
+
+  with cal_side_col:
+    st.markdown("#### ✏️ 일정 등록 / 관리")
+    
+    with st.expander("➕ 새 일정 등록하기", expanded=True):
+      selected_input_date = st.date_input(
+          "날짜 선택",
+          value=datetime.date(st.session_state.cal_year, st.session_state.cal_month, min(datetime.date.today().day, 28)),
+          key="cal_add_date"
+      )
+      new_title = st.text_input("일정 제목", placeholder="예: 8월 쿠폰 정산 마감", key="cal_add_title")
+      new_cat = st.selectbox("업무 구분", ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"], key="cal_add_cat")
+      new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항이나 전달내용 입력", key="cal_add_memo")
+      
+      if st.button("등록하기", type="primary", use_container_width=True):
+        if new_title.strip():
+          st.session_state.calendar_events.append({
+              "date": selected_input_date.strftime("%Y-%m-%d"),
+              "title": new_title.strip(),
+              "category": new_cat,
+              "memo": new_memo.strip()
+          })
+          st.success("✅ 일정이 등록되었습니다!")
+          st.rerun()
+        else:
+          st.warning("⚠️ 일정 제목을 입력해 주세요.")
+
+    st.write("")
+    st.markdown(f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록")
+    
+    current_month_prefix = f"{st.session_state.cal_year:04d}-{st.session_state.cal_month:02d}"
+    month_events = [
+        (idx, ev) for idx, ev in enumerate(st.session_state.calendar_events)
+        if ev["date"].startswith(current_month_prefix)
+    ]
+    month_events.sort(key=lambda x: x[1]["date"])
+
+    if month_events:
+      for orig_idx, ev in month_events:
+        with st.container():
+          c_info, c_del = st.columns([8, 2])
+          with c_info:
+            st.markdown(
+                f"**📅 {ev['date']} | [{ev['category']}] {ev['title']}**\n\n"
+                f"<span style='color: #94a3b8; font-size: 13px;'>{ev.get('memo', '-')}</span>",
+                unsafe_allow_html=True
+            )
+          with c_del:
+            if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
+              st.session_state.calendar_events.pop(orig_idx)
+              st.rerun()
+          st.markdown("<hr style='border: 0; border-top: 1px solid #334155; margin: 8px 0;'>", unsafe_allow_html=True)
+    else:
+      st.info("해당 월에 등록된 일정이 없습니다.")
