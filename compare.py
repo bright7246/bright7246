@@ -137,6 +137,16 @@ st.markdown(
         border-color: #ef4444 !important;
         color: #ffffff !important;
     }
+    .single-day-checkbox {
+        display: flex;
+        align-items: center;
+        margin-top: 36px;
+    }
+    .single-day-checkbox label p {
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        color: #38bdf8 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1970,21 +1980,36 @@ elif mode == "캘린더":
     st.markdown("#### ✏️ 일정 등록 / 관리")
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       default_day = datetime.date.today()
-      date_input_result = st.date_input(
-          "날짜 선택 (단일일 또는 기간)",
-          value=(default_day, default_day),
-          key="cal_add_date",
-      )
+      
+      date_col, chk_col = st.columns([6.8, 3.2])
+      with chk_col:
+        st.markdown('<div class="single-day-checkbox">', unsafe_allow_html=True)
+        is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-      if isinstance(date_input_result, (list, tuple)):
-        if len(date_input_result) == 2:
-          start_selected, end_selected = date_input_result
-        elif len(date_input_result) == 1:
-          start_selected = end_selected = date_input_result[0]
+      with date_col:
+        if is_single_day:
+          date_input_result = st.date_input(
+              "날짜 선택",
+              value=default_day,
+              key="cal_add_date_single",
+          )
+          start_selected = end_selected = date_input_result
         else:
-          start_selected = end_selected = default_day
-      else:
-        start_selected = end_selected = date_input_result
+          date_input_result = st.date_input(
+              "날짜 선택",
+              value=(default_day, default_day),
+              key="cal_add_date_range",
+          )
+          if isinstance(date_input_result, (list, tuple)):
+            if len(date_input_result) == 2:
+              start_selected, end_selected = date_input_result
+            elif len(date_input_result) == 1:
+              start_selected = end_selected = date_input_result[0]
+            else:
+              start_selected = end_selected = default_day
+          else:
+            start_selected = end_selected = date_input_result
 
       new_title = st.text_input(
           "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title"
