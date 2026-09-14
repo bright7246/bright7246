@@ -319,7 +319,7 @@ def read_excel_smart_header(uploaded_file):
   header_row_idx = 0
   for idx, row in df_raw.iterrows():
     row_str = " ".join(row.dropna().astype(str)).upper()
-    if "CLAIM" in row_str or "차량" in row_str or "공임" in row_str or "청구번호" in row_str:
+    if "CLAIM" in row_str or "차량" in row_str or "공임" in row_str:
       header_row_idx = idx
       break
   uploaded_file.seek(0)
@@ -558,10 +558,10 @@ def load_excel_mw(uploaded_file):
           "CLAIMTYPE",
           "청구유형",
           "클레임유형",
-          "유형",
           "TYPE",
+          "유형",
       ],
-      fallback_idx=(17 if len(df.columns) > 17 else None),
+      fallback_idx=17,
   )
   col_v = find_col_smart(
       df,
@@ -569,14 +569,14 @@ def load_excel_mw(uploaded_file):
           "제목",
           "TITLE",
           "SUBJECT",
+          "내용",
           "작업내용",
           "수리내용",
-          "내용",
           "DESCRIPTION",
           "REMARK",
           "비고",
       ],
-      fallback_idx=(21 if len(df.columns) > 21 else None),
+      fallback_idx=21,
   )
 
   excel_groups = defaultdict(list)
@@ -594,11 +594,9 @@ def load_excel_mw(uploaded_file):
 
 
 def load_pdf_mw(uploaded_file):
-  uploaded_file.seek(0)
   pdf_groups = defaultdict(list)
   with pdfplumber.open(uploaded_file) as pdf:
     for page_num, page in enumerate(pdf.pages):
-      # 홀수 페이지(0-indexed 기준 짝수 인덱스 0, 2, 4...)만 처리
       if page_num % 2 != 0:
         continue
       text = page.extract_text()
@@ -612,17 +610,16 @@ def load_pdf_mw(uploaded_file):
           continue
         page_seen.add(line_stripped)
 
-        match = re.search(r"([A-Za-z0-9]+)", line_stripped)
+        match = re.search(r"([A-Z]+\d+)", line_stripped)
         if match:
+          rep_order = match.group(1)
           parts = line_stripped.split()
-          if len(parts) >= 2:
-            rep_order = parts[0].strip()
-            try:
-              total_str = parts[-1].replace(",", ".")
-              pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
-              pdf_groups[rep_order].append(pdf_total_with_vat)
-            except ValueError:
-              continue
+          try:
+            total_str = parts[-1].replace(",", ".")
+            pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
+            pdf_groups[rep_order].append(pdf_total_with_vat)
+          except ValueError:
+            continue
   return pdf_groups
 
 
@@ -1302,7 +1299,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             diff_over_100_results.append({
                 "주문번호" if is_mw else "차량번호": label_item,
                 "Claim Type": r_val,
-                "작업내용": v_val,
+                "제목": v_val,
                 "차액": f"{diff_val:,}원",
             })
 
@@ -1338,13 +1335,12 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
         dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
         dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
 
-      key_col_name = "주문번호" if is_mw else "차량번호"
       if diff_over_100_results:
         diff_list_with_total = list(diff_over_100_results)
         diff_list_with_total.append({
-            key_col_name: "★ 총합계",
+            "주문번호" if is_mw else "차량번호": "★ 총합계",
             "Claim Type": "-",
-            "작업내용": "-",
+            "제목": "-",
             "차액": f"{total_diff_100_sum:,}원",
         })
         diff_df = pd.DataFrame(diff_list_with_total)
@@ -1352,9 +1348,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       else:
         diff_df = pd.DataFrame(
             columns=[
-                key_col_name,
+                "주문번호" if is_mw else "차량번호",
                 "Claim Type",
-                "작업내용",
+                "제목",
                 "차액",
             ]
         )
@@ -1985,47 +1981,40 @@ elif mode == "캘린더":
     st.markdown("#### ✏️ 일정 등록 / 관리")
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       default_day = datetime.date.today()
-
+      
       head_date_col, chk_col = st.columns([6.5, 3.5])
       with head_date_col:
-        st.markdown(
-            "<div style='font-size: 19px; font-weight: 700; color: #f1f5f9;"
-            " margin-top: 10px;'>날짜 선택</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='font-size: 19px; font-weight: 700; color: #f1f5f9; margin-top: 10px;'>날짜 선택</div>", unsafe_allow_html=True)
       with chk_col:
-        st.markdown(
-            '<div class="single-day-checkbox" style="margin-top: 10px;">',
-            unsafe_allow_html=True,
-        )
-        is_single_day = st.checkbox(
-            "하루예약", value=False, key="cal_single_day"
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
+        is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
+        st.markdown('</div>', unsafe_allow_html=True)
 
       if is_single_day:
         start_date_val = st.date_input(
-            "선택 일자", value=default_day, key="cal_start_date_single"
+            "선택 일자",
+            value=default_day,
+            key="cal_start_date_single"
         )
         end_date_val = start_date_val
       else:
         d_col1, d_col2 = st.columns(2)
         with d_col1:
           start_date_val = st.date_input(
-              "시작일", value=default_day, key="cal_start_date_range"
+              "시작일",
+              value=default_day,
+              key="cal_start_date_range"
           )
         with d_col2:
           end_date_val = st.date_input(
               "종료일",
               value=start_date_val,
               min_value=start_date_val,
-              key="cal_end_date_range",
+              key="cal_end_date_range"
           )
 
       new_title = st.text_input(
-          "일정 제목",
-          placeholder="예: 여름 휴가 / 9월 쿠폰 정산",
-          key="cal_add_title",
+          "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title"
       )
       new_cat = st.selectbox(
           "업무 구분",
@@ -2033,10 +2022,7 @@ elif mode == "캘린더":
           key="cal_add_cat",
       )
       new_memo = st.text_area(
-          "상세 메모 (선택)",
-          height=70,
-          placeholder="특이사항 입력",
-          key="cal_add_memo",
+          "상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo"
       )
 
       if st.button("등록하기", type="primary", use_container_width=True):
@@ -2067,14 +2053,11 @@ elif mode == "캘린더":
       if ev_start <= month_end_str and ev_end >= month_start_str:
         month_events.append((idx, ev))
 
-    month_events.sort(
-        key=lambda x: x[1].get("start_date", x[1].get("date", ""))
-    )
+    month_events.sort(key=lambda x: x[1].get("start_date", x[1].get("date", "")))
 
     st.markdown(
         f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록"
-        f" <span style='font-size: 15px; color: #38bdf8; font-weight: normal;"
-        f" margin-left: 8px;'>({len(month_events)}건)</span>",
+        f" <span style='font-size: 15px; color: #38bdf8; font-weight: normal; margin-left: 8px;'>({len(month_events)}건)</span>",
         unsafe_allow_html=True,
     )
 
