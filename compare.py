@@ -1113,7 +1113,7 @@ def parse_labor_lines(text):
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
   is_mw = mode == "MW 보증 비교"
-  title_prefix = "MW" if mode == "MW 보증 비교" else "쿠폰"
+  title_prefix = "MW" if is_mw else "쿠폰"
 
   st.markdown(
       f"### 🔍 {'PDF(홀수페이지)와 엑셀' if is_mw else '공지된 쿠폰 파일과 DMS 엑셀'}의"
@@ -1183,177 +1183,205 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       if is_mw:
         excel_groups = load_excel_mw(f2)
         pdf_groups = load_pdf_mw(f1)
-      else:
-        a_groups = load_excel_coupon_a(f1)
-        b_groups = load_excel_coupon_b(f2)
+        all_keys = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
+        
+        matched_results = []
+        diff_over_100_results = []
+        total_pdf_sum = 0
+        total_excel_sum = 0
+        total_diff_100_sum = 0
 
-      matched_results = []
-      diff_over_100_results = []
+        for key_item in all_keys:
+          items_pdf = pdf_groups.get(key_item, [])
+          items_excel = excel_groups.get(key_item, [])
+          max_len = max(len(items_pdf), len(items_excel))
 
-      if is_mw:
-        all_keys = sorted(
-            list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
-        )
-      else:
-        all_keys = sorted(
-            list(set(list(a_groups.keys()) + list(b_groups.keys())))
-        )
-
-      total_1_sum = 0
-      total_2_sum = 0
-      total_diff_100_sum = 0
-
-      for key_item in all_keys:
-        if is_mw:
-          items_1 = pdf_groups.get(key_item, [])
-          items_2 = excel_groups.get(key_item, [])
-        else:
-          items_1 = a_groups.get(key_item, [])
-          items_2 = b_groups.get(key_item, [])
-
-        max_len = max(len(items_1), len(items_2))
-
-        for i in range(max_len):
-          if is_mw:
-            val_1 = items_1[i] if i < len(items_1) else None
-            e_item = items_2[i] if i < len(items_2) else None
-            val_2 = e_item["amount"] if e_item else None
+          for i in range(max_len):
+            val_pdf = items_pdf[i] if i < len(items_pdf) else None
+            e_item = items_excel[i] if i < len(items_excel) else None
+            val_excel = e_item["amount"] if e_item else None
             r_val = e_item["claim_type"] if e_item else "-"
             v_val = e_item["v_desc"] if e_item else "-"
-          else:
-            a_item = items_1[i] if i < len(items_1) else None
-            b_item = items_2[i] if i < len(items_2) else None
-            val_1 = a_item["amount"] if a_item else None
-            val_2 = b_item["amount"] if b_item else None
-            r_val = (
-                b_item["claim_type"]
-                if b_item
-                else (a_item["claim_type"] if a_item else "-")
-            )
-            v_val = (
-                b_item["v_desc"]
-                if b_item
-                else (a_item["v_desc"] if a_item else "-")
-            )
 
-          label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
+            label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
 
-          if val_1 is not None:
-            total_1_sum += val_1
-          if val_2 is not None:
-            total_2_sum += val_2
+            if val_pdf is not None:
+              total_pdf_sum += val_pdf
+            if val_excel is not None:
+              total_excel_sum += val_excel
 
-          diff_val = 0
-          if val_1 is not None and val_2 is not None:
-            diff_val = val_1 - val_2
-            row_dict = {
-                "주문번호" if is_mw else "차량번호": label_item,
-                (
-                    "PDF 금액 (실 수령액)"
-                    if is_mw
-                    else "공지된 쿠폰 금액 ( 입금 금액 )"
-                ): f"{val_1:,}원",
-                (
-                    "DMS 금액 (청구 금액)"
-                    if is_mw
-                    else "DMS 쿠폰파일 ( 청구 금액 ) "
-                ): f"{val_2:,}원",
-                "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
-            }
-          elif val_1 is not None:
-            diff_val = val_1
-            row_dict = {
-                "주문번호" if is_mw else "차량번호": label_item,
-                (
-                    "PDF 금액 (실 수령액)"
-                    if is_mw
-                    else "공지된 쿠폰 금액 ( 입금 금액 )"
-                ): f"{val_1:,}원",
-                (
-                    "DMS 금액 (청구 금액)"
-                    if is_mw
-                    else "DMS 쿠폰파일 ( 청구 금액 ) "
-                ): "-",
-                "차액": f"{diff_val:,}원",
-            }
-          elif val_2 is not None:
-            diff_val = -val_2
-            row_dict = {
-                "주문번호" if is_mw else "차량번호": label_item,
-                (
-                    "PDF 금액 (실 수령액)"
-                    if is_mw
-                    else "공지된 쿠폰 금액 ( 입금 금액 )"
-                ): "-",
-                (
-                    "DMS 금액 (청구 금액)"
-                    if is_mw
-                    else "DMS 쿠폰파일 ( 청구 금액 ) "
-                ): f"{val_2:,}원",
-                "차액": f"{diff_val:,}원",
-            }
-          matched_results.append(row_dict)
+            diff_val = 0
+            if val_pdf is not None and val_excel is not None:
+              diff_val = val_pdf - val_excel
+              row_dict = {
+                  "주문번호": label_item,
+                  "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
+                  "DMS 금액 (청구 금액)": f"{val_excel:,}원",
+                  "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
+              }
+            elif val_pdf is not None:
+              diff_val = val_pdf
+              row_dict = {
+                  "주문번호": label_item,
+                  "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
+                  "DMS 금액 (청구 금액)": "-",
+                  "차액": f"{diff_val:,}원",
+              }
+            elif val_excel is not None:
+              diff_val = -val_excel
+              row_dict = {
+                  "주문번호": label_item,
+                  "PDF 금액 (실 수령액)": "-",
+                  "DMS 금액 (청구 금액)": f"{val_excel:,}원",
+                  "차액": f"{diff_val:,}원",
+              }
+            matched_results.append(row_dict)
 
-          if abs(diff_val) >= 100:
-            total_diff_100_sum += diff_val
-            diff_over_100_results.append({
-                "주문번호" if is_mw else "차량번호": label_item,
-                "Claim Type": r_val,
-                "제목": v_val,
-                "차액": f"{diff_val:,}원",
-            })
+            if abs(diff_val) >= 100:
+              total_diff_100_sum += diff_val
+              diff_over_100_results.append({
+                  "주문번호": label_item,
+                  "Claim Type": r_val,
+                  "제목": v_val,
+                  "차액": f"{diff_val:,}원",
+              })
 
-      total_diff_sum = total_1_sum - total_2_sum
-      total_cnt = len(matched_results)
+        total_diff_sum = total_pdf_sum - total_excel_sum
+        total_cnt = len(matched_results)
 
-      matched_results.append({
-          "주문번호" if is_mw else "차량번호": "★ 총합계",
-          (
-              "PDF 금액 (실 수령액)"
-              if is_mw
-              else "공지된 쿠폰 금액 ( 입금 금액 )"
-          ): f"{total_1_sum:,}원",
-          (
-              "DMS 금액 (청구 금액)" if is_mw else "DMS 쿠폰파일 ( 청구 금액 ) "
-          ): f"{total_2_sum:,}원",
-          "차액": f"{total_diff_sum:,}원",
-      })
+        matched_results.append({
+            "주문번호": "★ 총합계",
+            "PDF 금액 (실 수령액)": f"{total_pdf_sum:,}원",
+            "DMS 금액 (청구 금액)": f"{total_excel_sum:,}원",
+            "차액": f"{total_diff_sum:,}원",
+        })
 
-      res_df = pd.DataFrame(matched_results)
-      res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
+        res_df = pd.DataFrame(matched_results)
+        res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
 
-      if is_mw:
         excel_data, month_name = create_mw_excel_report(
-            f2, total_cnt, total_1_sum, total_2_sum, total_diff_sum
+            f2, total_cnt, total_pdf_sum, total_excel_sum, total_diff_sum
         )
         dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
         dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
+
+        if diff_over_100_results:
+          diff_list_with_total = list(diff_over_100_results)
+          diff_list_with_total.append({
+              "주문번호": "★ 총합계",
+              "Claim Type": "-",
+              "제목": "-",
+              "차액": f"{total_diff_100_sum:,}원",
+          })
+          diff_df = pd.DataFrame(diff_list_with_total)
+          diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
+        else:
+          diff_df = pd.DataFrame(columns=["주문번호", "Claim Type", "제목", "차액"])
+
+        total_1_sum = total_pdf_sum
+        total_2_sum = total_excel_sum
+
       else:
+        a_groups = load_excel_coupon_a(f1)
+        b_groups = load_excel_coupon_b(f2)
+        all_keys = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
+
+        matched_results = []
+        diff_over_100_results = []
+        total_a_sum = 0
+        total_b_sum = 0
+        total_diff_100_sum = 0
+
+        for key_item in all_keys:
+          items_a = a_groups.get(key_item, [])
+          items_b = b_groups.get(key_item, [])
+          max_len = max(len(items_a), len(items_b))
+
+          for i in range(max_len):
+            a_item = items_a[i] if i < len(items_a) else None
+            b_item = items_b[i] if i < len(items_b) else None
+            val_a = a_item["amount"] if a_item else None
+            val_b = b_item["amount"] if b_item else None
+            r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
+            v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
+
+            label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
+
+            if val_a is not None:
+              total_a_sum += val_a
+            if val_b is not None:
+              total_b_sum += val_b
+
+            diff_val = 0
+            if val_a is not None and val_b is not None:
+              diff_val = val_a - val_b
+              row_dict = {
+                  "차량번호": label_item,
+                  "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
+                  "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
+                  "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
+              }
+            elif val_a is not None:
+              diff_val = val_a
+              row_dict = {
+                  "차량번호": label_item,
+                  "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
+                  "DMS 쿠폰파일 ( 청구 금액 ) ": "-",
+                  "차액": f"{diff_val:,}원",
+              }
+            elif val_b is not None:
+              diff_val = -val_b
+              row_dict = {
+                  "차량번호": label_item,
+                  "공지된 쿠폰 금액 ( 입금 금액 )": "-",
+                  "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
+                  "차액": f"{diff_val:,}원",
+              }
+            matched_results.append(row_dict)
+
+            if abs(diff_val) >= 100:
+              total_diff_100_sum += diff_val
+              diff_over_100_results.append({
+                  "차량번호": label_item,
+                  "Claim Type": r_val,
+                  "제목": v_val,
+                  "차액": f"{diff_val:,}원",
+              })
+
+        total_diff_sum = total_a_sum - total_b_sum
+        total_cnt = len(matched_results)
+
+        matched_results.append({
+            "차량번호": "★ 총합계",
+            "공지된 쿠폰 금액 ( 입금 금액 )": f"{total_a_sum:,}원",
+            "DMS 쿠폰파일 ( 청구 금액 ) ": f"{total_b_sum:,}원",
+            "차액": f"{total_diff_sum:,}원",
+        })
+
+        res_df = pd.DataFrame(matched_results)
+        res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
+
         excel_data, month_name = create_coupon_excel_report(
-            f1, f2, total_cnt, total_2_sum, total_1_sum, total_diff_sum
+            f1, f2, total_cnt, total_b_sum, total_a_sum, total_diff_sum
         )
         dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
         dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
 
-      if diff_over_100_results:
-        diff_list_with_total = list(diff_over_100_results)
-        diff_list_with_total.append({
-            "주문번호" if is_mw else "차량번호": "★ 총합계",
-            "Claim Type": "-",
-            "제목": "-",
-            "차액": f"{total_diff_100_sum:,}원",
-        })
-        diff_df = pd.DataFrame(diff_list_with_total)
-        diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-      else:
-        diff_df = pd.DataFrame(
-            columns=[
-                "주문번호" if is_mw else "차량번호",
-                "Claim Type",
-                "제목",
-                "차액",
-            ]
-        )
+        if diff_over_100_results:
+          diff_list_with_total = list(diff_over_100_results)
+          diff_list_with_total.append({
+              "차량번호": "★ 총합계",
+              "Claim Type": "-",
+              "제목": "-",
+              "차액": f"{total_diff_100_sum:,}원",
+          })
+          diff_df = pd.DataFrame(diff_list_with_total)
+          diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
+        else:
+          diff_df = pd.DataFrame(columns=["차량번호", "Claim Type", "제목", "차액"])
+
+        total_1_sum = total_a_sum
+        total_2_sum = total_b_sum
 
     with right_col:
       render_side_by_side_tables(res_df, diff_df)
