@@ -344,183 +344,269 @@ def round_half_up(value):
 
 
 # ────────────────────────────────────────────────────────
-# 📊 [컴포넌트 렌더링]
+# 📊 [테이블 렌더링 - 공통 CSS/JS & 전용 렌더링 분리]
 # ────────────────────────────────────────────────────────
-def render_side_by_side_tables(
-    df_main, df_diff=None, diff_title="🚨 차액 리스트 (100원 이상)"
-):
-  main_headers = ["No."] + list(df_main.columns)
+TABLE_COMMON_CSS = """
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
+  .flex-container { display: flex; gap: 32px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
+  .table-card { flex: 0 0 auto; max-width: 50%; }
+  .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
+  .scroll-wrap { max-height: 1120px; overflow-y: auto; overflow-x: auto; border: 1px solid #334155; border-radius: 6px; }
+  .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
+  .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  .compact-table { border-collapse: collapse; width: max-content; font-size: 15px; user-select: text; }
+  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 14px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
+  .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+  
+  .compact-table tbody td.copyable { cursor: pointer; }
+  .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
+  
+  .compact-table tbody td.state-1 { background-color: rgba(14, 165, 233, 0.45) !important; color: #ffffff !important; }
+  .compact-table tbody td.state-2 { background-color: rgba(239, 68, 68, 0.45) !important; color: #ffffff !important; }
+  
+  .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
+  .diff-red { color: #ef4444 !important; font-weight: bold; }
+  .col-no { min-width: 44px; text-align: center; font-weight: bold; }
+  .col-id { min-width: 120px; text-align: center; }
+  .col-amt { min-width: 135px; text-align: right; }
+  .col-type { min-width: 110px; text-align: center; color: #38bdf8; }
+  .col-desc { min-width: 200px; text-align: left; }
+  .col-diff { min-width: 105px; text-align: right; }
+  #toast { visibility: hidden; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #ffffff; padding: 9px 18px; border-radius: 6px; font-weight: bold; font-size: 14px; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+  #toast.show { visibility: visible; animation: fadein 0.2s, fadeout 0.3s 1.1s; }
+  @keyframes fadein { from { opacity: 0; top: 0px; } to { opacity: 1; top: 14px; } }
+  @keyframes fadeout { from { opacity: 1; top: 14px; } to { opacity: 0; top: 0px; } }
+"""
 
+TABLE_COMMON_JS = """
+  function toggleCellColor(el) {
+    const text = el.innerText.trim();
+    if (!text || text === '-') return;
+
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) { navigator.clipboard.writeText(text); }
+    document.body.removeChild(ta);
+
+    let currentState = el.getAttribute('data-click-state') || '0';
+    if (currentState === '0') {
+      el.setAttribute('data-click-state', '1');
+      el.classList.add('state-1');
+    } else if (currentState === '1') {
+      el.setAttribute('data-click-state', '2');
+      el.classList.remove('state-1');
+      el.classList.add('state-2');
+    } else {
+      el.setAttribute('data-click-state', '0');
+      el.classList.remove('state-2');
+    }
+
+    const toast = document.getElementById('toast');
+    toast.innerText = '📋 복사 완료: ' + text;
+    toast.className = 'show';
+    setTimeout(function() { toast.className = ''; }, 1400);
+  }
+"""
+
+def render_mw_side_by_side_tables(df_main, df_diff):
+  """MW 보증 비교 전용 테이블 렌더러"""
+  main_headers = ["No."] + list(df_main.columns)
   main_tbody = []
   for idx, row in df_main.iterrows():
     is_total = "총합계" in str(row.iloc[0])
     tr_class = ' class="total-row"' if is_total else ""
     main_tbody.append(f"<tr{tr_class}>")
     main_tbody.append(f'<td class="col-no">{idx}</td>')
-
     for c_idx, val in enumerate(row):
       val_str = str(val)
       if c_idx in [0, 1] and not is_total and val_str != "-":
         align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
-        main_tbody.append(
-            f'<td class="{align_class}"'
-            f' onclick="toggleCellColor(this)">{val_str}</td>'
-        )
+        main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
       else:
-        align_class = (
-            "col-id"
-            if c_idx == 0
-            else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
-        )
+        align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
         main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
     main_tbody.append("</tr>")
 
   diff_section = ""
-  if df_diff is not None:
+  if df_diff is not None and len(df_diff) > 0:
     diff_headers = ["No."] + list(df_diff.columns)
-    if len(df_diff) > 0:
-      diff_tbody = []
-      for idx, row in df_diff.iterrows():
-        is_total = "총합계" in str(row.iloc[0])
-        tr_class = ' class="total-row"' if is_total else ""
-        diff_tbody.append(f"<tr{tr_class}>")
-        diff_tbody.append(f'<td class="col-no">{idx}</td>')
+    diff_tbody = []
+    for idx, row in df_diff.iterrows():
+      is_total = "총합계" in str(row.iloc[0])
+      tr_class = ' class="total-row"' if is_total else ""
+      diff_tbody.append(f"<tr{tr_class}>")
+      diff_tbody.append(f'<td class="col-no">{idx}</td>')
 
-        if not is_total:
-          diff_tbody.append(
-              f'<td class="col-id copyable" onclick="toggleCellColor(this)">'
-              f"{row.iloc[0]}</td>"
-          )
-        else:
-          diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+      if not is_total:
+        diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+      else:
+        diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
 
-        diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-        diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-        diff_color = "" if is_total else " diff-red"
-        diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-        diff_tbody.append("</tr>")
+      diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+      diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+      diff_color = "" if is_total else " diff-red"
+      diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+      diff_tbody.append("</tr>")
 
-      diff_section = (
-          '<div class="table-card">'
-          f'<div class="card-title">{diff_title}</div>'
-          '<div class="scroll-wrap">'
-          '<table class="compact-table">'
-          "<thead><tr>"
-          f'<th class="col-no">{diff_headers[0]}</th>'
-          f'<th class="col-id">{diff_headers[1]}</th>'
-          f'<th class="col-type">{diff_headers[2]}</th>'
-          f'<th class="col-desc">{diff_headers[3]}</th>'
-          f'<th class="col-diff">{diff_headers[4]}</th>'
-          "</tr></thead>"
-          f'<tbody>{"".join(diff_tbody)}</tbody>'
-          "</table></div></div>"
-      )
-    else:
-      diff_section = (
-          '<div class="table-card">'
-          f'<div class="card-title">{diff_title}</div>'
-          '<div style="padding: 16px; color: #10b981; font-weight: bold;'
-          ' background: #0f172a; border-radius: 6px; border: 1px solid'
-          ' #334155;">'
-          "✅ 차액 100원 이상 발생 항목이 없습니다."
-          "</div></div>"
-      )
+    th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
+                       f'<th class="col-id">{diff_headers[1]}</th>',
+                       f'<th class="col-type">{diff_headers[2]}</th>',
+                       f'<th class="col-desc">{diff_headers[3]}</th>',
+                       f'<th class="col-diff">{diff_headers[4]}</th>'])
 
-  css_code = """
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
-    .flex-container { display: flex; gap: 40px; align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; }
-    .table-card { flex: 0 0 auto; }
-    .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
-    .scroll-wrap { max-height: 1120px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
-    .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
-    .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
-    .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-    .compact-table { border-collapse: collapse; width: max-content; font-size: 16px; user-select: text; }
-    .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 14px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
-    .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
-    
-    .compact-table tbody td.copyable { cursor: pointer; }
-    .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
-    
-    .compact-table tbody td.state-1 { background-color: rgba(14, 165, 233, 0.45) !important; color: #ffffff !important; }
-    .compact-table tbody td.state-2 { background-color: rgba(239, 68, 68, 0.45) !important; color: #ffffff !important; }
-    
-    .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
-    .diff-red { color: #ef4444 !important; font-weight: bold; }
-    .col-no { min-width: 48px; text-align: center; font-weight: bold; }
-    .col-id { min-width: 130px; text-align: center; }
-    .col-amt { min-width: 140px; text-align: right; }
-    .col-type { min-width: 120px; text-align: center; color: #38bdf8; }
-    .col-desc { min-width: 220px; text-align: left; }
-    .col-diff { min-width: 110px; text-align: right; }
-    #toast { visibility: hidden; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #ffffff; padding: 9px 18px; border-radius: 6px; font-weight: bold; font-size: 14px; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-    #toast.show { visibility: visible; animation: fadein 0.2s, fadeout 0.3s 1.1s; }
-    @keyframes fadein { from { opacity: 0; top: 0px; } to { opacity: 1; top: 14px; } }
-    @keyframes fadeout { from { opacity: 1; top: 14px; } to { opacity: 0; top: 0px; } }
+    diff_section = f"""
+      <div class="table-card">
+        <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        <div class="scroll-wrap">
+          <table class="compact-table">
+            <thead><tr>{th_html}</tr></thead>
+            <tbody>{"".join(diff_tbody)}</tbody>
+          </table>
+        </div>
+      </div>
+    """
+  else:
+    diff_section = """
+      <div class="table-card">
+        <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+          ✅ 차액 100원 이상 발생 항목이 없습니다.
+        </div>
+      </div>
     """
 
-  js_code = """
-    function toggleCellColor(el) {
-      const text = el.innerText.trim();
-      if (!text || text === '-') return;
+  main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
+                          f'<th class="col-id">{main_headers[1]}</th>',
+                          f'<th class="col-amt">{main_headers[2]}</th>',
+                          f'<th class="col-amt">{main_headers[3]}</th>',
+                          f'<th class="col-diff">{main_headers[4]}</th>'])
 
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); } catch(e) { navigator.clipboard.writeText(text); }
-      document.body.removeChild(ta);
+  full_html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8" />
+    <style>{TABLE_COMMON_CSS}</style></head>
+    <body>
+      <div id="toast">📋 복사 완료!</div>
+      <div class="flex-container">
+        <div class="table-card">
+          <div class="card-title">📋 상세 대조 내역</div>
+          <div class="scroll-wrap">
+            <table class="compact-table">
+              <thead><tr>{main_th_html}</tr></thead>
+              <tbody>{"".join(main_tbody)}</tbody>
+            </table>
+          </div>
+        </div>
+        {diff_section}
+      </div>
+      <script>{TABLE_COMMON_JS}</script>
+    </body></html>
+  """
 
-      let currentState = el.getAttribute('data-click-state') || '0';
-      
-      if (currentState === '0') {
-        el.setAttribute('data-click-state', '1');
-        el.classList.add('state-1');
-      } else if (currentState === '1') {
-        el.setAttribute('data-click-state', '2');
-        el.classList.remove('state-1');
-        el.classList.add('state-2');
-      } else {
-        el.setAttribute('data-click-state', '0');
-        el.classList.remove('state-2');
-      }
+  calc_height = min(1160, max(320, len(df_main) * 44 + 100))
+  components.html(full_html, height=calc_height, scrolling=False)
 
-      const toast = document.getElementById('toast');
-      toast.innerText = '📋 복사 완료: ' + text;
-      toast.className = 'show';
-      setTimeout(function() { toast.className = ''; }, 1400);
-    }
+
+def render_coupon_side_by_side_tables(df_main, df_diff):
+  """쿠폰 보증 비교 전용 테이블 렌더러"""
+  main_headers = ["No."] + list(df_main.columns)
+  main_tbody = []
+  for idx, row in df_main.iterrows():
+    is_total = "총합계" in str(row.iloc[0])
+    tr_class = ' class="total-row"' if is_total else ""
+    main_tbody.append(f"<tr{tr_class}>")
+    main_tbody.append(f'<td class="col-no">{idx}</td>')
+    for c_idx, val in enumerate(row):
+      val_str = str(val)
+      if c_idx in [0, 1] and not is_total and val_str != "-":
+        align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
+        main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
+      else:
+        align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
+        main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
+    main_tbody.append("</tr>")
+
+  diff_section = ""
+  if df_diff is not None and len(df_diff) > 0:
+    diff_headers = ["No."] + list(df_diff.columns)
+    diff_tbody = []
+    for idx, row in df_diff.iterrows():
+      is_total = "총합계" in str(row.iloc[0])
+      tr_class = ' class="total-row"' if is_total else ""
+      diff_tbody.append(f"<tr{tr_class}>")
+      diff_tbody.append(f'<td class="col-no">{idx}</td>')
+
+      if not is_total:
+        diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+      else:
+        diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+
+      diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
+      diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+      diff_color = "" if is_total else " diff-red"
+      diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
+      diff_tbody.append("</tr>")
+
+    th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
+                       f'<th class="col-id">{diff_headers[1]}</th>',
+                       f'<th class="col-type">{diff_headers[2]}</th>',
+                       f'<th class="col-desc">{diff_headers[3]}</th>',
+                       f'<th class="col-diff">{diff_headers[4]}</th>'])
+
+    diff_section = f"""
+      <div class="table-card">
+        <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        <div class="scroll-wrap">
+          <table class="compact-table">
+            <thead><tr>{th_html}</tr></thead>
+            <tbody>{"".join(diff_tbody)}</tbody>
+          </table>
+        </div>
+      </div>
+    """
+  else:
+    diff_section = """
+      <div class="table-card">
+        <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+          ✅ 차액 100원 이상 발생 항목이 없습니다.
+        </div>
+      </div>
     """
 
-  full_html = (
-      '<!DOCTYPE html><html><head><meta charset="utf-8" />'
-      f"<style>{css_code}</style></head>"
-      "<body>"
-      '<div id="toast">📋 복사 완료!</div>'
-      '<div class="flex-container">'
-      '<div class="table-card">'
-      '<div class="card-title">📋 상세 대조 내역</div>'
-      '<div class="scroll-wrap">'
-      '<table class="compact-table">'
-      "<thead><tr>"
-      f'<th class="col-no">{main_headers[0]}</th>'
-      f'<th class="col-id">{main_headers[1]}</th>'
-      f'<th class="col-amt">{main_headers[2]}</th>'
-      f'<th class="col-amt">{main_headers[3]}</th>'
-      f'<th class="col-diff">{main_headers[4]}</th>'
-      "</tr></thead>"
-      f'<tbody>{"".join(main_tbody)}</tbody>'
-      "</table></div></div>"
-      f"{diff_section}"
-      "</div>"
-      f"<script>{js_code}</script>"
-      "</body></html>"
-  )
+  main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
+                          f'<th class="col-id">{main_headers[1]}</th>',
+                          f'<th class="col-amt">{main_headers[2]}</th>',
+                          f'<th class="col-amt">{main_headers[3]}</th>',
+                          f'<th class="col-diff">{main_headers[4]}</th>'])
 
-  calc_height = min(1160, max(300, len(df_main) * 44 + 100))
+  full_html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8" />
+    <style>{TABLE_COMMON_CSS}</style></head>
+    <body>
+      <div id="toast">📋 복사 완료!</div>
+      <div class="flex-container">
+        <div class="table-card">
+          <div class="card-title">📋 상세 대조 내역</div>
+          <div class="scroll-wrap">
+            <table class="compact-table">
+              <thead><tr>{main_th_html}</tr></thead>
+              <tbody>{"".join(main_tbody)}</tbody>
+            </table>
+          </div>
+        </div>
+        {diff_section}
+      </div>
+      <script>{TABLE_COMMON_JS}</script>
+    </body></html>
+  """
+
+  calc_height = min(1160, max(320, len(df_main) * 44 + 100))
   components.html(full_html, height=calc_height, scrolling=False)
 
 
@@ -1281,6 +1367,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
         total_1_sum = total_pdf_sum
         total_2_sum = total_excel_sum
 
+        with right_col:
+          render_mw_side_by_side_tables(res_df, diff_df)
+
       else:
         a_groups = load_excel_coupon_a(f1)
         b_groups = load_excel_coupon_b(f2)
@@ -1383,8 +1472,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
         total_1_sum = total_a_sum
         total_2_sum = total_b_sum
 
-    with right_col:
-      render_side_by_side_tables(res_df, diff_df)
+        with right_col:
+          render_coupon_side_by_side_tables(res_df, diff_df)
 
     with left_col:
       st.divider()
