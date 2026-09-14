@@ -80,7 +80,7 @@ st.markdown(
         color: #f1f5f9 !important;
     }
     .custom-sub-label {
-        font-size: 19px;
+        font-size: 17px;
         font-weight: 700;
         color: #f1f5f9;
         margin-bottom: 8px;
@@ -344,21 +344,21 @@ def round_half_up(value):
 
 
 # ────────────────────────────────────────────────────────
-# 📊 [테이블 렌더링 - 공통 CSS/JS & 전용 렌더링 분리]
+# 📊 [테이블 렌더링 - 좌측 여백 축소 및 가로 확장]
 # ────────────────────────────────────────────────────────
 TABLE_COMMON_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
-  .flex-container { display: flex; gap: 32px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
-  .table-card { flex: 0 0 auto; max-width: 50%; }
+  .flex-container { display: flex; gap: 20px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
+  .table-card { flex: 0 0 auto; }
   .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
   .scroll-wrap { max-height: 1120px; overflow-y: auto; overflow-x: auto; border: 1px solid #334155; border-radius: 6px; }
   .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
   .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
   .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   .compact-table { border-collapse: collapse; width: max-content; font-size: 15px; user-select: text; }
-  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 14px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
-  .compact-table tbody td { padding: 9px 14px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 12px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
+  .compact-table tbody td { padding: 9px 12px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
   
   .compact-table tbody td.copyable { cursor: pointer; }
   .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
@@ -369,11 +369,11 @@ TABLE_COMMON_CSS = """
   .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
   .diff-red { color: #ef4444 !important; font-weight: bold; }
   .col-no { min-width: 44px; text-align: center; font-weight: bold; }
-  .col-id { min-width: 120px; text-align: center; }
-  .col-amt { min-width: 135px; text-align: right; }
-  .col-type { min-width: 110px; text-align: center; color: #38bdf8; }
-  .col-desc { min-width: 200px; text-align: left; }
-  .col-diff { min-width: 105px; text-align: right; }
+  .col-id { min-width: 110px; text-align: center; }
+  .col-amt { min-width: 130px; text-align: right; }
+  .col-type { min-width: 105px; text-align: center; color: #38bdf8; }
+  .col-desc { min-width: 190px; text-align: left; }
+  .col-diff { min-width: 100px; text-align: right; }
   #toast { visibility: hidden; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #ffffff; padding: 9px 18px; border-radius: 6px; font-weight: bold; font-size: 14px; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
   #toast.show { visibility: visible; animation: fadein 0.2s, fadeout 0.3s 1.1s; }
   @keyframes fadein { from { opacity: 0; top: 0px; } to { opacity: 1; top: 14px; } }
@@ -415,7 +415,6 @@ TABLE_COMMON_JS = """
 """
 
 def render_mw_side_by_side_tables(df_main, df_diff):
-  """MW 보증 비교 전용 테이블 렌더러"""
   main_headers = ["No."] + list(df_main.columns)
   main_tbody = []
   for idx, row in df_main.iterrows():
@@ -513,7 +512,6 @@ def render_mw_side_by_side_tables(df_main, df_diff):
 
 
 def render_coupon_side_by_side_tables(df_main, df_diff):
-  """쿠폰 보증 비교 전용 테이블 렌더러"""
   main_headers = ["No."] + list(df_main.columns)
   main_tbody = []
   for idx, row in df_main.iterrows():
@@ -1207,7 +1205,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
   )
   st.write("")
 
-  left_col, right_col = st.columns([4.2, 5.8], gap="large")
+  # 좌측 입력 영역을 3.0으로 줄이고 우측 테이블 영역을 7.0으로 확장, 간격 최소화
+  left_col, right_col = st.columns([3.0, 7.0], gap="medium")
 
   with left_col:
     if is_mw:
