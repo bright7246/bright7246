@@ -3,6 +3,7 @@ import datetime
 import calendar
 import io
 import re
+import pdfplumber
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
@@ -1981,35 +1982,36 @@ elif mode == "캘린더":
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       default_day = datetime.date.today()
       
-      date_col, chk_col = st.columns([6.8, 3.2])
+      head_date_col, chk_col = st.columns([6.5, 3.5])
+      with head_date_col:
+        st.markdown("<div style='font-size: 19px; font-weight: 700; color: #f1f5f9; margin-top: 10px;'>날짜 선택</div>", unsafe_allow_html=True)
       with chk_col:
-        st.markdown('<div class="single-day-checkbox">', unsafe_allow_html=True)
+        st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
         is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
         st.markdown('</div>', unsafe_allow_html=True)
 
-      with date_col:
-        if is_single_day:
-          date_input_result = st.date_input(
-              "날짜 선택",
+      if is_single_day:
+        start_date_val = st.date_input(
+            "선택 일자",
+            value=default_day,
+            key="cal_start_date_single"
+        )
+        end_date_val = start_date_val
+      else:
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+          start_date_val = st.date_input(
+              "시작일",
               value=default_day,
-              key="cal_add_date_single",
+              key="cal_start_date_range"
           )
-          start_selected = end_selected = date_input_result
-        else:
-          date_input_result = st.date_input(
-              "날짜 선택",
-              value=(default_day, default_day),
-              key="cal_add_date_range",
+        with d_col2:
+          end_date_val = st.date_input(
+              "종료일",
+              value=start_date_val,
+              min_value=start_date_val,
+              key="cal_end_date_range"
           )
-          if isinstance(date_input_result, (list, tuple)):
-            if len(date_input_result) == 2:
-              start_selected, end_selected = date_input_result
-            elif len(date_input_result) == 1:
-              start_selected = end_selected = date_input_result[0]
-            else:
-              start_selected = end_selected = default_day
-          else:
-            start_selected = end_selected = date_input_result
 
       new_title = st.text_input(
           "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title"
@@ -2026,8 +2028,8 @@ elif mode == "캘린더":
       if st.button("등록하기", type="primary", use_container_width=True):
         if new_title.strip():
           st.session_state.calendar_events.append({
-              "start_date": start_selected.strftime("%Y-%m-%d"),
-              "end_date": end_selected.strftime("%Y-%m-%d"),
+              "start_date": start_date_val.strftime("%Y-%m-%d"),
+              "end_date": end_date_val.strftime("%Y-%m-%d"),
               "title": new_title.strip(),
               "category": new_cat,
               "memo": new_memo.strip(),
