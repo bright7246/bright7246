@@ -179,6 +179,7 @@ st.markdown(
 
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 SW_FILE_PATH = "sw_data.json"
+CAL_FILE_PATH = "calendar_data.json"
 
 # ────────────────────────────────────────────────────────
 # 🚗 S/W 버전 파일 영구 저장 / 로드 함수
@@ -205,6 +206,28 @@ def save_sw_data(data):
 
 if "sw_history" not in st.session_state:
     st.session_state.sw_history = load_sw_data()
+
+# ────────────────────────────────────────────────────────
+# 📅 캘린더 일정 파일 영구 저장 / 로드 함수 (가짜 기본일정 삭제)
+# ────────────────────────────────────────────────────────
+def load_calendar_data():
+    if os.path.exists(CAL_FILE_PATH):
+        try:
+            with open(CAL_FILE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []  # 기본 일정 하드코딩 완전 제거 (사용자가 등록한 일정만 유지)
+
+def save_calendar_data(data):
+    try:
+        with open(CAL_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+if "calendar_events" not in st.session_state:
+    st.session_state.calendar_events = load_calendar_data()
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
@@ -402,23 +425,6 @@ if "cal_year" not in st.session_state:
     st.session_state.cal_year = today_date.year
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = today_date.month
-if "calendar_events" not in st.session_state:
-    st.session_state.calendar_events = [
-        {
-            "start_date": f"{today_date.year:04d}-{today_date.month:02d}-10",
-            "end_date": f"{today_date.year:04d}-{today_date.month:02d}-10",
-            "title": "MW 보증 청구 마감",
-            "category": "MW 마감",
-            "memo": "DMS 및 PDF 대조 완료 확인",
-        },
-        {
-            "start_date": f"{today_date.year:04d}-{today_date.month:02d}-20",
-            "end_date": f"{today_date.year:04d}-{today_date.month:02d}-20",
-            "title": "쿠폰 보증 정산",
-            "category": "쿠폰 정산",
-            "memo": "공지 파일 차액 리스트 송부",
-        },
-    ]
 
 nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
 
@@ -2148,7 +2154,8 @@ elif mode == "캘린더":
                         "category": new_cat,
                         "memo": new_memo.strip(),
                     })
-                    st.success("✅ 일정이 등록되었습니다!")
+                    save_calendar_data(st.session_state.calendar_events)
+                    st.success("✅ 일정이 영구 저장되었습니다!")
                     st.rerun()
                 else:
                     st.warning("⚠️ 일정 제목을 입력해 주세요.")
@@ -2217,6 +2224,7 @@ elif mode == "캘린더":
                             st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
                             if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
                                 st.session_state.calendar_events.pop(orig_idx)
+                                save_calendar_data(st.session_state.calendar_events)
                                 st.rerun()
                             st.markdown("</div>", unsafe_allow_html=True)
             else:
