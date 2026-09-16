@@ -178,13 +178,13 @@ st.markdown(
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
 # ────────────────────────────────────────────────────────
-# 🚗 S/W 버전 세션 상태 초기화
+# 🚗 S/W 버전 세션 상태 초기화 (메모 필드 포함)
 # ────────────────────────────────────────────────────────
 if "sw_history" not in st.session_state:
   st.session_state.sw_history = {
-      "VOLVO": [{"version": "5.2.16", "date": "2026-09-10"}],
-      "V.ELEC": [{"version": "3.0.34", "date": "2026-09-08"}],
-      "POL": [{"version": "4.2.14", "date": "2026-09-05"}],
+      "VOLVO": [{"version": "5.2.16", "date": "2026-09-10", "memo": "정기 업데이트 배포"}],
+      "V.ELEC": [{"version": "3.0.34", "date": "2026-09-08", "memo": "전기차 배터리 제어 로직 개선"}],
+      "POL": [{"version": "4.2.14", "date": "2026-09-05", "memo": "인포테인먼트 안정화 패치"}],
   }
 
 
@@ -204,13 +204,24 @@ def manage_sw_dialog(car_key):
       key=f"input_sw_ver_{car_key}",
   )
 
+  new_memo_input = st.text_area(
+      "메모 (특이사항 / 변경내역)",
+      placeholder="예: 내비게이션 오류 수정 및 배터리 로직 패치",
+      height=75,
+      key=f"input_sw_memo_{car_key}",
+  )
+
   if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
     if new_ver_input.strip():
       today_str = datetime.date.today().strftime("%Y-%m-%d")
       st.session_state.sw_history[car_key].insert(
-          0, {"version": new_ver_input.strip(), "date": today_str}
+          0, {
+              "version": new_ver_input.strip(),
+              "date": today_str,
+              "memo": new_memo_input.strip()
+          }
       )
-      st.success(f"✅ {car_key} S/W 버전이 등록되었습니다!")
+      st.success(f"✅ {car_key} S/W 버전 및 메모가 등록되었습니다!")
       st.rerun()
     else:
       st.warning("⚠️ 버전을 입력해 주세요.")
@@ -223,10 +234,12 @@ def manage_sw_dialog(car_key):
     for idx, item in enumerate(history_list):
       c_h_info, c_h_del = st.columns([8.2, 1.8])
       with c_h_info:
-        badge_text = " (최신)" if idx == 0 else ""
+        badge_text = " <span style='color:#38bdf8; font-weight:bold;'>(최신)</span>" if idx == 0 else ""
+        memo_display = f"<div style='font-size:12px; color:#cbd5e1; margin-top:4px;'>📝 {item.get('memo')}</div>" if item.get("memo") else ""
         st.markdown(
             f"**{idx + 1}. 버전: `{item['version']}`** {badge_text}  \n"
-            f"<span style='color:#94a3b8; font-size:13px;'>등록일자: {item['date']}</span>",
+            f"<span style='color:#94a3b8; font-size:12px;'>등록일자: {item['date']}</span>"
+            f"{memo_display}",
             unsafe_allow_html=True,
         )
       with c_h_del:
