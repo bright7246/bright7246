@@ -58,6 +58,28 @@ st.markdown(
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
+    /* S/W 헤더 배지 전용 버튼 스타일 */
+    div.sw-btn-wrap div.stButton > button {
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 4px 8px !important;
+        border-radius: 8px !important;
+        margin-top: 6px !important;
+        background-color: #0f172a !important;
+        border: 1px solid #334155 !important;
+        color: #f8fafc !important;
+        white-space: nowrap !important;
+    }
+    div.sw-btn-wrap div.stButton > button p {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+    }
+    div.sw-btn-wrap div.stButton > button:hover {
+        background-color: #1e293b !important;
+        border-color: #0ea5e9 !important;
+        color: #38bdf8 !important;
+    }
     button[kind="primary"], div.stDownloadButton > button {
         background-color: #0ea5e9 !important;
         border-color: #0ea5e9 !important;
@@ -155,6 +177,71 @@ st.markdown(
 
 APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
 
+# ────────────────────────────────────────────────────────
+# 🚗 S/W 버전 세션 상태 초기화
+# ────────────────────────────────────────────────────────
+if "sw_history" not in st.session_state:
+  st.session_state.sw_history = {
+      "VOLVO": [{"version": "5.2.16", "date": "2026-09-10"}],
+      "V.ELEC": [{"version": "3.0.34", "date": "2026-09-08"}],
+      "POL": [{"version": "4.2.14", "date": "2026-09-05"}],
+  }
+
+
+@st.dialog("🚗 S/W 버전 관리")
+def manage_sw_dialog(car_key):
+  st.markdown(f"### ⚙️ **{car_key}** S/W 버전 기록")
+  curr_ver = (
+      st.session_state.sw_history[car_key][0]["version"]
+      if st.session_state.sw_history[car_key]
+      else "-"
+  )
+  st.info(f"현재 등록된 최신 버전 : **{curr_ver}**")
+
+  new_ver_input = st.text_input(
+      "새 S/W 버전 입력",
+      placeholder="예: 5.2.17",
+      key=f"input_sw_ver_{car_key}",
+  )
+
+  if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
+    if new_ver_input.strip():
+      today_str = datetime.date.today().strftime("%Y-%m-%d")
+      st.session_state.sw_history[car_key].insert(
+          0, {"version": new_ver_input.strip(), "date": today_str}
+      )
+      st.success(f"✅ {car_key} S/W 버전이 등록되었습니다!")
+      st.rerun()
+    else:
+      st.warning("⚠️ 버전을 입력해 주세요.")
+
+  st.divider()
+  st.markdown("#### 📜 최근 등록 이력 (최신 5개)")
+  history_list = st.session_state.sw_history.get(car_key, [])[:5]
+
+  if history_list:
+    for idx, item in enumerate(history_list):
+      c_h_info, c_h_del = st.columns([8.2, 1.8])
+      with c_h_info:
+        badge_text = " (최신)" if idx == 0 else ""
+        st.markdown(
+            f"**{idx + 1}. 버전: `{item['version']}`** {badge_text}  \n"
+            f"<span style='color:#94a3b8; font-size:13px;'>등록일자: {item['date']}</span>",
+            unsafe_allow_html=True,
+        )
+      with c_h_del:
+        if st.button(
+            "삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True
+        ):
+          st.session_state.sw_history[car_key].pop(idx)
+          st.rerun()
+      st.markdown(
+          "<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>",
+          unsafe_allow_html=True,
+      )
+  else:
+    st.info("등록된 버전 이력이 없습니다.")
+
 
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
@@ -200,9 +287,75 @@ def share_modal():
   st.components.v1.html(copy_btn_html, height=65)
 
 
-head_col1, head_col2 = st.columns([8.5, 1.5])
+# ────────────────────────────────────────────────────────
+# 🔝 상단 헤더 (타이틀 + S/W 배지 3종 + 공유 버튼)
+# ────────────────────────────────────────────────────────
+head_col1, col_sw_lbl, col_sw_v, col_sw_ve, col_sw_p, head_col2 = st.columns(
+    [4.3, 0.6, 1.4, 1.4, 1.3, 1.0]
+)
+
 with head_col1:
   st.title("📊 아이언모터스 보증팀 지원 프로그램")
+
+with col_sw_lbl:
+  st.markdown(
+      """
+      <div style="
+          height: 38px;
+          margin-top: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #1e293b;
+          border: 1px solid #475569;
+          border-radius: 8px;
+          font-weight: 800;
+          font-size: 13px;
+          color: #38bdf8;
+      ">
+        S/W
+      </div>
+      """,
+      unsafe_allow_html=True,
+  )
+
+latest_v = (
+    st.session_state.sw_history["VOLVO"][0]["version"]
+    if st.session_state.sw_history["VOLVO"]
+    else "-"
+)
+with col_sw_v:
+  st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+  if st.button(
+      f"VOLVO  {latest_v}", use_container_width=True, key="btn_sw_volvo"
+  ):
+    manage_sw_dialog("VOLVO")
+  st.markdown("</div>", unsafe_allow_html=True)
+
+latest_ve = (
+    st.session_state.sw_history["V.ELEC"][0]["version"]
+    if st.session_state.sw_history["V.ELEC"]
+    else "-"
+)
+with col_sw_ve:
+  st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+  if st.button(
+      f"V.ELEC  {latest_ve}", use_container_width=True, key="btn_sw_velec"
+  ):
+    manage_sw_dialog("V.ELEC")
+  st.markdown("</div>", unsafe_allow_html=True)
+
+latest_p = (
+    st.session_state.sw_history["POL"][0]["version"]
+    if st.session_state.sw_history["POL"]
+    else "-"
+)
+with col_sw_p:
+  st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+  if st.button(f"POL  {latest_p}", use_container_width=True, key="btn_sw_pol"):
+    manage_sw_dialog("POL")
+  st.markdown("</div>", unsafe_allow_html=True)
+
 with head_col2:
   st.markdown('<div class="share-btn-wrap">', unsafe_allow_html=True)
   if st.button("🔗 공유 / QR", use_container_width=True):
@@ -414,6 +567,7 @@ TABLE_COMMON_JS = """
   }
 """
 
+
 def render_mw_side_by_side_tables(df_main, df_diff):
   main_headers = ["No."] + list(df_main.columns)
   main_tbody = []
@@ -426,9 +580,16 @@ def render_mw_side_by_side_tables(df_main, df_diff):
       val_str = str(val)
       if c_idx in [0, 1] and not is_total and val_str != "-":
         align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
-        main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
+        main_tbody.append(
+            f'<td class="{align_class}"'
+            f' onclick="toggleCellColor(this)">{val_str}</td>'
+        )
       else:
-        align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
+        align_class = (
+            "col-id"
+            if c_idx == 0
+            else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
+        )
         main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
     main_tbody.append("</tr>")
 
@@ -443,7 +604,10 @@ def render_mw_side_by_side_tables(df_main, df_diff):
       diff_tbody.append(f'<td class="col-no">{idx}</td>')
 
       if not is_total:
-        diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+        diff_tbody.append(
+            f'<td class="col-id copyable" onclick="toggleCellColor(this)">'
+            f"{row.iloc[0]}</td>"
+        )
       else:
         diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
 
@@ -453,11 +617,13 @@ def render_mw_side_by_side_tables(df_main, df_diff):
       diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
       diff_tbody.append("</tr>")
 
-    th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
-                       f'<th class="col-id">{diff_headers[1]}</th>',
-                       f'<th class="col-type">{diff_headers[2]}</th>',
-                       f'<th class="col-desc">{diff_headers[3]}</th>',
-                       f'<th class="col-diff">{diff_headers[4]}</th>'])
+    th_html = "".join([
+        f'<th class="col-no">{diff_headers[0]}</th>',
+        f'<th class="col-id">{diff_headers[1]}</th>',
+        f'<th class="col-type">{diff_headers[2]}</th>',
+        f'<th class="col-desc">{diff_headers[3]}</th>',
+        f'<th class="col-diff">{diff_headers[4]}</th>',
+    ])
 
     diff_section = f"""
       <div class="table-card">
@@ -480,11 +646,13 @@ def render_mw_side_by_side_tables(df_main, df_diff):
       </div>
     """
 
-  main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
-                          f'<th class="col-id">{main_headers[1]}</th>',
-                          f'<th class="col-amt">{main_headers[2]}</th>',
-                          f'<th class="col-amt">{main_headers[3]}</th>',
-                          f'<th class="col-diff">{main_headers[4]}</th>'])
+  main_th_html = "".join([
+      f'<th class="col-no">{main_headers[0]}</th>',
+      f'<th class="col-id">{main_headers[1]}</th>',
+      f'<th class="col-amt">{main_headers[2]}</th>',
+      f'<th class="col-amt">{main_headers[3]}</th>',
+      f'<th class="col-diff">{main_headers[4]}</th>',
+  ])
 
   full_html = f"""
     <!DOCTYPE html><html><head><meta charset="utf-8" />
@@ -523,9 +691,16 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
       val_str = str(val)
       if c_idx in [0, 1] and not is_total and val_str != "-":
         align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
-        main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
+        main_tbody.append(
+            f'<td class="{align_class}"'
+            f' onclick="toggleCellColor(this)">{val_str}</td>'
+        )
       else:
-        align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
+        align_class = (
+            "col-id"
+            if c_idx == 0
+            else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
+        )
         main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
     main_tbody.append("</tr>")
 
@@ -540,7 +715,10 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
       diff_tbody.append(f'<td class="col-no">{idx}</td>')
 
       if not is_total:
-        diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
+        diff_tbody.append(
+            f'<td class="col-id copyable" onclick="toggleCellColor(this)">'
+            f"{row.iloc[0]}</td>"
+        )
       else:
         diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
 
@@ -550,11 +728,13 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
       diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
       diff_tbody.append("</tr>")
 
-    th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
-                       f'<th class="col-id">{diff_headers[1]}</th>',
-                       f'<th class="col-type">{diff_headers[2]}</th>',
-                       f'<th class="col-desc">{diff_headers[3]}</th>',
-                       f'<th class="col-diff">{diff_headers[4]}</th>'])
+    th_html = "".join([
+        f'<th class="col-no">{diff_headers[0]}</th>',
+        f'<th class="col-id">{diff_headers[1]}</th>',
+        f'<th class="col-type">{diff_headers[2]}</th>',
+        f'<th class="col-desc">{diff_headers[3]}</th>',
+        f'<th class="col-diff">{diff_headers[4]}</th>',
+    ])
 
     diff_section = f"""
       <div class="table-card">
@@ -577,11 +757,13 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
       </div>
     """
 
-  main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
-                          f'<th class="col-id">{main_headers[1]}</th>',
-                          f'<th class="col-amt">{main_headers[2]}</th>',
-                          f'<th class="col-amt">{main_headers[3]}</th>',
-                          f'<th class="col-diff">{main_headers[4]}</th>'])
+  main_th_html = "".join([
+      f'<th class="col-no">{main_headers[0]}</th>',
+      f'<th class="col-id">{main_headers[1]}</th>',
+      f'<th class="col-amt">{main_headers[2]}</th>',
+      f'<th class="col-amt">{main_headers[3]}</th>',
+      f'<th class="col-diff">{main_headers[4]}</th>',
+  ])
 
   full_html = f"""
     <!DOCTYPE html><html><head><meta charset="utf-8" />
@@ -1205,7 +1387,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
   )
   st.write("")
 
-  # 좌측 입력 영역을 3.0으로 줄이고 우측 테이블 영역을 7.0으로 확장, 간격 최소화
+  # 좌측 입력 영역 비율을 3.0으로 줄이고, 우측 테이블 영역을 7.0으로 넓혀 좌측으로 밀착
   left_col, right_col = st.columns([3.0, 7.0], gap="medium")
 
   with left_col:
@@ -1268,8 +1450,10 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       if is_mw:
         excel_groups = load_excel_mw(f2)
         pdf_groups = load_pdf_mw(f1)
-        all_keys = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
-        
+        all_keys = sorted(
+            list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
+        )
+
         matched_results = []
         diff_over_100_results = []
         total_pdf_sum = 0
@@ -1361,7 +1545,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
           diff_df = pd.DataFrame(diff_list_with_total)
           diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
         else:
-          diff_df = pd.DataFrame(columns=["주문번호", "Claim Type", "제목", "차액"])
+          diff_df = pd.DataFrame(
+              columns=["주문번호", "Claim Type", "제목", "차액"]
+          )
 
         total_1_sum = total_pdf_sum
         total_2_sum = total_excel_sum
@@ -1372,7 +1558,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
       else:
         a_groups = load_excel_coupon_a(f1)
         b_groups = load_excel_coupon_b(f2)
-        all_keys = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
+        all_keys = sorted(
+            list(set(list(a_groups.keys()) + list(b_groups.keys())))
+        )
 
         matched_results = []
         diff_over_100_results = []
@@ -1390,8 +1578,16 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             b_item = items_b[i] if i < len(items_b) else None
             val_a = a_item["amount"] if a_item else None
             val_b = b_item["amount"] if b_item else None
-            r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
-            v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
+            r_val = (
+                b_item["claim_type"]
+                if b_item
+                else (a_item["claim_type"] if a_item else "-")
+            )
+            v_val = (
+                b_item["v_desc"]
+                if b_item
+                else (a_item["v_desc"] if a_item else "-")
+            )
 
             label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
 
@@ -1466,7 +1662,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
           diff_df = pd.DataFrame(diff_list_with_total)
           diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
         else:
-          diff_df = pd.DataFrame(columns=["차량번호", "Claim Type", "제목", "차액"])
+          diff_df = pd.DataFrame(
+              columns=["차량번호", "Claim Type", "제목", "차액"]
+          )
 
         total_1_sum = total_a_sum
         total_2_sum = total_b_sum
@@ -2097,40 +2295,47 @@ elif mode == "캘린더":
     st.markdown("#### ✏️ 일정 등록 / 관리")
     with st.expander("➕ 새 일정 등록하기", expanded=True):
       default_day = datetime.date.today()
-      
+
       head_date_col, chk_col = st.columns([6.5, 3.5])
       with head_date_col:
-        st.markdown("<div style='font-size: 19px; font-weight: 700; color: #f1f5f9; margin-top: 10px;'>날짜 선택</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='font-size: 19px; font-weight: 700; color: #f1f5f9;"
+            " margin-top: 10px;'>날짜 선택</div>",
+            unsafe_allow_html=True,
+        )
       with chk_col:
-        st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
-        is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="single-day-checkbox" style="margin-top: 10px;">',
+            unsafe_allow_html=True,
+        )
+        is_single_day = st.checkbox(
+            "하루예약", value=False, key="cal_single_day"
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
       if is_single_day:
         start_date_val = st.date_input(
-            "선택 일자",
-            value=default_day,
-            key="cal_start_date_single"
+            "선택 일자", value=default_day, key="cal_start_date_single"
         )
         end_date_val = start_date_val
       else:
         d_col1, d_col2 = st.columns(2)
         with d_col1:
           start_date_val = st.date_input(
-              "시작일",
-              value=default_day,
-              key="cal_start_date_range"
+              "시작일", value=default_day, key="cal_start_date_range"
           )
         with d_col2:
           end_date_val = st.date_input(
               "종료일",
               value=start_date_val,
               min_value=start_date_val,
-              key="cal_end_date_range"
+              key="cal_end_date_range",
           )
 
       new_title = st.text_input(
-          "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title"
+          "일정 제목",
+          placeholder="예: 여름 휴가 / 9월 쿠폰 정산",
+          key="cal_add_title",
       )
       new_cat = st.selectbox(
           "업무 구분",
@@ -2138,7 +2343,10 @@ elif mode == "캘린더":
           key="cal_add_cat",
       )
       new_memo = st.text_area(
-          "상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo"
+          "상세 메모 (선택)",
+          height=70,
+          placeholder="특이사항 입력",
+          key="cal_add_memo",
       )
 
       if st.button("등록하기", type="primary", use_container_width=True):
@@ -2169,7 +2377,9 @@ elif mode == "캘린더":
       if ev_start <= month_end_str and ev_end >= month_start_str:
         month_events.append((idx, ev))
 
-    month_events.sort(key=lambda x: x[1].get("start_date", x[1].get("date", "")))
+    month_events.sort(
+        key=lambda x: x[1].get("start_date", x[1].get("date", ""))
+    )
 
     st.markdown(
         f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록"
