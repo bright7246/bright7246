@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import base64
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
@@ -13,8 +14,26 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 볼보 로고 이미지 주소 (GitHub Raw URL 및 로컬 백업)
-LOGO_URL = "https://raw.githubusercontent.com/bright7246/cg4cltxcy2z2ksgwbsod2p/main/logo.png"
+# ────────────────────────────────────────────────────────
+# 🚗 볼보 공식 로고 이미지 (로컬 파일 확인 후 내장 Base64 자동 로드)
+# ────────────────────────────────────────────────────────
+def get_brand_logo():
+    if os.path.exists("logo.png"):
+        try:
+            with open("logo.png", "rb") as img_f:
+                return f"data:image/png;base64,{base64.b64encode(img_f.read()).decode('utf-8')}"
+        except Exception:
+            pass
+    # 웹 로고 백업 (SVG 벡터 로고 - 외부 파일 없이도 100% 고화질 표시)
+    svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#111111" stroke-width="8"/>
+      <path d="M 68 32 L 88 12 M 72 12 L 88 12 L 88 28" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="square" stroke-linejoin="miter"/>
+      <rect x="18" y="42" width="64" height="16" fill="#ffffff"/>
+      <text x="50" y="55" font-family="'Arial Black', sans-serif" font-weight="900" font-size="14" fill="#111111" text-anchor="middle" letter-spacing="2">VOLVO</text>
+    </svg>"""
+    return f"data:image/svg+xml;utf8,{svg_icon}"
+
+LOGO_DATA_URI = get_brand_logo()
 
 st.set_page_config(
     page_title="IRON WARRANTY",
@@ -23,15 +42,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 카카오톡 링크 공유(OG Tag) 썸네일 지정
 st.markdown(
     f"""
     <head>
       <meta property="og:title" content="IRON WARRANTY">
       <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
-      <meta property="og:image" content="{LOGO_URL}">
-      <meta property="og:image:width" content="600">
-      <meta property="og:image:height" content="600">
+      <meta property="og:image" content="https://dummyimage.com/1200x630/0ea5e9/ffffff.png&text=IRON+WARRANTY">
       <meta property="og:type" content="website">
       <meta name="google" content="notranslate">
     </head>
@@ -179,15 +195,16 @@ st.markdown(
     .brand-title-wrap {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
     }
     .brand-logo-img {
-        width: 44px;
-        height: 44px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%;
         background-color: #ffffff;
-        padding: 2px;
-        object-fit: contain;
+        padding: 3px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        flex-shrink: 0;
     }
     </style>
     """,
@@ -367,7 +384,7 @@ with head_col1:
     st.markdown(
         f"""
         <div class="brand-title-wrap">
-          <img src="{LOGO_URL}" class="brand-logo-img" alt="VOLVO" onerror="this.style.display='none'" />
+          <img src="{LOGO_DATA_URI}" class="brand-logo-img" alt="VOLVO" />
           <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">아이언모터스 보증팀 지원 프로그램</h1>
         </div>
         """,
