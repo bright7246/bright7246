@@ -13,6 +13,9 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+# 볼보 로고 이미지 주소 (GitHub Raw URL 및 로컬 백업)
+LOGO_URL = "https://raw.githubusercontent.com/bright7246/cg4cltxcy2z2ksgwbsod2p/main/logo.png"
+
 st.set_page_config(
     page_title="IRON WARRANTY",
     page_icon="🚗",
@@ -20,14 +23,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# 카카오톡 링크 공유(OG Tag) 썸네일 지정
 st.markdown(
-    """
+    f"""
     <head>
       <meta property="og:title" content="IRON WARRANTY">
       <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
-      <meta property="og:image" content="https://dummyimage.com/1200x630/0ea5e9/ffffff.png&text=IRON+WARRANTY">
-      <meta property="og:image:width" content="1200">
-      <meta property="og:image:height" content="630">
+      <meta property="og:image" content="{LOGO_URL}">
+      <meta property="og:image:width" content="600">
+      <meta property="og:image:height" content="600">
       <meta property="og:type" content="website">
       <meta name="google" content="notranslate">
     </head>
@@ -172,6 +176,19 @@ st.markdown(
         font-weight: 600 !important;
         color: #38bdf8 !important;
     }
+    .brand-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .brand-logo-img {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background-color: #ffffff;
+        padding: 2px;
+        object-fit: contain;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -208,7 +225,7 @@ if "sw_history" not in st.session_state:
     st.session_state.sw_history = load_sw_data()
 
 # ────────────────────────────────────────────────────────
-# 📅 캘린더 일정 파일 영구 저장 / 로드 함수 (가짜 기본일정 삭제)
+# 📅 캘린더 일정 파일 영구 저장 / 로드 함수
 # ────────────────────────────────────────────────────────
 def load_calendar_data():
     if os.path.exists(CAL_FILE_PATH):
@@ -217,7 +234,7 @@ def load_calendar_data():
                 return json.load(f)
         except Exception:
             pass
-    return []  # 기본 일정 하드코딩 완전 제거 (사용자가 등록한 일정만 유지)
+    return []
 
 def save_calendar_data(data):
     try:
@@ -340,14 +357,22 @@ def share_modal():
     st.components.v1.html(copy_btn_html, height=65)
 
 # ────────────────────────────────────────────────────────
-# 🔝 상단 헤더
+# 🔝 상단 헤더 (볼보 로고 + 타이틀 + S/W 배지 + 공유 버튼)
 # ────────────────────────────────────────────────────────
 head_col1, col_sw_lbl, col_sw_v, col_sw_ve, col_sw_p, head_col2 = st.columns(
     [4.3, 0.6, 1.4, 1.4, 1.3, 1.0]
 )
 
 with head_col1:
-    st.title("📊 아이언모터스 보증팀 지원 프로그램")
+    st.markdown(
+        f"""
+        <div class="brand-title-wrap">
+          <img src="{LOGO_URL}" class="brand-logo-img" alt="VOLVO" onerror="this.style.display='none'" />
+          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">아이언모터스 보증팀 지원 프로그램</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with col_sw_lbl:
     st.markdown(
