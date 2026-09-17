@@ -6,6 +6,7 @@ import json
 import os
 import re
 import base64
+import requests
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
@@ -15,7 +16,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # ────────────────────────────────────────────────────────
-# 🚗 볼보 공식 로고 이미지 (로컬 파일 확인 후 내장 Base64 자동 로드)
+# 🚗 볼보 공식 로고 이미지
 # ────────────────────────────────────────────────────────
 def get_brand_logo():
     if os.path.exists("logo.png"):
@@ -209,65 +210,101 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 🌐 변경된 최신 주소 적용
 APP_URL = "https://iron-warranty-app.streamlit.app"
-SW_FILE_PATH = "sw_data.json"
-CAL_FILE_PATH = "calendar_data.json"
 
 # ────────────────────────────────────────────────────────
-# 🚗 S/W 버전 파일 영구 저장 / 로드 함수
+# ☁️ GitHub 영구 저장소 연동 모듈 (Secrets 기반)
 # ────────────────────────────────────────────────────────
-def load_sw_data():
-    if os.path.exists(SW_FILE_PATH):
+def get_github_auth():
+    token = st.secrets.get("GITHUB_TOKEN", None)
+    repo = st.secrets.get("GITHUB_REPO", None)
+    if token and repo:
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        return repo, headers
+    return None, None
+
+def github_load_file(filename, default_data):
+    repo, headers = get_github_auth()
+    if repo and headers:
+        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
         try:
-            with open(SW_FILE_PATH, "r", encoding="utf-8") as f:
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                content_b64 = res.json().get("content", "")
+                decoded = base64.b64decode(content_b64).decode("utf-8")
+                return json.loads(decoded)
+        except Exception:
+            pass
+            
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    return {
-        "VOLVO": [{"version": "5.2.16", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
-        "V.ELEC": [{"version": "3.0.34", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
-        "POL": [{"version": "4.2.14", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
-    }
+    return default_data
 
-def save_sw_data(data):
+def github_save_file(filename, data):
+    repo, headers = get_github_auth()
+    content_str = json.dumps(data, ensure_ascii=False, indent=2)
+    
+    # 1. 로컬 파일에도 즉시 저장
     try:
-        with open(SW_FILE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content_str)
     except Exception:
         pass
+        
+    # 2. GitHub 저장소에 원격 자동 커밋 (영구 보존)
+    if repo and headers:
+        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        try:
+            sha = None
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                sha = res.json().get("sha")
+                
+            payload = {
+                "message": f"Update {filename} via App",
+                "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
+            }
+            if sha:
+                payload["sha"] = sha
+            requests.put(url, headers=headers, json=payload, timeout=5)
+        except Exception:
+            pass
+
+DEFAULT_SW_DATA = {
+    "VOLVO": [{"version": "5.2.16", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+    "V.ELEC": [{"version": "3.0.34", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+    "POL": [{"version": "4.2.14", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+}
+
+DEFAULT_CALENDAR_DATA = [
+    {
+        "start_date": f"{datetime.date.today().year:04d}-{datetime.date.today().month:02d}-10",
+        "end_date": f"{datetime.date.today().year:04d}-{datetime.date.today().month:02d}-10",
+        "title": "MW 보증 청구 마감",
+        "category": "MW 마감",
+        "memo": "DMS 및 PDF 대조 완료 확인",
+    }
+]
 
 if "sw_history" not in st.session_state:
-    st.session_state.sw_history = load_sw_data()
-
-# ────────────────────────────────────────────────────────
-# 📅 캘린더 일정 파일 영구 저장 / 로드 함수
-# ────────────────────────────────────────────────────────
-def load_calendar_data():
-    if os.path.exists(CAL_FILE_PATH):
-        try:
-            with open(CAL_FILE_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return []
-
-def save_calendar_data(data):
-    try:
-        with open(CAL_FILE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    st.session_state.sw_history = github_load_file("sw_data.json", DEFAULT_SW_DATA)
 
 if "calendar_events" not in st.session_state:
-    st.session_state.calendar_events = load_calendar_data()
+    st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
     st.markdown(f"### ⚙️ **{car_key}** S/W 버전 기록")
     curr_ver = (
         st.session_state.sw_history[car_key][0]["version"]
-        if st.session_state.sw_history[car_key]
+        if st.session_state.sw_history.get(car_key)
         else "-"
     )
     st.info(f"현재 등록된 최신 버전 : **{curr_ver}**")
@@ -288,6 +325,8 @@ def manage_sw_dialog(car_key):
     if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
         if new_ver_input.strip():
             today_str = datetime.date.today().strftime("%Y-%m-%d")
+            if car_key not in st.session_state.sw_history:
+                st.session_state.sw_history[car_key] = []
             st.session_state.sw_history[car_key].insert(
                 0, {
                     "version": new_ver_input.strip(),
@@ -295,7 +334,7 @@ def manage_sw_dialog(car_key):
                     "memo": new_memo_input.strip()
                 }
             )
-            save_sw_data(st.session_state.sw_history)
+            github_save_file("sw_data.json", st.session_state.sw_history)
             st.success(f"✅ {car_key} S/W 버전이 영구 저장되었습니다!")
             st.rerun()
         else:
@@ -320,7 +359,7 @@ def manage_sw_dialog(car_key):
             with c_h_del:
                 if st.button("삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True):
                     st.session_state.sw_history[car_key].pop(idx)
-                    save_sw_data(st.session_state.sw_history)
+                    github_save_file("sw_data.json", st.session_state.sw_history)
                     st.rerun()
             st.markdown(
                 "<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>",
@@ -414,7 +453,7 @@ with col_sw_lbl:
 
 latest_v = (
     st.session_state.sw_history["VOLVO"][0]["version"]
-    if st.session_state.sw_history["VOLVO"]
+    if st.session_state.sw_history.get("VOLVO")
     else "-"
 )
 with col_sw_v:
@@ -425,7 +464,7 @@ with col_sw_v:
 
 latest_ve = (
     st.session_state.sw_history["V.ELEC"][0]["version"]
-    if st.session_state.sw_history["V.ELEC"]
+    if st.session_state.sw_history.get("V.ELEC")
     else "-"
 )
 with col_sw_ve:
@@ -436,7 +475,7 @@ with col_sw_ve:
 
 latest_p = (
     st.session_state.sw_history["POL"][0]["version"]
-    if st.session_state.sw_history["POL"]
+    if st.session_state.sw_history.get("POL")
     else "-"
 )
 with col_sw_p:
@@ -2195,7 +2234,7 @@ elif mode == "캘린더":
                         "category": new_cat,
                         "memo": new_memo.strip(),
                     })
-                    save_calendar_data(st.session_state.calendar_events)
+                    github_save_file("calendar_data.json", st.session_state.calendar_events)
                     st.success("✅ 일정이 영구 저장되었습니다!")
                     st.rerun()
                 else:
@@ -2265,7 +2304,7 @@ elif mode == "캘린더":
                             st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
                             if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
                                 st.session_state.calendar_events.pop(orig_idx)
-                                save_calendar_data(st.session_state.calendar_events)
+                                github_save_file("calendar_data.json", st.session_state.calendar_events)
                                 st.rerun()
                             st.markdown("</div>", unsafe_allow_html=True)
             else:
