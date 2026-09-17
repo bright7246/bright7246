@@ -24,7 +24,6 @@ def get_brand_logo():
                 return f"data:image/png;base64,{base64.b64encode(img_f.read()).decode('utf-8')}"
         except Exception:
             pass
-    # 웹 로고 백업 (SVG 벡터 로고 - 외부 파일 없이도 100% 고화질 표시)
     svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="38" fill="none" stroke="#111111" stroke-width="8"/>
       <path d="M 68 32 L 88 12 M 72 12 L 88 12 L 88 28" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="square" stroke-linejoin="miter"/>
@@ -43,7 +42,7 @@ st.set_page_config(
 )
 
 st.markdown(
-    f"""
+    """
     <head>
       <meta property="og:title" content="IRON WARRANTY">
       <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
@@ -80,7 +79,6 @@ st.markdown(
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
-    /* S/W 헤더 배지 전용 버튼 스타일 */
     div.sw-btn-wrap div.stButton > button {
         height: 38px !important;
         min-height: 38px !important;
@@ -211,7 +209,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
+# 🌐 변경된 최신 주소 적용
+APP_URL = "https://iron-warranty-app.streamlit.app"
 SW_FILE_PATH = "sw_data.json"
 CAL_FILE_PATH = "calendar_data.json"
 
