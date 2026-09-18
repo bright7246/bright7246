@@ -236,7 +236,6 @@ st.markdown(
         line-height: 1.15;
         white-space: nowrap;
     }
-    /* 주기표 입력창 세로 높이 축소 */
     div.sch-grid-wrap div[data-baseweb="input"] {
         height: 34px !important;
         min-height: 34px !important;
@@ -248,7 +247,6 @@ st.markdown(
         font-weight: 600 !important;
         text-align: center !important;
     }
-    /* 슬림 저장 버튼 스타일 */
     div.sch-save-wrap div.stButton > button {
         height: 40px !important;
         min-height: 40px !important;
@@ -346,23 +344,23 @@ DEFAULT_CALENDAR_DATA = [
 ]
 
 # ────────────────────────────────────────────────────────
-# 📋 4번째 탭 : 볼보 정기점검 기본 데이터
+# 📋 4번째 탭 : 볼보 정기점검 빈 데이터 (모든 셀 완전 빈칸 초기화)
 # ────────────────────────────────────────────────────────
-DEFAULT_SCHEDULE_DATA = {
+EMPTY_SCHEDULE_DATA = {
     "rows": [
-        {"item": "점검(17301)/(17300)", "vals": ["ICE", "ICE/BEV", "ICE", "ICE/BEV", "ICE", "ICE/BEV"]},
-        {"item": "마모점검(17302)", "vals": ["ICE(25년~)", "ICE(ALL)", "ICE(25년~)", "ICE(ALL)", "ICE(25년~)", "ICE(ALL)"]},
-        {"item": "변속기점검(17303)", "vals": ["", "", "", "ICE", "", ""]},
-        {"item": "엔진오일(17301)", "vals": ["ICE", "ICE", "ICE", "ICE", "ICE", "ICE"]},
-        {"item": "에어컨필터(17432)", "vals": ["ICE", "ICE/BEV", "ICE", "ICE/BEV", "ICE", "ICE/BEV"]},
-        {"item": "에어크리너(17435)", "vals": ["", "", "", "ICE", "", ""]},
-        {"item": "스파크 플러그(17424)", "vals": ["", "", "", "ICE", "", ""]},
-        {"item": "전면유리 크리닝(17481)", "vals": ["", "ICE/BEV (EX30 제외)", "", "", "", ""]},
-        {"item": "감속기오일", "vals": ["", "", "", "EX30", "", ""]},
-        {"item": "브레이크 오일 (17406)", "vals": ["", "", "", "ICE", "", ""]},
+        {"item": "점검(17301)/(17300)", "vals": ["", "", "", "", "", ""]},
+        {"item": "마모점검(17302)", "vals": ["", "", "", "", "", ""]},
+        {"item": "변속기점검(17303)", "vals": ["", "", "", "", "", ""]},
+        {"item": "엔진오일(17301)", "vals": ["", "", "", "", "", ""]},
+        {"item": "에어컨필터(17432)", "vals": ["", "", "", "", "", ""]},
+        {"item": "에어크리너(17435)", "vals": ["", "", "", "", "", ""]},
+        {"item": "스파크 플러그(17424)", "vals": ["", "", "", "", "", ""]},
+        {"item": "전면유리 크리닝(17481)", "vals": ["", "", "", "", "", ""]},
+        {"item": "감속기오일", "vals": ["", "", "", "", "", ""]},
+        {"item": "브레이크 오일 (17406)", "vals": ["", "", "", "", "", ""]},
     ],
-    "wiper_row1": ["", "ICE", "", "ICE", "", ""],
-    "sealant_row": ["", "", "", "", "BEV(23년식만)(폴딩박스 가능)", ""],
+    "wiper_row1": ["", "", "", "", "", ""],
+    "sealant_row": ["", "", "", "", "", ""],
     "wiper_notice": "※ 볼보 전기차 와이퍼 블레이드 : 22년식 정기점검 때만/23년식 1년에 1회만 가능 (5회) / 24년식 5년 10만km까지 5회 가능 / 25년식 이후 5년에 10만km까지 3회 가능\n( EC40, EX30 : 전면 와이퍼만 가능 / EX40 (XC40) : 전면,후면 와이퍼 블레이드 가능)"
 }
 
@@ -373,7 +371,7 @@ if "calendar_events" not in st.session_state:
     st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
 
 if "schedule_data" not in st.session_state:
-    st.session_state.schedule_data = github_load_file("service_schedule_data.json", DEFAULT_SCHEDULE_DATA)
+    st.session_state.schedule_data = github_load_file("service_schedule_data.json", EMPTY_SCHEDULE_DATA)
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
@@ -2132,15 +2130,15 @@ elif mode == "정기점검 주기표":
     with sch_top_col1:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
     with sch_top_col2:
-        if st.button("🔄 기본값 초기화", use_container_width=True):
-            st.session_state.schedule_data = DEFAULT_SCHEDULE_DATA
+        if st.button("🗑️ 전체 내용 비우기", use_container_width=True):
+            st.session_state.schedule_data = EMPTY_SCHEDULE_DATA
             github_save_file("service_schedule_data.json", st.session_state.schedule_data)
-            st.success("기본 양식으로 복구되었습니다.")
+            st.success("모든 내용이 깨끗하게 비워졌습니다.")
             st.rerun()
     with sch_top_col3:
         btn_save_top = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
 
-    # 1. 상단 VOLVO 배지와 우측 범례(ICE=내연, BEV=전기차)
+    # 1. 상단 VOLVO 배지와 우측 범례
     volvo_head_c1, volvo_head_c2 = st.columns([1.1, 7.2])
     with volvo_head_c1:
         st.markdown(
@@ -2178,7 +2176,7 @@ elif mode == "정기점검 주기표":
             unsafe_allow_html=True,
         )
 
-    # 2. 고정 테이블 헤더 행 (첫 열 비율 1.8 -> 1.1로 대폭 축소)
+    # 2. 고정 테이블 헤더 행 (첫 열 비율 1.1)
     h_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
     columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
     for idx, h_name in enumerate(columns_header):
@@ -2190,12 +2188,11 @@ elif mode == "정기점검 주기표":
     # 3. 데이터 입력/수정 폼
     with st.form("schedule_form"):
         sch_data = st.session_state.schedule_data
-        rows = sch_data.get("rows", DEFAULT_SCHEDULE_DATA["rows"])
+        rows = sch_data.get("rows", EMPTY_SCHEDULE_DATA["rows"])
         
         updated_rows = []
         st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
         for r_idx, row in enumerate(rows):
-            # 첫 번째 컬럼 너비를 1.1로 축소하여 파란 네모에 맞춤
             col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
             with col_cells[0]:
                 st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
@@ -2213,26 +2210,26 @@ elif mode == "정기점검 주기표":
                     new_row_vals.append(val_input)
             updated_rows.append({"item": row["item"], "vals": new_row_vals})
 
-        # 와이퍼 행 (첫 열 너비 1.1로 축소)
+        # 와이퍼 행 (6칸 분할)
         w_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with w_cols[0]:
             st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
         
         updated_wiper_r1 = []
-        wiper_r1_src = sch_data.get("wiper_row1", DEFAULT_SCHEDULE_DATA["wiper_row1"])
+        wiper_r1_src = sch_data.get("wiper_row1", EMPTY_SCHEDULE_DATA["wiper_row1"])
         for c_idx in range(6):
             with w_cols[c_idx + 1]:
                 val = wiper_r1_src[c_idx] if c_idx < len(wiper_r1_src) else ""
                 w_val = st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
                 updated_wiper_r1.append(w_val)
 
-        # 실런트 행 (첫 열 너비 1.1로 축소)
+        # 실런트 행 (6칸 분할)
         s_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with s_cols[0]:
             st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
         
         updated_sealant_row = []
-        sealant_src = sch_data.get("sealant_row", DEFAULT_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "BEV(23년식만)(폴딩박스 가능)", ""]))
+        sealant_src = sch_data.get("sealant_row", EMPTY_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "", ""]))
         for c_idx in range(6):
             with s_cols[c_idx + 1]:
                 val = sealant_src[c_idx] if c_idx < len(sealant_src) else ""
@@ -2245,7 +2242,7 @@ elif mode == "정기점검 주기표":
         st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
         updated_wiper_notice = st.text_area(
             "와이퍼 통합 안내문구",
-            value=sch_data.get("wiper_notice", DEFAULT_SCHEDULE_DATA["wiper_notice"]),
+            value=sch_data.get("wiper_notice", EMPTY_SCHEDULE_DATA["wiper_notice"]),
             height=65,
             key="sch_wiper_notice",
             label_visibility="collapsed"
