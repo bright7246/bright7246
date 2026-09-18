@@ -247,16 +247,6 @@ st.markdown(
         font-weight: 600 !important;
         text-align: center !important;
     }
-    div.sch-save-wrap div.stButton > button {
-        height: 40px !important;
-        min-height: 40px !important;
-        border-radius: 6px !important;
-        padding: 0 24px !important;
-    }
-    div.sch-save-wrap div.stButton > button p {
-        font-size: 14px !important;
-        font-weight: 700 !important;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -2126,6 +2116,12 @@ elif mode == "공임코드 비교":
 # 4️⃣ [모드 4] 정기점검 주기표 (VOLVO)
 # ────────────────────────────────────────────────────────
 elif mode == "정기점검 주기표":
+    sch_data = st.session_state.schedule_data
+    rows_data = sch_data.get("rows", EMPTY_SCHEDULE_DATA["rows"])
+    wiper_data = sch_data.get("wiper_row1", EMPTY_SCHEDULE_DATA["wiper_row1"])
+    sealant_data = sch_data.get("sealant_row", EMPTY_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "", ""]))
+    wiper_notice_data = sch_data.get("wiper_notice", EMPTY_SCHEDULE_DATA["wiper_notice"])
+
     sch_top_col1, sch_top_col2, sch_top_col3 = st.columns([7.0, 1.5, 1.5])
     with sch_top_col1:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
@@ -2133,10 +2129,49 @@ elif mode == "정기점검 주기표":
         if st.button("🗑️ 전체 내용 비우기", use_container_width=True):
             st.session_state.schedule_data = EMPTY_SCHEDULE_DATA
             github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            for r_idx in range(len(rows_data)):
+                for c_idx in range(6):
+                    st.session_state[f"sch_cell_{r_idx}_{c_idx}"] = ""
+            for c_idx in range(6):
+                st.session_state[f"sch_wiper_{c_idx}"] = ""
+                st.session_state[f"sch_sealant_c_{c_idx}"] = ""
+            st.session_state["sch_wiper_notice"] = EMPTY_SCHEDULE_DATA["wiper_notice"]
             st.success("모든 내용이 깨끗하게 비워졌습니다.")
             st.rerun()
     with sch_top_col3:
-        btn_save_top = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
+        if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
+            updated_rows = []
+            for r_idx, r_item in enumerate(rows_data):
+                row_vals = []
+                for c_idx in range(6):
+                    k = f"sch_cell_{r_idx}_{c_idx}"
+                    v = st.session_state.get(k, r_item["vals"][c_idx] if c_idx < len(r_item["vals"]) else "")
+                    row_vals.append(v)
+                updated_rows.append({"item": r_item["item"], "vals": row_vals})
+
+            updated_wiper = []
+            for c_idx in range(6):
+                k = f"sch_wiper_{c_idx}"
+                v = st.session_state.get(k, wiper_data[c_idx] if c_idx < len(wiper_data) else "")
+                updated_wiper.append(v)
+
+            updated_sealant = []
+            for c_idx in range(6):
+                k = f"sch_sealant_c_{c_idx}"
+                v = st.session_state.get(k, sealant_data[c_idx] if c_idx < len(sealant_data) else "")
+                updated_sealant.append(v)
+
+            updated_notice = st.session_state.get("sch_wiper_notice", wiper_notice_data)
+
+            st.session_state.schedule_data = {
+                "rows": updated_rows,
+                "wiper_row1": updated_wiper,
+                "sealant_row": updated_sealant,
+                "wiper_notice": updated_notice
+            }
+            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            st.success("✅ 정기점검 주기표 내용이 영구 저장되었습니다!")
+            st.rerun()
 
     # 1. 상단 VOLVO 배지와 우측 범례
     volvo_head_c1, volvo_head_c2 = st.columns([1.1, 7.2])
@@ -2176,7 +2211,7 @@ elif mode == "정기점검 주기표":
             unsafe_allow_html=True,
         )
 
-    # 2. 고정 테이블 헤더 행 (첫 열 비율 1.1)
+    # 2. 고정 테이블 헤더 행
     h_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
     columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
     for idx, h_name in enumerate(columns_header):
@@ -2185,86 +2220,54 @@ elif mode == "정기점검 주기표":
 
     st.write("")
 
-    # 3. 데이터 입력/수정 폼
-    with st.form("schedule_form"):
-        sch_data = st.session_state.schedule_data
-        rows = sch_data.get("rows", EMPTY_SCHEDULE_DATA["rows"])
-        
-        updated_rows = []
-        st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
-        for r_idx, row in enumerate(rows):
-            col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
-            with col_cells[0]:
-                st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
-            
-            new_row_vals = []
-            for c_idx in range(6):
-                with col_cells[c_idx + 1]:
-                    val = row["vals"][c_idx] if c_idx < len(row["vals"]) else ""
-                    val_input = st.text_input(
-                        f"r_{r_idx}_c_{c_idx}",
-                        value=val,
-                        label_visibility="collapsed",
-                        key=f"sch_cell_{r_idx}_{c_idx}"
-                    )
-                    new_row_vals.append(val_input)
-            updated_rows.append({"item": row["item"], "vals": new_row_vals})
+    # 3. 데이터 입력 그리드
+    st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
+    for r_idx, row in enumerate(rows_data):
+        col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        with col_cells[0]:
+            st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
 
-        # 와이퍼 행 (6칸 분할)
-        w_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
-        with w_cols[0]:
-            st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
-        
-        updated_wiper_r1 = []
-        wiper_r1_src = sch_data.get("wiper_row1", EMPTY_SCHEDULE_DATA["wiper_row1"])
         for c_idx in range(6):
-            with w_cols[c_idx + 1]:
-                val = wiper_r1_src[c_idx] if c_idx < len(wiper_r1_src) else ""
-                w_val = st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
-                updated_wiper_r1.append(w_val)
+            with col_cells[c_idx + 1]:
+                val = row["vals"][c_idx] if c_idx < len(row["vals"]) else ""
+                st.text_input(
+                    f"r_{r_idx}_c_{c_idx}",
+                    value=val,
+                    label_visibility="collapsed",
+                    key=f"sch_cell_{r_idx}_{c_idx}"
+                )
 
-        # 실런트 행 (6칸 분할)
-        s_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
-        with s_cols[0]:
-            st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
-        
-        updated_sealant_row = []
-        sealant_src = sch_data.get("sealant_row", EMPTY_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "", ""]))
-        for c_idx in range(6):
-            with s_cols[c_idx + 1]:
-                val = sealant_src[c_idx] if c_idx < len(sealant_src) else ""
-                s_val = st.text_input(f"s_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_sealant_c_{c_idx}")
-                updated_sealant_row.append(s_val)
+    # 와이퍼 행 (6칸 분할)
+    w_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    with w_cols[0]:
+        st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    for c_idx in range(6):
+        with w_cols[c_idx + 1]:
+            val = wiper_data[c_idx] if c_idx < len(wiper_data) else ""
+            st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
 
-        st.write("")
-        st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
-        updated_wiper_notice = st.text_area(
-            "와이퍼 통합 안내문구",
-            value=sch_data.get("wiper_notice", EMPTY_SCHEDULE_DATA["wiper_notice"]),
-            height=65,
-            key="sch_wiper_notice",
-            label_visibility="collapsed"
-        )
+    # 실런트 행 (6칸 분할)
+    s_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    with s_cols[0]:
+        st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
 
-        st.write("")
-        b_c1, b_c2, b_c3 = st.columns([3.5, 3.0, 3.5])
-        with b_c2:
-            st.markdown('<div class="sch-save-wrap">', unsafe_allow_html=True)
-            submit_sch = st.form_submit_button("💾 위의 수정내용 영구 저장하기", type="primary", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        if submit_sch or btn_save_top:
-            st.session_state.schedule_data = {
-                "rows": updated_rows,
-                "wiper_row1": updated_wiper_r1,
-                "sealant_row": updated_sealant_row,
-                "wiper_notice": updated_wiper_notice
-            }
-            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
-            st.success("✅ 정기점검 주기표 내용이 영구 저장되었습니다!")
-            st.rerun()
+    for c_idx in range(6):
+        with s_cols[c_idx + 1]:
+            val = sealant_data[c_idx] if c_idx < len(sealant_data) else ""
+            st.text_input(f"s_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_sealant_c_{c_idx}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.write("")
+    st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
+    st.text_area(
+        "와이퍼 통합 안내문구",
+        value=wiper_notice_data,
+        height=65,
+        key="sch_wiper_notice",
+        label_visibility="collapsed"
+    )
 
 # ────────────────────────────────────────────────────────
 # 5️⃣ [모드 5] 캘린더 (보증/업무 일정 관리)
