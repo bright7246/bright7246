@@ -66,7 +66,7 @@ st.markdown(
         border-radius: 10px !important;
     }
     div[data-testid="stHorizontalBlock"] div.stButton > button p {
-        font-size: 18px !important;
+        font-size: 16px !important;
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
@@ -293,11 +293,36 @@ DEFAULT_CALENDAR_DATA = [
     }
 ]
 
+# ────────────────────────────────────────────────────────
+# 📋 4번째 탭 : 볼보 정기점검 기본 데이터
+# ────────────────────────────────────────────────────────
+DEFAULT_SCHEDULE_DATA = {
+    "rows": [
+        {"item": "점검(17301)/(17300)", "vals": ["ICE", "ICE/BEV", "ICE", "ICE/BEV", "ICE", "ICE/BEV"]},
+        {"item": "마모점검(17302)", "vals": ["ICE(25년~)", "ICE(ALL)", "ICE(25년~)", "ICE(ALL)", "ICE(25년~)", "ICE(ALL)"]},
+        {"item": "변속기점검(17303)", "vals": ["", "", "", "ICE", "", ""]},
+        {"item": "엔진오일(17301)", "vals": ["ICE", "ICE", "ICE", "ICE", "ICE", "ICE"]},
+        {"item": "에어컨필터(17432)", "vals": ["ICE", "ICE/BEV", "ICE", "ICE/BEV", "ICE", "ICE/BEV"]},
+        {"item": "에어크리너(17435)", "vals": ["", "", "", "ICE", "", ""]},
+        {"item": "스파크 플러그(17424)", "vals": ["", "", "", "ICE", "", ""]},
+        {"item": "전면유리 크리닝(17481)", "vals": ["", "ICE/BEV (EX30 제외)", "", "", "", ""]},
+        {"item": "감속기오일", "vals": ["", "", "", "EX30", "", ""]},
+        {"item": "브레이크 오일 (17406)", "vals": ["", "", "", "ICE", "", ""]},
+    ],
+    "wiper_row1": ["", "ICE", "", "ICE", "", ""],
+    "wiper_notice": "※ 볼보 전기차 와이퍼 블레이드 : 22년식 정기점검 때만/23년식 1년에 1회만 가능 (5회) / 24년식 5년 10만km까지 5회 가능 / 25년식 이후 5년에 10만km까지 3회 가능\n( EC40, EX30 : 전면 와이퍼만 가능 / EX40 (XC40) : 전면,후면 와이퍼 블레이드 가능)",
+    "sealant_blank_count": 4,
+    "sealant_text": "BEV(23년식만)(폴딩박스 가능)"
+}
+
 if "sw_history" not in st.session_state:
     st.session_state.sw_history = github_load_file("sw_data.json", DEFAULT_SW_DATA)
 
 if "calendar_events" not in st.session_state:
     st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
+
+if "schedule_data" not in st.session_state:
+    st.session_state.schedule_data = github_load_file("service_schedule_data.json", DEFAULT_SCHEDULE_DATA)
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
@@ -506,7 +531,10 @@ if "cal_year" not in st.session_state:
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = today_date.month
 
-nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
+# ────────────────────────────────────────────────────────
+# 🧭 5개 탭 분할
+# ────────────────────────────────────────────────────────
+nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns(5)
 
 with nav_col1:
     btn_mw = st.button(
@@ -545,6 +573,17 @@ with nav_col3:
             st.rerun()
 
 with nav_col4:
+    btn_sched = st.button(
+        "📋 정기점검 주기표\n(VOLVO)",
+        use_container_width=True,
+        type="primary" if st.session_state.current_mode == "정기점검 주기표" else "secondary",
+    )
+    if btn_sched:
+        if st.session_state.current_mode != "정기점검 주기표":
+            st.session_state.current_mode = "정기점검 주기표"
+            st.rerun()
+
+with nav_col5:
     btn_cal = st.button(
         "📅 캘린더\n(보증/업무 일정 관리)",
         use_container_width=True,
@@ -946,7 +985,6 @@ def load_pdf_mw(uploaded_file):
                         pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
 
-                        # 표준 6컬럼 형태 (주문번호 완료일자 서브번호 공임 부품 합계) 파싱
                         if len(parts) >= 6:
                             l_val = float(parts[-3].replace(",", "."))
                             m_val = float(parts[-2].replace(",", "."))
@@ -962,7 +1000,6 @@ def load_pdf_mw(uploaded_file):
             for line in p_text.split("\n"):
                 l_clean = line.strip()
                 if "***" in l_clean:
-                    # *** 이후의 텍스트에서 콤마 소수점 형태의 숫자만 분리
                     after_stars = l_clean.split("***")[-1]
                     parts = after_stars.split()
                     numeric_tokens = []
@@ -981,7 +1018,6 @@ def load_pdf_mw(uploaded_file):
             if exact_labour_summary > 0 and exact_material_summary > 0:
                 break
 
-    # *** 요약 줄이 깔끔하게 읽혔으면 그 값을 사용하고, 그렇지 않으면 행 누적값 적용
     final_pdf_labour = exact_labour_summary if exact_labour_summary > 0 else round_half_up(line_labour_total)
     final_pdf_material = exact_material_summary if exact_material_summary > 0 else round_half_up(line_material_total)
 
@@ -2041,6 +2077,185 @@ elif mode == "공임코드 비교":
                 else:
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
 
+# ────────────────────────────────────────────────────────
+# 4️⃣ [모드 4] 정기점검 주기표 (VOLVO)
+# ────────────────────────────────────────────────────────
+elif mode == "정기점검 주기표":
+    sch_col1, sch_col2, sch_col3 = st.columns([7.0, 1.5, 1.5])
+    with sch_col1:
+        st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
+    with sch_col2:
+        if st.button("🔄 기본값 초기화", use_container_width=True):
+            st.session_state.schedule_data = DEFAULT_SCHEDULE_DATA
+            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            st.success("기본 양식으로 복구되었습니다.")
+            st.rerun()
+    with sch_col3:
+        btn_save_sch = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
+
+    st.markdown(
+        """
+        <div style="
+            background-color: #ffff00;
+            color: #000000;
+            font-weight: 800;
+            font-size: 16px;
+            padding: 6px 16px;
+            display: inline-block;
+            border: 2px solid #000000;
+            margin-bottom: 8px;
+        ">
+            VOLVO
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
+    
+    # 엑셀 스타일의 CSS (헤더/첫열 회색 픽스, 내부 셀 흰색 및 테두리 정렬)
+    table_css = """
+    <style>
+    .sch-table {
+        width: 100%;
+        border-collapse: collapse;
+        color: #111111;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        border: 2px solid #333333;
+    }
+    .sch-table th {
+        background-color: #d9d9d9 !important;
+        color: #111111 !important;
+        font-weight: 800;
+        text-align: center;
+        padding: 8px 6px;
+        border: 1px solid #7f7f7f;
+        font-size: 15px;
+    }
+    .sch-table td {
+        border: 1px solid #7f7f7f;
+        padding: 4px;
+        background-color: #ffffff;
+        text-align: center;
+        vertical-align: middle;
+    }
+    .sch-table td.fixed-item {
+        background-color: #e6e6e6 !important;
+        font-weight: 700;
+        color: #111111;
+        text-align: center;
+        min-width: 170px;
+    }
+    .sch-input {
+        width: 100%;
+        border: 1px solid transparent;
+        background-color: transparent;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 2px;
+        color: #111111;
+        border-radius: 4px;
+    }
+    .sch-input:hover, .sch-input:focus {
+        border: 1px solid #0ea5e9;
+        background-color: #f0fdf4;
+        outline: none;
+    }
+    .bev-highlight {
+        color: #ef4444;
+        font-weight: bold;
+    }
+    </style>
+    """
+    st.markdown(table_css, unsafe_allow_html=True)
+
+    # 데이터 입력 폼 생성 (폼으로 제출받아 GitHub에 영구 저장)
+    with st.form("schedule_form"):
+        sch_data = st.session_state.schedule_data
+        rows = sch_data.get("rows", DEFAULT_SCHEDULE_DATA["rows"])
+        
+        # 1. 메인 10개 행 렌더링
+        updated_rows = []
+        for r_idx, row in enumerate(rows):
+            col_cells = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+            with col_cells[0]:
+                st.markdown(
+                    f"<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px; font-size:14px;'>{row['item']}</div>",
+                    unsafe_allow_html=True
+                )
+            
+            new_row_vals = []
+            for c_idx in range(6):
+                with col_cells[c_idx + 1]:
+                    val = row["vals"][c_idx] if c_idx < len(row["vals"]) else ""
+                    val_input = st.text_input(
+                        f"r_{r_idx}_c_{c_idx}",
+                        value=val,
+                        label_visibility="collapsed",
+                        key=f"sch_cell_{r_idx}_{c_idx}"
+                    )
+                    new_row_vals.append(val_input)
+            updated_rows.append({"item": row["item"], "vals": new_row_vals})
+
+        st.write("")
+        # 2. 와이퍼 항목 (2행으로 구성: 상단 개별셀 + 하단 긴 안내문구 병합)
+        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 와이퍼 (36304) 설정</div>", unsafe_allow_html=True)
+        w_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        with w_cols[0]:
+            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>와이퍼 (36304)</div>", unsafe_allow_html=True)
+        
+        updated_wiper_r1 = []
+        wiper_r1_src = sch_data.get("wiper_row1", DEFAULT_SCHEDULE_DATA["wiper_row1"])
+        for c_idx in range(6):
+            with w_cols[c_idx + 1]:
+                val = wiper_r1_src[c_idx] if c_idx < len(wiper_r1_src) else ""
+                w_val = st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
+                updated_wiper_r1.append(w_val)
+                
+        updated_wiper_notice = st.text_area(
+            "와이퍼 통합 안내문구",
+            value=sch_data.get("wiper_notice", DEFAULT_SCHEDULE_DATA["wiper_notice"]),
+            height=70,
+            key="sch_wiper_notice",
+            label_visibility="collapsed"
+        )
+
+        st.write("")
+        # 3. 실런트 항목 (1~4열 빈칸 병합 + 5~6열 BEV 폴딩박스 문구)
+        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 실런트 설정</div>", unsafe_allow_html=True)
+        s_cols = st.columns([1.8, 4.8, 2.4])
+        with s_cols[0]:
+            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>실런트</div>", unsafe_allow_html=True)
+        with s_cols[1]:
+            st.markdown("<div style='background-color:#ffffff; color:#94a3b8; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>(1년/1.5만 ~ 4년/6만 빈칸 영역)</div>", unsafe_allow_html=True)
+        with s_cols[2]:
+            updated_sealant_text = st.text_input(
+                "실런트 내용",
+                value=sch_data.get("sealant_text", DEFAULT_SCHEDULE_DATA["sealant_text"]),
+                label_visibility="collapsed",
+                key="sch_sealant_txt"
+            )
+
+        st.write("")
+        submit_sch = st.form_submit_button("💾 위의 정기점검 주기표 수정내역 영구 저장하기", type="primary", use_container_width=True)
+        
+        if submit_sch or btn_save_sch:
+            st.session_state.schedule_data = {
+                "rows": updated_rows,
+                "wiper_row1": updated_wiper_r1,
+                "wiper_notice": updated_wiper_notice,
+                "sealant_blank_count": 4,
+                "sealant_text": updated_sealant_text
+            }
+            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            st.success("✅ 정기점검 주기표 내용이 영구 저장되었습니다!")
+            st.rerun()
+
+# ────────────────────────────────────────────────────────
+# 5️⃣ [모드 5] 캘린더 (보증/업무 일정 관리)
+# ────────────────────────────────────────────────────────
 elif mode == "캘린더":
     st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
     st.write("")
