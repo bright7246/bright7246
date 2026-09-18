@@ -207,6 +207,19 @@ st.markdown(
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         flex-shrink: 0;
     }
+    .sch-header-cell {
+        background-color: #d9d9d9;
+        color: #111111;
+        font-weight: 800;
+        font-size: 14px;
+        text-align: center;
+        padding: 9px 4px;
+        border: 1px solid #777777;
+        border-radius: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -961,7 +974,6 @@ def load_pdf_mw(uploaded_file):
     exact_material_summary = 0
 
     with pdfplumber.open(uploaded_file) as pdf:
-        # 홀수 페이지에서 각 행 파싱 및 행별 공임/부품 누적
         for page_num, page in enumerate(pdf.pages):
             if page_num % 2 != 0:
                 continue
@@ -993,7 +1005,6 @@ def load_pdf_mw(uploaded_file):
                     except ValueError:
                         continue
 
-        # 마지막 페이지에서 *** 줄의 합계 찾기
         pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
         for p in reversed(pages_to_check):
             p_text = p.extract_text() or ""
@@ -2081,108 +2092,76 @@ elif mode == "공임코드 비교":
 # 4️⃣ [모드 4] 정기점검 주기표 (VOLVO)
 # ────────────────────────────────────────────────────────
 elif mode == "정기점검 주기표":
-    sch_col1, sch_col2, sch_col3 = st.columns([7.0, 1.5, 1.5])
-    with sch_col1:
+    sch_top_col1, sch_top_col2, sch_top_col3 = st.columns([7.0, 1.5, 1.5])
+    with sch_top_col1:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
-    with sch_col2:
+    with sch_top_col2:
         if st.button("🔄 기본값 초기화", use_container_width=True):
             st.session_state.schedule_data = DEFAULT_SCHEDULE_DATA
             github_save_file("service_schedule_data.json", st.session_state.schedule_data)
             st.success("기본 양식으로 복구되었습니다.")
             st.rerun()
-    with sch_col3:
-        btn_save_sch = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
+    with sch_top_col3:
+        btn_save_top = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
 
-    st.markdown(
-        """
-        <div style="
-            background-color: #ffff00;
-            color: #000000;
-            font-weight: 800;
-            font-size: 16px;
-            padding: 6px 16px;
-            display: inline-block;
-            border: 2px solid #000000;
-            margin-bottom: 8px;
-        ">
-            VOLVO
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # 1. 상단 VOLVO 배지와 우측 범례(ICE=내연, BEV=전기차)
+    volvo_head_c1, volvo_head_c2 = st.columns([1.8, 7.2])
+    with volvo_head_c1:
+        st.markdown(
+            """
+            <div style="
+                background-color: #ffff00;
+                color: #000000;
+                font-weight: 800;
+                font-size: 15px;
+                padding: 6px 0;
+                text-align: center;
+                border: 2px solid #000000;
+                border-radius: 4px;
+                margin-bottom: 6px;
+            ">
+                VOLVO
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with volvo_head_c2:
+        st.markdown(
+            """
+            <div style="
+                text-align: right;
+                font-size: 14px;
+                font-weight: 700;
+                padding-top: 8px;
+                margin-bottom: 6px;
+            ">
+                <span style="color: #f1f5f9; margin-right: 18px;">ICE=내연</span>
+                <span style="color: #ef4444;">BEV=전기차</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
+    # 2. 고정 테이블 헤더 행 (빨간 네모 영역: 항목(공임코드), 1년/1.5만 ~ 9만)
+    h_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
     columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
-    
-    # 엑셀 스타일의 CSS (헤더/첫열 회색 픽스, 내부 셀 흰색 및 테두리 정렬)
-    table_css = """
-    <style>
-    .sch-table {
-        width: 100%;
-        border-collapse: collapse;
-        color: #111111;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 14px;
-        border: 2px solid #333333;
-    }
-    .sch-table th {
-        background-color: #d9d9d9 !important;
-        color: #111111 !important;
-        font-weight: 800;
-        text-align: center;
-        padding: 8px 6px;
-        border: 1px solid #7f7f7f;
-        font-size: 15px;
-    }
-    .sch-table td {
-        border: 1px solid #7f7f7f;
-        padding: 4px;
-        background-color: #ffffff;
-        text-align: center;
-        vertical-align: middle;
-    }
-    .sch-table td.fixed-item {
-        background-color: #e6e6e6 !important;
-        font-weight: 700;
-        color: #111111;
-        text-align: center;
-        min-width: 170px;
-    }
-    .sch-input {
-        width: 100%;
-        border: 1px solid transparent;
-        background-color: transparent;
-        text-align: center;
-        font-size: 13px;
-        font-weight: 600;
-        padding: 6px 2px;
-        color: #111111;
-        border-radius: 4px;
-    }
-    .sch-input:hover, .sch-input:focus {
-        border: 1px solid #0ea5e9;
-        background-color: #f0fdf4;
-        outline: none;
-    }
-    .bev-highlight {
-        color: #ef4444;
-        font-weight: bold;
-    }
-    </style>
-    """
-    st.markdown(table_css, unsafe_allow_html=True)
+    for idx, h_name in enumerate(columns_header):
+        with h_cols[idx]:
+            st.markdown(f'<div class="sch-header-cell">{h_name}</div>', unsafe_allow_html=True)
 
-    # 데이터 입력 폼 생성 (폼으로 제출받아 GitHub에 영구 저장)
+    st.write("")
+
+    # 3. 데이터 입력/수정 폼
     with st.form("schedule_form"):
         sch_data = st.session_state.schedule_data
         rows = sch_data.get("rows", DEFAULT_SCHEDULE_DATA["rows"])
         
-        # 1. 메인 10개 행 렌더링
         updated_rows = []
         for r_idx, row in enumerate(rows):
             col_cells = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
             with col_cells[0]:
                 st.markdown(
-                    f"<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px; font-size:14px;'>{row['item']}</div>",
+                    f"<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>{row['item']}</div>",
                     unsafe_allow_html=True
                 )
             
@@ -2200,11 +2179,10 @@ elif mode == "정기점검 주기표":
             updated_rows.append({"item": row["item"], "vals": new_row_vals})
 
         st.write("")
-        # 2. 와이퍼 항목 (2행으로 구성: 상단 개별셀 + 하단 긴 안내문구 병합)
         st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 와이퍼 (36304) 설정</div>", unsafe_allow_html=True)
         w_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with w_cols[0]:
-            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>와이퍼 (36304)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>와이퍼 (36304)</div>", unsafe_allow_html=True)
         
         updated_wiper_r1 = []
         wiper_r1_src = sch_data.get("wiper_row1", DEFAULT_SCHEDULE_DATA["wiper_row1"])
@@ -2223,13 +2201,12 @@ elif mode == "정기점검 주기표":
         )
 
         st.write("")
-        # 3. 실런트 항목 (1~4열 빈칸 병합 + 5~6열 BEV 폴딩박스 문구)
         st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 실런트 설정</div>", unsafe_allow_html=True)
         s_cols = st.columns([1.8, 4.8, 2.4])
         with s_cols[0]:
-            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>실런트</div>", unsafe_allow_html=True)
+            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>실런트</div>", unsafe_allow_html=True)
         with s_cols[1]:
-            st.markdown("<div style='background-color:#ffffff; color:#94a3b8; padding:10px 6px; text-align:center; border:1px solid #777; border-radius:4px;'>(1년/1.5만 ~ 4년/6만 빈칸 영역)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='background-color:#ffffff; color:#94a3b8; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>(1년/1.5만 ~ 4년/6만 빈칸 영역)</div>", unsafe_allow_html=True)
         with s_cols[2]:
             updated_sealant_text = st.text_input(
                 "실런트 내용",
@@ -2241,7 +2218,7 @@ elif mode == "정기점검 주기표":
         st.write("")
         submit_sch = st.form_submit_button("💾 위의 정기점검 주기표 수정내역 영구 저장하기", type="primary", use_container_width=True)
         
-        if submit_sch or btn_save_sch:
+        if submit_sch or btn_save_top:
             st.session_state.schedule_data = {
                 "rows": updated_rows,
                 "wiper_row1": updated_wiper_r1,
