@@ -48,6 +48,8 @@ st.markdown(
       <meta property="og:title" content="IRON WARRANTY">
       <meta property="og:description" content="아이언모터스 보증팀 지원 프로그램">
       <meta property="og:image" content="https://dummyimage.com/1200x630/0ea5e9/ffffff.png&text=IRON+WARRANTY">
+      <meta property="og:image:width" content="1200">
+      <meta property="og:image:height" content="630">
       <meta property="og:type" content="website">
       <meta name="google" content="notranslate">
     </head>
@@ -914,11 +916,13 @@ def load_excel_mw(uploaded_file):
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
-    pdf_labour_cost = 0
-    pdf_material_cost = 0
+    line_labour_total = 0
+    line_material_total = 0
+    exact_labour_summary = 0
+    exact_material_summary = 0
 
     with pdfplumber.open(uploaded_file) as pdf:
-        # 1. 홀수 페이지에서 각 클레임 주문별 금액 추출
+        # 홀수 페이지에서 각 행 파싱 및 행별 공임/부품 누적
         for page_num, page in enumerate(pdf.pages):
             if page_num % 2 != 0:
                 continue
@@ -933,7 +937,7 @@ def load_pdf_mw(uploaded_file):
                     continue
                 page_seen.add(line_stripped)
 
-                match = re.search(r"([A-Z]+\d+)", line_stripped)
+                match = re.search(r'([A-Z]+\d+)', line_stripped)
                 if match:
                     rep_order = match.group(1)
                     parts = line_stripped.split()
@@ -941,33 +945,47 @@ def load_pdf_mw(uploaded_file):
                         total_str = parts[-1].replace(",", ".")
                         pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
+
+                        # 표준 6컬럼 형태 (주문번호 완료일자 서브번호 공임 부품 합계) 파싱
+                        if len(parts) >= 6:
+                            l_val = float(parts[-3].replace(",", "."))
+                            m_val = float(parts[-2].replace(",", "."))
+                            line_labour_total += l_val
+                            line_material_total += m_val
                     except ValueError:
                         continue
 
-        # 2. 마지막 페이지(또는 끝에서 2페이지 내)에서 입금 공임과 입금 부품 합계 추출
+        # 마지막 페이지에서 *** 줄의 합계 찾기
         pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
         for p in reversed(pages_to_check):
             p_text = p.extract_text() or ""
             for line in p_text.split("\n"):
                 l_clean = line.strip()
-                # *** 기호가 있거나 유럽식 금액(소수점 콤마 표기)이 여러 개 나오는 총합계 행 탐색
-                if "***" in l_clean or ("," in l_clean and len(re.findall(r'\d+,\d{2}', l_clean)) >= 2):
-                    amounts_found = re.findall(r'(\d+[\d\s]*,\d{2})', l_clean)
-                    if len(amounts_found) >= 2:
+                if "***" in l_clean:
+                    # *** 이후의 텍스트에서 콤마 소수점 형태의 숫자만 분리
+                    after_stars = l_clean.split("***")[-1]
+                    parts = after_stars.split()
+                    numeric_tokens = []
+                    for pt in parts:
+                        cleaned = pt.replace(" ", "")
+                        if re.match(r'^\d+,\d{2}$', cleaned):
+                            numeric_tokens.append(cleaned)
+
+                    if len(numeric_tokens) >= 2:
                         try:
-                            # 첫 번째 값 = 입금 공임 (Labour cost)
-                            c1 = amounts_found[0].replace(" ", "").replace(",", ".")
-                            # 두 번째 값 = 입금 부품 (Material)
-                            c2 = amounts_found[1].replace(" ", "").replace(",", ".")
-                            pdf_labour_cost = int(round_half_up(float(c1)))
-                            pdf_material_cost = int(round_half_up(float(c2)))
+                            exact_labour_summary = round_half_up(float(numeric_tokens[0].replace(",", ".")))
+                            exact_material_summary = round_half_up(float(numeric_tokens[1].replace(",", ".")))
                             break
                         except Exception:
                             pass
-            if pdf_labour_cost > 0 and pdf_material_cost > 0:
+            if exact_labour_summary > 0 and exact_material_summary > 0:
                 break
 
-    return pdf_groups, pdf_labour_cost, pdf_material_cost
+    # *** 요약 줄이 깔끔하게 읽혔으면 그 값을 사용하고, 그렇지 않으면 행 누적값 적용
+    final_pdf_labour = exact_labour_summary if exact_labour_summary > 0 else round_half_up(line_labour_total)
+    final_pdf_material = exact_material_summary if exact_material_summary > 0 else round_half_up(line_material_total)
+
+    return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
@@ -1911,7 +1929,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
