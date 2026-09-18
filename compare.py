@@ -211,14 +211,52 @@ st.markdown(
         background-color: #d9d9d9;
         color: #111111;
         font-weight: 800;
-        font-size: 14px;
+        font-size: 13px;
         text-align: center;
-        padding: 9px 4px;
+        padding: 6px 2px;
         border: 1px solid #777777;
         border-radius: 4px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+    .sch-item-cell {
+        background-color: #d9d9d9;
+        color: #111111;
+        font-weight: 700;
+        padding: 5px 4px;
+        text-align: center;
+        border: 1px solid #777777;
+        border-radius: 4px;
+        font-size: 12px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+    }
+    /* 주기표 입력창 세로 높이 축소 */
+    div.sch-grid-wrap div[data-baseweb="input"] {
+        height: 34px !important;
+        min-height: 34px !important;
+    }
+    div.sch-grid-wrap div[data-baseweb="input"] input {
+        height: 34px !important;
+        padding: 2px 6px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-align: center !important;
+    }
+    /* 슬림 저장 버튼 스타일 */
+    div.sch-save-wrap div.stButton > button {
+        height: 40px !important;
+        min-height: 40px !important;
+        border-radius: 6px !important;
+        padding: 0 24px !important;
+    }
+    div.sch-save-wrap div.stButton > button p {
+        font-size: 14px !important;
+        font-weight: 700 !important;
     }
     </style>
     """,
@@ -323,9 +361,8 @@ DEFAULT_SCHEDULE_DATA = {
         {"item": "브레이크 오일 (17406)", "vals": ["", "", "", "ICE", "", ""]},
     ],
     "wiper_row1": ["", "ICE", "", "ICE", "", ""],
-    "wiper_notice": "※ 볼보 전기차 와이퍼 블레이드 : 22년식 정기점검 때만/23년식 1년에 1회만 가능 (5회) / 24년식 5년 10만km까지 5회 가능 / 25년식 이후 5년에 10만km까지 3회 가능\n( EC40, EX30 : 전면 와이퍼만 가능 / EX40 (XC40) : 전면,후면 와이퍼 블레이드 가능)",
-    "sealant_blank_count": 4,
-    "sealant_text": "BEV(23년식만)(폴딩박스 가능)"
+    "sealant_row": ["", "", "", "", "BEV(23년식만)(폴딩박스 가능)", ""],
+    "wiper_notice": "※ 볼보 전기차 와이퍼 블레이드 : 22년식 정기점검 때만/23년식 1년에 1회만 가능 (5회) / 24년식 5년 10만km까지 5회 가능 / 25년식 이후 5년에 10만km까지 3회 가능\n( EC40, EX30 : 전면 와이퍼만 가능 / EX40 (XC40) : 전면,후면 와이퍼 블레이드 가능)"
 }
 
 if "sw_history" not in st.session_state:
@@ -1628,8 +1665,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     max_len = max(len(items_a), len(items_b))
 
                     for i in range(max_len):
-                        a_item = items_a[i] if i < len(items_a) else None
-                        b_item = items_b[i] if i < len(items_b) else None
                         val_a = a_item["amount"] if a_item else None
                         val_b = b_item["amount"] if b_item else None
                         r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
@@ -2113,12 +2148,12 @@ elif mode == "정기점검 주기표":
                 background-color: #ffff00;
                 color: #000000;
                 font-weight: 800;
-                font-size: 15px;
-                padding: 6px 0;
+                font-size: 14px;
+                padding: 5px 0;
                 text-align: center;
                 border: 2px solid #000000;
                 border-radius: 4px;
-                margin-bottom: 6px;
+                margin-bottom: 4px;
             ">
                 VOLVO
             </div>
@@ -2130,19 +2165,19 @@ elif mode == "정기점검 주기표":
             """
             <div style="
                 text-align: right;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 700;
-                padding-top: 8px;
-                margin-bottom: 6px;
+                padding-top: 6px;
+                margin-bottom: 4px;
             ">
-                <span style="color: #f1f5f9; margin-right: 18px;">ICE=내연</span>
+                <span style="color: #f1f5f9; margin-right: 16px;">ICE=내연</span>
                 <span style="color: #ef4444;">BEV=전기차</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    # 2. 고정 테이블 헤더 행 (빨간 네모 영역: 항목(공임코드), 1년/1.5만 ~ 9만)
+    # 2. 고정 테이블 헤더 행
     h_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
     columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
     for idx, h_name in enumerate(columns_header):
@@ -2157,13 +2192,11 @@ elif mode == "정기점검 주기표":
         rows = sch_data.get("rows", DEFAULT_SCHEDULE_DATA["rows"])
         
         updated_rows = []
+        st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
         for r_idx, row in enumerate(rows):
             col_cells = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
             with col_cells[0]:
-                st.markdown(
-                    f"<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>{row['item']}</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
             
             new_row_vals = []
             for c_idx in range(6):
@@ -2178,11 +2211,10 @@ elif mode == "정기점검 주기표":
                     new_row_vals.append(val_input)
             updated_rows.append({"item": row["item"], "vals": new_row_vals})
 
-        st.write("")
-        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 와이퍼 (36304) 설정</div>", unsafe_allow_html=True)
+        # 와이퍼 행 (6칸 분할)
         w_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with w_cols[0]:
-            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>와이퍼 (36304)</div>", unsafe_allow_html=True)
+            st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
         
         updated_wiper_r1 = []
         wiper_r1_src = sch_data.get("wiper_row1", DEFAULT_SCHEDULE_DATA["wiper_row1"])
@@ -2191,40 +2223,47 @@ elif mode == "정기점검 주기표":
                 val = wiper_r1_src[c_idx] if c_idx < len(wiper_r1_src) else ""
                 w_val = st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
                 updated_wiper_r1.append(w_val)
-                
+
+        # 실런트 행 (다른 행과 동일하게 6칸 분할)
+        s_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        with s_cols[0]:
+            st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
+        
+        updated_sealant_row = []
+        sealant_src = sch_data.get("sealant_row", DEFAULT_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "BEV(23년식만)(폴딩박스 가능)", ""]))
+        for c_idx in range(6):
+            with s_cols[c_idx + 1]:
+                val = sealant_src[c_idx] if c_idx < len(sealant_src) else ""
+                s_val = st.text_input(f"s_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_sealant_c_{c_idx}")
+                updated_sealant_row.append(s_val)
+
+        st.markdown('</div>', unsafe_allow_html=True) # sch-grid-wrap 종료
+
+        st.write("")
+        # 실런트 아래로 위치 이동한 와이퍼 통합 안내 메모장
+        st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
         updated_wiper_notice = st.text_area(
             "와이퍼 통합 안내문구",
             value=sch_data.get("wiper_notice", DEFAULT_SCHEDULE_DATA["wiper_notice"]),
-            height=70,
+            height=65,
             key="sch_wiper_notice",
             label_visibility="collapsed"
         )
 
         st.write("")
-        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;'>🔧 실런트 설정</div>", unsafe_allow_html=True)
-        s_cols = st.columns([1.8, 4.8, 2.4])
-        with s_cols[0]:
-            st.markdown("<div style='background-color:#d9d9d9; color:#111; font-weight:700; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>실런트</div>", unsafe_allow_html=True)
-        with s_cols[1]:
-            st.markdown("<div style='background-color:#ffffff; color:#94a3b8; padding:10px 4px; text-align:center; border:1px solid #777; border-radius:4px; font-size:13px;'>(1년/1.5만 ~ 4년/6만 빈칸 영역)</div>", unsafe_allow_html=True)
-        with s_cols[2]:
-            updated_sealant_text = st.text_input(
-                "실런트 내용",
-                value=sch_data.get("sealant_text", DEFAULT_SCHEDULE_DATA["sealant_text"]),
-                label_visibility="collapsed",
-                key="sch_sealant_txt"
-            )
-
-        st.write("")
-        submit_sch = st.form_submit_button("💾 위의 정기점검 주기표 수정내역 영구 저장하기", type="primary", use_container_width=True)
+        # 하단 저장 버튼 슬림화
+        b_c1, b_c2, b_c3 = st.columns([3.5, 3.0, 3.5])
+        with b_c2:
+            st.markdown('<div class="sch-save-wrap">', unsafe_allow_html=True)
+            submit_sch = st.form_submit_button("💾 위의 수정내용 영구 저장하기", type="primary", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         
         if submit_sch or btn_save_top:
             st.session_state.schedule_data = {
                 "rows": updated_rows,
                 "wiper_row1": updated_wiper_r1,
-                "wiper_notice": updated_wiper_notice,
-                "sealant_blank_count": 4,
-                "sealant_text": updated_sealant_text
+                "sealant_row": updated_sealant_row,
+                "wiper_notice": updated_wiper_notice
             }
             github_save_file("service_schedule_data.json", st.session_state.schedule_data)
             st.success("✅ 정기점검 주기표 내용이 영구 저장되었습니다!")
