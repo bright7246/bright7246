@@ -224,16 +224,17 @@ st.markdown(
         background-color: #d9d9d9;
         color: #111111;
         font-weight: 700;
-        padding: 5px 4px;
+        padding: 4px 4px;
         text-align: center;
         border: 1px solid #777777;
         border-radius: 4px;
-        font-size: 12px;
+        font-size: 11.5px;
         height: 34px;
         display: flex;
         align-items: center;
         justify-content: center;
-        line-height: 1.2;
+        line-height: 1.15;
+        white-space: nowrap;
     }
     /* 주기표 입력창 세로 높이 축소 */
     div.sch-grid-wrap div[data-baseweb="input"] {
@@ -242,7 +243,7 @@ st.markdown(
     }
     div.sch-grid-wrap div[data-baseweb="input"] input {
         height: 34px !important;
-        padding: 2px 6px !important;
+        padding: 2px 4px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
         text-align: center !important;
@@ -2140,7 +2141,7 @@ elif mode == "정기점검 주기표":
         btn_save_top = st.button("💾 변경내용 영구저장", type="primary", use_container_width=True)
 
     # 1. 상단 VOLVO 배지와 우측 범례(ICE=내연, BEV=전기차)
-    volvo_head_c1, volvo_head_c2 = st.columns([1.8, 7.2])
+    volvo_head_c1, volvo_head_c2 = st.columns([1.1, 7.2])
     with volvo_head_c1:
         st.markdown(
             """
@@ -2177,8 +2178,8 @@ elif mode == "정기점검 주기표":
             unsafe_allow_html=True,
         )
 
-    # 2. 고정 테이블 헤더 행
-    h_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    # 2. 고정 테이블 헤더 행 (첫 열 비율 1.8 -> 1.1로 대폭 축소)
+    h_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
     columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
     for idx, h_name in enumerate(columns_header):
         with h_cols[idx]:
@@ -2194,7 +2195,8 @@ elif mode == "정기점검 주기표":
         updated_rows = []
         st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
         for r_idx, row in enumerate(rows):
-            col_cells = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+            # 첫 번째 컬럼 너비를 1.1로 축소하여 파란 네모에 맞춤
+            col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
             with col_cells[0]:
                 st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
             
@@ -2211,8 +2213,8 @@ elif mode == "정기점검 주기표":
                     new_row_vals.append(val_input)
             updated_rows.append({"item": row["item"], "vals": new_row_vals})
 
-        # 와이퍼 행 (6칸 분할)
-        w_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        # 와이퍼 행 (첫 열 너비 1.1로 축소)
+        w_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with w_cols[0]:
             st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
         
@@ -2224,8 +2226,8 @@ elif mode == "정기점검 주기표":
                 w_val = st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
                 updated_wiper_r1.append(w_val)
 
-        # 실런트 행 (다른 행과 동일하게 6칸 분할)
-        s_cols = st.columns([1.8, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        # 실런트 행 (첫 열 너비 1.1로 축소)
+        s_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
         with s_cols[0]:
             st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
         
@@ -2237,10 +2239,9 @@ elif mode == "정기점검 주기표":
                 s_val = st.text_input(f"s_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_sealant_c_{c_idx}")
                 updated_sealant_row.append(s_val)
 
-        st.markdown('</div>', unsafe_allow_html=True) # sch-grid-wrap 종료
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.write("")
-        # 실런트 아래로 위치 이동한 와이퍼 통합 안내 메모장
         st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
         updated_wiper_notice = st.text_area(
             "와이퍼 통합 안내문구",
@@ -2251,7 +2252,6 @@ elif mode == "정기점검 주기표":
         )
 
         st.write("")
-        # 하단 저장 버튼 슬림화
         b_c1, b_c2, b_c3 = st.columns([3.5, 3.0, 3.5])
         with b_c2:
             st.markdown('<div class="sch-save-wrap">', unsafe_allow_html=True)
