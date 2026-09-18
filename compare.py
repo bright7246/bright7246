@@ -918,7 +918,7 @@ def load_pdf_mw(uploaded_file):
     pdf_material_cost = 0
 
     with pdfplumber.open(uploaded_file) as pdf:
-        # 홀수 페이지에서 각 클레임 주문별 금액 추출
+        # 1. 홀수 페이지에서 각 클레임 주문별 금액 추출
         for page_num, page in enumerate(pdf.pages):
             if page_num % 2 != 0:
                 continue
@@ -944,52 +944,28 @@ def load_pdf_mw(uploaded_file):
                     except ValueError:
                         continue
 
-        # 마지막 페이지에서 Labour cost 및 Material (공급가액) 추출
-        if pdf.pages:
-            last_page = pdf.pages[-1]
-            last_text = last_page.extract_text() or ""
-            
-            # 패턴 1: 정규식 검색
-            m_labour = re.search(r'Labour\s*cost\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
-            if m_labour:
-                val_str = m_labour.group(1).strip().replace(" ", "").replace(",", "")
-                try:
-                    pdf_labour_cost = int(round_half_up(float(val_str)))
-                except Exception:
-                    pass
-
-            m_mat = re.search(r'Material\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
-            if m_mat:
-                val_str = m_mat.group(1).strip().replace(" ", "").replace(",", "")
-                try:
-                    pdf_material_cost = int(round_half_up(float(val_str)))
-                except Exception:
-                    pass
-
-            # 패턴 2: 줄 단위 분할 보완 탐색
-            if pdf_labour_cost == 0 or pdf_material_cost == 0:
-                for line in last_text.split("\n"):
-                    l_clean = line.strip()
-                    if "LABOUR COST" in l_clean.upper() and pdf_labour_cost == 0:
-                        parts = l_clean.split()
-                        for p in reversed(parts):
-                            cleaned_p = p.replace(",", "").replace(".", "")
-                            if cleaned_p.isdigit():
-                                try:
-                                    pdf_labour_cost = int(round_half_up(float(p.replace(",", "."))))
-                                    break
-                                except Exception:
-                                    pass
-                    if "MATERIAL" in l_clean.upper() and pdf_material_cost == 0:
-                        parts = l_clean.split()
-                        for p in reversed(parts):
-                            cleaned_p = p.replace(",", "").replace(".", "")
-                            if cleaned_p.isdigit():
-                                try:
-                                    pdf_material_cost = int(round_half_up(float(p.replace(",", "."))))
-                                    break
-                                except Exception:
-                                    pass
+        # 2. 마지막 페이지(또는 끝에서 2페이지 내)에서 입금 공임과 입금 부품 합계 추출
+        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
+        for p in reversed(pages_to_check):
+            p_text = p.extract_text() or ""
+            for line in p_text.split("\n"):
+                l_clean = line.strip()
+                # *** 기호가 있거나 유럽식 금액(소수점 콤마 표기)이 여러 개 나오는 총합계 행 탐색
+                if "***" in l_clean or ("," in l_clean and len(re.findall(r'\d+,\d{2}', l_clean)) >= 2):
+                    amounts_found = re.findall(r'(\d+[\d\s]*,\d{2})', l_clean)
+                    if len(amounts_found) >= 2:
+                        try:
+                            # 첫 번째 값 = 입금 공임 (Labour cost)
+                            c1 = amounts_found[0].replace(" ", "").replace(",", ".")
+                            # 두 번째 값 = 입금 부품 (Material)
+                            c2 = amounts_found[1].replace(" ", "").replace(",", ".")
+                            pdf_labour_cost = int(round_half_up(float(c1)))
+                            pdf_material_cost = int(round_half_up(float(c2)))
+                            break
+                        except Exception:
+                            pass
+            if pdf_labour_cost > 0 and pdf_material_cost > 0:
+                break
 
     return pdf_groups, pdf_labour_cost, pdf_material_cost
 
@@ -1935,7 +1911,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
