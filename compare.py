@@ -236,20 +236,16 @@ st.markdown(
         line-height: 1.15;
         white-space: nowrap;
     }
-
-    /* 🎯 주기표 입력창 강력 가운데 정렬 강제 적용 */
-    div.sch-grid-wrap div[data-testid="stTextInput"] div[data-baseweb="input"],
-    div.sch-grid-wrap div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+    div.sch-grid-wrap div[data-baseweb="input"] {
         height: 34px !important;
         min-height: 34px !important;
     }
-    div.sch-grid-wrap input[type="text"] {
+    div.sch-grid-wrap div[data-baseweb="input"] input {
         height: 34px !important;
         padding: 2px 4px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
         text-align: center !important;
-        -webkit-text-align: center !important;
     }
     </style>
     """,
@@ -2224,7 +2220,7 @@ elif mode == "정기점검 주기표":
 
     st.write("")
 
-    # 3. 데이터 입력 그리드 (가운데 정렬 컨테이너)
+    # 3. 데이터 입력 그리드
     st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
     for r_idx, row in enumerate(rows_data):
         col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
