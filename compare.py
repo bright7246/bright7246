@@ -62,6 +62,27 @@ st.markdown(
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
+    div.sw-btn-wrap div.stButton > button {
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 4px 8px !important;
+        border-radius: 8px !important;
+        margin-top: 6px !important;
+        background-color: #0f172a !important;
+        border: 1px solid #334155 !important;
+        color: #f8fafc !important;
+        white-space: nowrap !important;
+    }
+    div.sw-btn-wrap div.stButton > button p {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+    }
+    div.sw-btn-wrap div.stButton > button:hover {
+        background-color: #1e293b !important;
+        border-color: #0ea5e9 !important;
+        color: #38bdf8 !important;
+    }
     button[kind="primary"], div.stDownloadButton > button {
         background-color: #0ea5e9 !important;
         border-color: #0ea5e9 !important;
@@ -224,6 +245,81 @@ def github_save_json(filename, content_dict):
     except Exception:
         return False
 
+# ────────────────────────────────────────────────────────
+# 🚗 S/W 버전 관리
+# ────────────────────────────────────────────────────────
+if "sw_history" not in st.session_state:
+    default_sw = {
+        "VOLVO": [{"version": "5.2.16", "date": "2026-09-10", "memo": "정기 업데이트 배포"}],
+        "V.ELEC": [{"version": "3.0.34", "date": "2026-09-08", "memo": "전기차 배터리 제어 로직 개선"}],
+        "POL": [{"version": "4.2.14", "date": "2026-09-05", "memo": "인포테인먼트 안정화 패치"}],
+    }
+    st.session_state.sw_history = github_load_json("sw_history.json", default_sw)
+
+@st.dialog("🚗 S/W 버전 관리")
+def manage_sw_dialog(car_key):
+    st.markdown(f"### ⚙️ **{car_key}** S/W 버전 기록")
+    curr_ver = (
+        st.session_state.sw_history[car_key][0]["version"]
+        if st.session_state.sw_history.get(car_key)
+        else "-"
+    )
+    st.info(f"현재 등록된 최신 버전 : **{curr_ver}**")
+
+    new_ver_input = st.text_input(
+        "새 S/W 버전 입력",
+        placeholder="예: 5.2.17",
+        key=f"input_sw_ver_{car_key}",
+    )
+
+    new_memo_input = st.text_area(
+        "메모 (특이사항 / 변경내역)",
+        placeholder="예: 내비게이션 오류 수정 및 배터리 로직 패치",
+        height=75,
+        key=f"input_sw_memo_{car_key}",
+    )
+
+    if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
+        if new_ver_input.strip():
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+            st.session_state.sw_history[car_key].insert(
+                0, {
+                    "version": new_ver_input.strip(),
+                    "date": today_str,
+                    "memo": new_memo_input.strip()
+                }
+            )
+            github_save_json("sw_history.json", st.session_state.sw_history)
+            st.success(f"✅ {car_key} S/W 버전 및 메모가 등록되었습니다!")
+            st.rerun()
+        else:
+            st.warning("⚠️ 버전을 입력해 주세요.")
+
+    st.divider()
+    st.markdown("#### 📜 최근 등록 이력 (최신 5개)")
+    history_list = st.session_state.sw_history.get(car_key, [])[:5]
+
+    if history_list:
+        for idx, item in enumerate(history_list):
+            c_h_info, c_h_del = st.columns([8.2, 1.8])
+            with c_h_info:
+                badge_text = " <span style='color:#38bdf8; font-weight:bold;'>(최신)</span>" if idx == 0 else ""
+                memo_display = f"<div style='font-size:12px; color:#cbd5e1; margin-top:4px;'>📝 {item.get('memo')}</div>" if item.get("memo") else ""
+                st.markdown(
+                    f"**{idx + 1}. 버전: `{item['version']}`** {badge_text}  \n"
+                    f"<span style='color:#94a3b8; font-size:12px;'>등록일자: {item['date']}</span>"
+                    f"{memo_display}",
+                    unsafe_allow_html=True,
+                )
+            with c_h_del:
+                if st.button("삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True):
+                    st.session_state.sw_history[car_key].pop(idx)
+                    github_save_json("sw_history.json", st.session_state.sw_history)
+                    st.rerun()
+            st.markdown("<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>", unsafe_allow_html=True)
+    else:
+        st.info("등록된 버전 이력이 없습니다.")
+
 @st.dialog("📱 프로그램 공유하기")
 def share_modal():
     st.write("스마트폰 카메라로 아래 QR 코드를 비추면 즉시 접속할 수 있습니다.")
@@ -267,9 +363,71 @@ def share_modal():
     """
     st.components.v1.html(copy_btn_html, height=65)
 
-head_col1, head_col2 = st.columns([8.5, 1.5])
+# ────────────────────────────────────────────────────────
+# 🔝 상단 헤더
+# ────────────────────────────────────────────────────────
+head_col1, col_sw_lbl, col_sw_v, col_sw_ve, col_sw_p, head_col2 = st.columns(
+    [4.3, 0.6, 1.4, 1.4, 1.3, 1.0]
+)
+
 with head_col1:
     st.title("📊 아이언모터스 보증팀 지원 프로그램")
+
+with col_sw_lbl:
+    st.markdown(
+        """
+        <div style="
+            height: 38px;
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 13px;
+            color: #38bdf8;
+        ">
+          S/W
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+latest_v = (
+    st.session_state.sw_history["VOLVO"][0]["version"]
+    if st.session_state.sw_history.get("VOLVO")
+    else "-"
+)
+with col_sw_v:
+    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+    if st.button(f"VOLVO {latest_v}", use_container_width=True, key="btn_sw_volvo"):
+        manage_sw_dialog("VOLVO")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+latest_ve = (
+    st.session_state.sw_history["V.ELEC"][0]["version"]
+    if st.session_state.sw_history.get("V.ELEC")
+    else "-"
+)
+with col_sw_ve:
+    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+    if st.button(f"V.ELEC {latest_ve}", use_container_width=True, key="btn_sw_velec"):
+        manage_sw_dialog("V.ELEC")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+latest_p = (
+    st.session_state.sw_history["POL"][0]["version"]
+    if st.session_state.sw_history.get("POL")
+    else "-"
+)
+with col_sw_p:
+    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
+    if st.button(f"POL {latest_p}", use_container_width=True, key="btn_sw_pol"):
+        manage_sw_dialog("POL")
+    st.markdown("</div>", unsafe_allow_html=True)
+
 with head_col2:
     st.markdown('<div class="share-btn-wrap">', unsafe_allow_html=True)
     if st.button("🔗 공유 / QR", use_container_width=True):
@@ -359,16 +517,6 @@ with nav_col3:
         st.rerun()
 
 with nav_col4:
-    btn_cal = st.button(
-        "📅 캘린더\n(보증/업무 일정 관리)",
-        use_container_width=True,
-        type="primary" if st.session_state.current_mode == "캘린더" else "secondary",
-    )
-    if btn_cal and st.session_state.current_mode != "캘린더":
-        st.session_state.current_mode = "캘린더"
-        st.rerun()
-
-with nav_col5:
     btn_maint = st.button(
         "📋 정기점검 주기표 (VOLVO)",
         use_container_width=True,
@@ -376,6 +524,16 @@ with nav_col5:
     )
     if btn_maint and st.session_state.current_mode != "정기점검 주기표":
         st.session_state.current_mode = "정기점검 주기표"
+        st.rerun()
+
+with nav_col5:
+    btn_cal = st.button(
+        "📅 캘린더\n(보증/업무 일정 관리)",
+        use_container_width=True,
+        type="primary" if st.session_state.current_mode == "캘린더" else "secondary",
+    )
+    if btn_cal and st.session_state.current_mode != "캘린더":
+        st.session_state.current_mode = "캘린더"
         st.rerun()
 
 st.divider()
@@ -1746,6 +1904,124 @@ elif mode == "공임코드 비교":
                 else:
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
 
+elif mode == "정기점검 주기표":
+    # 2번 사진처럼 상단 제목 및 우측 버튼, 범례 배치
+    title_col, action_col = st.columns([6, 4])
+    with title_col:
+        st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
+    with action_col:
+        btn_c1, btn_c2 = st.columns([1, 1])
+        with btn_c1:
+            if st.button("🗑 전체 내용 비우기", use_container_width=True):
+                st.session_state.volvo_table_data = {}
+                github_save_json("volvo_schedule.json", {})
+                st.rerun()
+        with btn_c2:
+            if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
+                github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
+                st.success("✅ GitHub에 성공적으로 저장되었습니다!")
+
+    # 2번 사진 레이아웃: 좌측에 표를 680px 너비로 딱 고정 배치, 우측은 완전히 빈 영역
+    sub_t1, sub_t2, empty_space = st.columns([2.0, 3.5, 4.5])
+    with sub_t1:
+        st.markdown(
+            """
+            <div style="
+                background-color: #facc15;
+                color: #000000;
+                font-weight: 800;
+                text-align: center;
+                padding: 6px 0;
+                border-radius: 4px;
+                font-size: 13px;
+                width: 140px;
+                margin-bottom: 4px;
+            ">VOLVO</div>
+            """,
+            unsafe_allow_html=True
+        )
+    with sub_t2:
+        st.markdown(
+            """
+            <div style="text-align: right; font-size: 13px; font-weight: bold; padding-top: 6px; padding-right: 10px;">
+                <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
+                <span style="color: #ef4444;">BEV=전기차</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # iframe 내부 CSS를 가로 680px로 강제 고정하여 2번 사진과 똑같은 콤팩트 크기로 설정
+    maint_css = """
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: transparent; color: #f8fafc; overflow: hidden; }
+    .volvo-table-container { width: 680px; max-width: 680px; border: 1px solid #334155; border-radius: 4px; overflow: hidden; margin: 0; }
+    table { border-collapse: collapse; width: 680px; table-layout: fixed; font-size: 11px; }
+    th, td { border: 1px solid #334155; text-align: center; height: 30px; padding: 2px 3px; }
+    th { background-color: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; }
+    th.row-header { background-color: #e2e8f0; color: #0f172a; font-weight: 700; width: 155px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; font-size: 11px; }
+    td.cell:hover { background-color: #334155; }
+    td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
+    td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
+    td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
+    """
+
+    header_cols_html = "".join([f'<th style="width: 87px;">{col}</th>' for col in VOLVO_COLS])
+    
+    rows_html = []
+    for r_idx, r_name in enumerate(VOLVO_ROWS):
+        cells_html = []
+        for c_idx, c_name in enumerate(VOLVO_COLS):
+            k = f"{r_idx}_{c_idx}"
+            v = st.session_state.volvo_table_data.get(k, "")
+            cls = ""
+            if v == "ICE": cls = "ice"
+            elif v == "BEV": cls = "bev"
+            elif v == "ICE/BEV": cls = "both"
+            cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
+        rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
+
+    maint_js = f"""
+    const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
+    function handleClick(el, key) {{
+        let curr = el.innerText.trim();
+        let nextIdx = (states.indexOf(curr) + 1) % states.length;
+        let nextVal = states[nextIdx];
+        el.innerText = nextVal;
+        el.className = 'cell';
+        if (nextVal === 'ICE') el.classList.add('ice');
+        else if (nextVal === 'BEV') el.classList.add('bev');
+        else if (nextVal === 'ICE/BEV') el.classList.add('both');
+        
+        let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
+        data[key] = nextVal;
+        localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
+    }}
+    """
+
+    full_maint_html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8" />
+    <style>{maint_css}</style></head>
+    <body>
+      <div class="volvo-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th class="row-header">항목(공임코드)</th>
+              {header_cols_html}
+            </tr>
+          </thead>
+          <tbody>
+            {"".join(rows_html)}
+          </tbody>
+        </table>
+      </div>
+      <script>{maint_js}</script>
+    </body></html>
+    """
+    components.html(full_maint_html, height=440, scrolling=False)
+
 elif mode == "캘린더":
     st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
     st.write("")
@@ -2075,128 +2351,3 @@ elif mode == "캘린더":
                             st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("해당 월에 등록된 일정이 없습니다.")
-
-elif mode == "정기점검 주기표":
-    # 2번 사진처럼 상단 타이틀 및 우측 버튼/범례 구성
-    title_col, action_col = st.columns([6, 4])
-    with title_col:
-        st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
-    with action_col:
-        btn_c1, btn_c2 = st.columns([1, 1])
-        with btn_c1:
-            if st.button("🗑 전체 내용 비우기", use_container_width=True):
-                st.session_state.volvo_table_data = {}
-                github_save_json("volvo_schedule.json", {})
-                st.rerun()
-        with btn_c2:
-            if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
-                github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
-                st.success("✅ GitHub에 성공적으로 저장되었습니다!")
-
-    # 화면을 좌/우 50%씩 분할: 좌측에 주기표를 컴팩트하게 배치, 우측은 새로운 표를 위해 비워둠
-    col_left, col_right = st.columns([1, 1], gap="large")
-
-    with col_left:
-        sub_t1, sub_t2 = st.columns([1, 1])
-        with sub_t1:
-            st.markdown(
-                """
-                <div style="
-                    background-color: #facc15;
-                    color: #000000;
-                    font-weight: 800;
-                    text-align: center;
-                    padding: 5px 0;
-                    border-radius: 4px;
-                    font-size: 14px;
-                    margin-bottom: 6px;
-                    width: 140px;
-                ">VOLVO</div>
-                """,
-                unsafe_allow_html=True
-            )
-        with sub_t2:
-            st.markdown(
-                """
-                <div style="text-align: right; font-size: 13px; font-weight: bold; margin-top: 5px;">
-                    <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
-                    <span style="color: #ef4444;">BEV=전기차</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        maint_css = """
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: transparent; color: #f8fafc; overflow: hidden; }
-        .volvo-table-container { width: 100%; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
-        table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
-        th, td { border: 1px solid #334155; text-align: center; height: 32px; padding: 2px 4px; }
-        th { background-color: #cbd5e1; color: #0f172a; font-weight: 800; }
-        th.row-header { background-color: #cbd5e1; color: #0f172a; font-weight: 700; width: 28%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; }
-        td.cell:hover { background-color: #334155; }
-        td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
-        td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
-        td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
-        """
-
-        header_cols_html = "".join([f"<th>{col}</th>" for col in VOLVO_COLS])
-        
-        rows_html = []
-        for r_idx, r_name in enumerate(VOLVO_ROWS):
-            cells_html = []
-            for c_idx, c_name in enumerate(VOLVO_COLS):
-                k = f"{r_idx}_{c_idx}"
-                v = st.session_state.volvo_table_data.get(k, "")
-                cls = ""
-                if v == "ICE": cls = "ice"
-                elif v == "BEV": cls = "bev"
-                elif v == "ICE/BEV": cls = "both"
-                cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
-            rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
-
-        maint_js = f"""
-        const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
-        function handleClick(el, key) {{
-            let curr = el.innerText.trim();
-            let nextIdx = (states.indexOf(curr) + 1) % states.length;
-            let nextVal = states[nextIdx];
-            el.innerText = nextVal;
-            el.className = 'cell';
-            if (nextVal === 'ICE') el.classList.add('ice');
-            else if (nextVal === 'BEV') el.classList.add('bev');
-            else if (nextVal === 'ICE/BEV') el.classList.add('both');
-            
-            // iframe -> parent window communication or direct fetch simulation
-            let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
-            data[key] = nextVal;
-            localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
-        }}
-        """
-
-        full_maint_html = f"""
-        <!DOCTYPE html><html><head><meta charset="utf-8" />
-        <style>{maint_css}</style></head>
-        <body>
-          <div class="volvo-table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th class="row-header">항목(공임코드)</th>
-                  {header_cols_html}
-                </tr>
-              </thead>
-              <tbody>
-                {"".join(rows_html)}
-              </tbody>
-            </table>
-          </div>
-          <script>{maint_js}</script>
-        </body></html>
-        """
-        components.html(full_maint_html, height=440, scrolling=False)
-
-    with col_right:
-        # 2번 사진처럼 새로운 표를 배치하기 위해 비워둔 우측 영역
-        st.empty()
