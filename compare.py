@@ -182,10 +182,6 @@ def github_load_json(filename, default_value):
             data = json.loads(resp.read().decode('utf-8'))
             content = base64.b64decode(data['content']).decode('utf-8')
             return json.loads(content)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return default_value
-        return default_value
     except Exception:
         return default_value
 
@@ -296,7 +292,7 @@ if "cal_year" not in st.session_state:
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = today_date.month
 
-# 초기 로드 시 GitHub에서 데이터 불러오기
+# 캘린더 데이터 영구 저장 로드
 if "calendar_events" not in st.session_state:
     default_events = [
         {
@@ -316,13 +312,16 @@ if "calendar_events" not in st.session_state:
     ]
     st.session_state.calendar_events = github_load_json("calendar_data.json", default_events)
 
-if "sw_version_data" not in st.session_state:
-    default_sw = {
-        "version": "v3.1.2",
-        "update_date": "2026-09-21",
-        "memo": "S/W 최신 업데이트 완료 (보증 공임 및 세부 점검항목 개정 반영)"
-    }
-    st.session_state.sw_version_data = github_load_json("sw_data.json", default_sw)
+# 정기점검 주기표 데이터 로드
+VOLVO_ROWS = [
+    "점검(17301)/(17300)", "마모점검(17302)", "변속기점검(17303)", "엔진오일(17301)",
+    "에어컨필터(17432)", "에어크리너(17435)", "스파크 플러그(17424)", "전면유리 크리닝(17481)",
+    "감속기오일", "브레이크 오일 (17406)", "와이퍼 (36304)", "실런트"
+]
+VOLVO_COLS = ["1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
+
+if "volvo_table_data" not in st.session_state:
+    st.session_state.volvo_table_data = github_load_json("volvo_schedule.json", {})
 
 nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns(5)
 
@@ -371,7 +370,7 @@ with nav_col4:
 
 with nav_col5:
     btn_maint = st.button(
-        "📋 정기점검 주기표\n(점검 항목 관리)",
+        "📋 정기점검 주기표 (VOLVO)",
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "정기점검 주기표" else "secondary",
     )
@@ -382,7 +381,6 @@ with nav_col5:
 st.divider()
 
 mode = st.session_state.current_mode
-
 
 # ────────────────────────────────────────────────────────
 # 🛠️ [공통 함수]
@@ -400,7 +398,6 @@ def read_excel_smart_header(uploaded_file):
     df = pd.read_excel(uploaded_file, header=header_row_idx)
     return df
 
-
 def find_col_smart(df, keywords, fallback_idx=None):
     for kw in keywords:
         kw_clean = str(kw).replace(" ", "").upper()
@@ -412,13 +409,11 @@ def find_col_smart(df, keywords, fallback_idx=None):
         return df.columns[fallback_idx]
     return None
 
-
 def round_half_up(value):
     return int(value + 0.5)
 
-
 # ────────────────────────────────────────────────────────
-# 📊 [테이블 렌더링 - 좌측 여백 축소 및 가로 확장]
+# 📊 [테이블 렌더링 - 대조 내역]
 # ────────────────────────────────────────────────────────
 TABLE_COMMON_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -584,7 +579,6 @@ def render_mw_side_by_side_tables(df_main, df_diff):
     calc_height = min(1160, max(320, len(df_main) * 44 + 100))
     components.html(full_html, height=calc_height, scrolling=False)
 
-
 def render_coupon_side_by_side_tables(df_main, df_diff):
     main_headers = ["No."] + list(df_main.columns)
     main_tbody = []
@@ -681,7 +675,6 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
     calc_height = min(1160, max(320, len(df_main) * 44 + 100))
     components.html(full_html, height=calc_height, scrolling=False)
 
-
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
 # ────────────────────────────────────────────────────────
@@ -711,29 +704,12 @@ def load_excel_mw(uploaded_file):
 
     col_r = find_col_smart(
         df,
-        [
-            "CLAIM TYPE",
-            "CLAIMTYPE",
-            "청구유형",
-            "클레임유형",
-            "TYPE",
-            "유형",
-        ],
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
         fallback_idx=17,
     )
     col_v = find_col_smart(
         df,
-        [
-            "제목",
-            "TITLE",
-            "SUBJECT",
-            "내용",
-            "작업내용",
-            "수리내용",
-            "DESCRIPTION",
-            "REMARK",
-            "비고",
-        ],
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
         fallback_idx=21,
     )
 
@@ -749,7 +725,6 @@ def load_excel_mw(uploaded_file):
                 "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
             })
     return excel_groups
-
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
@@ -780,10 +755,7 @@ def load_pdf_mw(uploaded_file):
                         continue
     return pdf_groups
 
-
-def create_mw_excel_report(
-    uploaded_file_mw, count, total_pdf, total_excel, total_diff
-):
+def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -791,19 +763,9 @@ def create_mw_excel_report(
     ws.print_title_rows = "1:3"
 
     target_headers = [
-        "Claim No",
-        "차량번호",
-        "Job No",
-        "완결일자",
-        "청구일자",
-        "공임청구액",
-        "공임청구부가세",
-        "부품청구액",
-        "부품청구부가세",
-        "공임입금액",
-        "공임입금부가세",
-        "부품입금액",
-        "부품입금부가세",
+        "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
+        "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
+        "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세",
     ]
     alias_dict = {
         "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
@@ -815,23 +777,9 @@ def create_mw_excel_report(
         "공임청구부가세": ["공임청구부가세", "공임청구 부가세", "공임부가세"],
         "부품청구액": ["부품청구액", "부품청구", "부품 청구액"],
         "부품청구부가세": ["부품청구부가세", "부품청구 부가세", "부품부가세"],
-        "공임입금액": [
-            "공임입금액",
-            "공임입금",
-            "공임승인액",
-            "공임승인",
-            "공임 입금액",
-            "공임승인금액",
-        ],
+        "공임입금액": ["공임입금액", "공임입금", "공임승인액", "공임승인", "공임 입금액", "공임승인금액"],
         "공임입금부가세": ["공임입금부가세", "공임입금 부가세", "공임승인부가세"],
-        "부품입금액": [
-            "부품입금액",
-            "부품입금",
-            "부품승인액",
-            "부품승인",
-            "부품 입금액",
-            "부품승인금액",
-        ],
+        "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액", "부품승인금액"],
         "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"],
     }
     col_mapping = {
@@ -846,9 +794,7 @@ def create_mw_excel_report(
         month_str = f"{int(m_fn.group(1))}월"
     else:
         for col in df_mw_raw.columns:
-            if any(
-                keyword in str(col).upper() for keyword in ["일자", "DATE", "완결", "청구"]
-            ):
+            if any(keyword in str(col).upper() for keyword in ["일자", "DATE", "완결", "청구"]):
                 sample_dates = df_mw_raw[col].dropna().astype(str).tolist()
                 for d in sample_dates:
                     m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
@@ -918,18 +864,14 @@ def create_mw_excel_report(
         no_counter += 1
 
     ws.row_dimensions[current_row].height = 25
-    ws.merge_cells(
-        start_row=current_row, start_column=1, end_row=current_row, end_column=2
-    )
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
     c_sum = ws.cell(row=current_row, column=1, value="합계")
     c_sum.font = Font(bold=True)
     c_sum.alignment = Alignment(horizontal="center", vertical="center")
     ws.cell(row=current_row, column=1).border = thin_border
     ws.cell(row=current_row, column=2).border = thin_border
 
-    ws.merge_cells(
-        start_row=current_row, start_column=3, end_row=current_row, end_column=4
-    )
+    ws.merge_cells(start_row=current_row, start_column=3, end_row=current_row, end_column=4)
     c_cnt = ws.cell(row=current_row, column=3, value=f"댓수 : {count}")
     c_cnt.font = Font(bold=True)
     c_cnt.alignment = Alignment(horizontal="center", vertical="center")
@@ -972,9 +914,7 @@ def create_mw_excel_report(
     c_l.alignment = Alignment(horizontal="right", vertical="center")
     c_l.border = thin_border
 
-    ws.merge_cells(
-        start_row=current_row, start_column=13, end_row=current_row, end_column=14
-    )
+    ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
     c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
     c_mn.font = Font(bold=True)
     c_mn.alignment = Alignment(horizontal="center", vertical="center")
@@ -994,7 +934,6 @@ def create_mw_excel_report(
     output.seek(0)
     return output, month_str
 
-
 # ────────────────────────────────────────────────────────
 # 2️⃣ [모드 2] 쿠폰 보증 비교
 # ────────────────────────────────────────────────────────
@@ -1010,38 +949,17 @@ def load_excel_coupon_a(uploaded_file):
     if col_labour:
         df[col_labour] = pd.to_numeric(df[col_labour], errors="coerce").fillna(0)
     df["Calc_Total"] = (
-        (
-            (df[col_part] if col_part else 0)
-            + (df[col_labour] if col_labour else 0)
-        )
-        * 1.1
+        ((df[col_part] if col_part else 0) + (df[col_labour] if col_labour else 0)) * 1.1
     ).apply(round_half_up)
 
     col_r = find_col_smart(
         df,
-        [
-            "CLAIM TYPE",
-            "CLAIMTYPE",
-            "청구유형",
-            "클레임유형",
-            "TYPE",
-            "유형",
-        ],
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
         fallback_idx=17,
     )
     col_v = find_col_smart(
         df,
-        [
-            "제목",
-            "TITLE",
-            "SUBJECT",
-            "내용",
-            "작업내용",
-            "수리내용",
-            "DESCRIPTION",
-            "REMARK",
-            "비고",
-        ],
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
         fallback_idx=21,
     )
 
@@ -1058,7 +976,6 @@ def load_excel_coupon_a(uploaded_file):
             })
     return a_groups
 
-
 def load_excel_coupon_b(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     col_car = find_col_smart(
@@ -1070,29 +987,12 @@ def load_excel_coupon_b(uploaded_file):
 
     col_r = find_col_smart(
         df,
-        [
-            "CLAIM TYPE",
-            "CLAIMTYPE",
-            "청구유형",
-            "클레임유형",
-            "TYPE",
-            "유형",
-        ],
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
         fallback_idx=17,
     )
     col_v = find_col_smart(
         df,
-        [
-            "제목",
-            "TITLE",
-            "SUBJECT",
-            "내용",
-            "작업내용",
-            "수리내용",
-            "DESCRIPTION",
-            "REMARK",
-            "비고",
-        ],
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
         fallback_idx=21,
     )
 
@@ -1109,10 +1009,7 @@ def load_excel_coupon_b(uploaded_file):
             })
     return b_groups
 
-
-def create_coupon_excel_report(
-    uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff
-):
+def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff):
     df_a_raw = read_excel_smart_header(uploaded_file_a)
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1126,10 +1023,7 @@ def create_coupon_excel_report(
         month_str = f"{int(m_fn.group(1))}월"
     else:
         for col in df_a_raw.columns:
-            if any(
-                keyword in str(col)
-                for keyword in ["일자", "DATE", "승인", "청구", "입고", "출고"]
-            ):
+            if any(keyword in str(col) for keyword in ["일자", "DATE", "승인", "청구", "입고", "출고"]):
                 sample_dates = df_a_raw[col].dropna().astype(str).tolist()
                 for d in sample_dates:
                     m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
@@ -1244,7 +1138,6 @@ def create_coupon_excel_report(
     output.seek(0)
     return output, month_str
 
-
 # ────────────────────────────────────────────────────────
 # 3️⃣ [모드 3] 공임코드 비교
 # ────────────────────────────────────────────────────────
@@ -1265,7 +1158,6 @@ def parse_labor_lines(text):
             code_map[code].append(line_clean)
     return code_map
 
-
 # ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
@@ -1284,8 +1176,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     with left_col:
         if is_mw:
             st.markdown(
-                '<div class="custom-sub-label">1. PDF 파일을 선택하세요 (예시 :'
-                " DEALER_CREDITNOTE_6755)</div>",
+                '<div class="custom-sub-label">1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)</div>',
                 unsafe_allow_html=True,
             )
             f1 = st.file_uploader(
@@ -1296,8 +1187,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
 
             st.markdown(
-                '<div class="custom-sub-label">2. 엑셀 파일을 선택하세요 (예시 :'
-                " 보증청구현황 [ 항목 조정 가능 ]_2026)</div>",
+                '<div class="custom-sub-label">2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)</div>',
                 unsafe_allow_html=True,
             )
             f2 = st.file_uploader(
@@ -1308,8 +1198,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
         else:
             st.markdown(
-                '<div class="custom-sub-label">1. 공지된 쿠폰 파일을 선택하세요'
-                " (예시 : IR_JJ_Aug)</div>",
+                '<div class="custom-sub-label">1. 공지된 쿠폰 파일을 선택하세요 (예시 : IR_JJ_Aug)</div>',
                 unsafe_allow_html=True,
             )
             f1 = st.file_uploader(
@@ -1320,8 +1209,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
 
             st.markdown(
-                '<div class="custom-sub-label">2. DMS 쿠폰파일을 선택하세요 (예시'
-                " : 쿠폰청구관리_20260818085441)</div>",
+                '<div class="custom-sub-label">2. DMS 쿠폰파일을 선택하세요 (예시 : 쿠폰청구관리_20260818085441)</div>',
                 unsafe_allow_html=True,
             )
             f2 = st.file_uploader(
@@ -1342,7 +1230,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 excel_groups = load_excel_mw(f2)
                 pdf_groups = load_pdf_mw(f1)
                 all_keys = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
-                
+
                 matched_results = []
                 diff_over_100_results = []
                 total_pdf_sum = 0
@@ -2053,16 +1941,12 @@ elif mode == "캘린더":
                         "</div>"
                     )
 
-                cal_html.append(
-                    f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>'
-                )
+                cal_html.append(f'<div class="cal-cell">{num_html}{"".join(chips_html)}</div>')
     cal_html.append("</div></div></body></html>")
 
     num_weeks = len(month_cal)
     calc_iframe_height = num_weeks * 95 + 50
-    components.html(
-        "".join(cal_html), height=calc_iframe_height, scrolling=False
-    )
+    components.html("".join(cal_html), height=calc_iframe_height, scrolling=False)
 
     st.divider()
 
@@ -2072,49 +1956,40 @@ elif mode == "캘린더":
         st.markdown("#### ✏️ 일정 등록 / 관리")
         with st.expander("➕ 새 일정 등록하기", expanded=True):
             default_day = datetime.date.today()
-            
+
             head_date_col, chk_col = st.columns([6.5, 3.5])
             with head_date_col:
-                st.markdown("<div style='font-size: 19px; font-weight: 700; color: #f1f5f9; margin-top: 10px;'>날짜 선택</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='font-size: 19px; font-weight: 700; color: #f1f5f9; margin-top: 10px;'>날짜 선택</div>",
+                    unsafe_allow_html=True,
+                )
             with chk_col:
                 st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
                 is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             if is_single_day:
-                start_date_val = st.date_input(
-                    "선택 일자",
-                    value=default_day,
-                    key="cal_start_date_single"
-                )
+                start_date_val = st.date_input("선택 일자", value=default_day, key="cal_start_date_single")
                 end_date_val = start_date_val
             else:
                 d_col1, d_col2 = st.columns(2)
                 with d_col1:
-                    start_date_val = st.date_input(
-                        "시작일",
-                        value=default_day,
-                        key="cal_start_date_range"
-                    )
+                    start_date_val = st.date_input("시작일", value=default_day, key="cal_start_date_range")
                 with d_col2:
                     end_date_val = st.date_input(
                         "종료일",
                         value=start_date_val,
                         min_value=start_date_val,
-                        key="cal_end_date_range"
+                        key="cal_end_date_range",
                     )
 
-            new_title = st.text_input(
-                "일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title"
-            )
+            new_title = st.text_input("일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title")
             new_cat = st.selectbox(
                 "업무 구분",
                 ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"],
                 key="cal_add_cat",
             )
-            new_memo = st.text_area(
-                "상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo"
-            )
+            new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo")
 
             if st.button("등록하기", type="primary", use_container_width=True):
                 if new_title.strip():
@@ -2193,9 +2068,7 @@ elif mode == "캘린더":
                             )
                         with c_del:
                             st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
-                            if st.button(
-                                "삭제", key=f"del_ev_{orig_idx}", use_container_width=True
-                            ):
+                            if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
                                 st.session_state.calendar_events.pop(orig_idx)
                                 github_save_json("calendar_data.json", st.session_state.calendar_events)
                                 st.rerun()
@@ -2204,53 +2077,126 @@ elif mode == "캘린더":
                 st.info("해당 월에 등록된 일정이 없습니다.")
 
 elif mode == "정기점검 주기표":
-    st.markdown("### 📋 정기점검 주기 및 표준 작업 가이드")
-    st.write("")
+    # 2번 사진처럼 상단 타이틀 및 우측 버튼/범례 구성
+    title_col, action_col = st.columns([6, 4])
+    with title_col:
+        st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
+    with action_col:
+        btn_c1, btn_c2 = st.columns([1, 1])
+        with btn_c1:
+            if st.button("🗑 전체 내용 비우기", use_container_width=True):
+                st.session_state.volvo_table_data = {}
+                github_save_json("volvo_schedule.json", {})
+                st.rerun()
+        with btn_c2:
+            if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
+                github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
+                st.success("✅ GitHub에 성공적으로 저장되었습니다!")
 
-    # 가로를 반(50%)으로 나누어 표를 좌측에 배치하고, 우측은 추후 추가할 표 영역으로 비워둠
+    # 화면을 좌/우 50%씩 분할: 좌측에 주기표를 컴팩트하게 배치, 우측은 새로운 표를 위해 비워둠
     col_left, col_right = st.columns([1, 1], gap="large")
 
     with col_left:
-        st.markdown("#### 🔧 정기점검 주기표 (기본)")
+        sub_t1, sub_t2 = st.columns([1, 1])
+        with sub_t1:
+            st.markdown(
+                """
+                <div style="
+                    background-color: #facc15;
+                    color: #000000;
+                    font-weight: 800;
+                    text-align: center;
+                    padding: 5px 0;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    margin-bottom: 6px;
+                    width: 140px;
+                ">VOLVO</div>
+                """,
+                unsafe_allow_html=True
+            )
+        with sub_t2:
+            st.markdown(
+                """
+                <div style="text-align: right; font-size: 13px; font-weight: bold; margin-top: 5px;">
+                    <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
+                    <span style="color: #ef4444;">BEV=전기차</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-        maint_data = [
-            {"회차": "1회차", "점검 주기": "1년 / 20,000 km", "주요 점검 및 교환 항목": "엔진오일 & 필터, 에어컨 필터, 기본 육안점검"},
-            {"회차": "2회차", "점검 주기": "2년 / 40,000 km", "주요 점검 및 교환 항목": "엔진오일 & 필터, 에어컨 필터, 브레이크액, 에어클리너"},
-            {"회차": "3회차", "점검 주기": "3년 / 60,000 km", "주요 점검 및 교환 항목": "엔진오일 & 필터, 에어컨 필터, 스파크 플러그 / 연료필터"},
-            {"회차": "4회차", "점검 주기": "4년 / 80,000 km", "주요 점검 및 교환 항목": "엔진오일 & 필터, 에어컨 필터, 브레이크액, 종합 점검"},
-            {"회차": "5회차", "점검 주기": "5년 / 100,000 km", "주요 점검 및 교환 항목": "엔진오일 & 필터, 에어컨 필터, 구동 벨트류 점검"},
-        ]
+        maint_css = """
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: transparent; color: #f8fafc; overflow: hidden; }
+        .volvo-table-container { width: 100%; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
+        table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+        th, td { border: 1px solid #334155; text-align: center; height: 32px; padding: 2px 4px; }
+        th { background-color: #cbd5e1; color: #0f172a; font-weight: 800; }
+        th.row-header { background-color: #cbd5e1; color: #0f172a; font-weight: 700; width: 28%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; }
+        td.cell:hover { background-color: #334155; }
+        td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
+        td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
+        td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
+        """
 
-        df_maint = pd.DataFrame(maint_data)
-        df_maint.index = range(1, len(df_maint) + 1)
+        header_cols_html = "".join([f"<th>{col}</th>" for col in VOLVO_COLS])
+        
+        rows_html = []
+        for r_idx, r_name in enumerate(VOLVO_ROWS):
+            cells_html = []
+            for c_idx, c_name in enumerate(VOLVO_COLS):
+                k = f"{r_idx}_{c_idx}"
+                v = st.session_state.volvo_table_data.get(k, "")
+                cls = ""
+                if v == "ICE": cls = "ice"
+                elif v == "BEV": cls = "bev"
+                elif v == "ICE/BEV": cls = "both"
+                cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
+            rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
 
-        maint_table_html = f"""
+        maint_js = f"""
+        const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
+        function handleClick(el, key) {{
+            let curr = el.innerText.trim();
+            let nextIdx = (states.indexOf(curr) + 1) % states.length;
+            let nextVal = states[nextIdx];
+            el.innerText = nextVal;
+            el.className = 'cell';
+            if (nextVal === 'ICE') el.classList.add('ice');
+            else if (nextVal === 'BEV') el.classList.add('bev');
+            else if (nextVal === 'ICE/BEV') el.classList.add('both');
+            
+            // iframe -> parent window communication or direct fetch simulation
+            let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
+            data[key] = nextVal;
+            localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
+        }}
+        """
+
+        full_maint_html = f"""
         <!DOCTYPE html><html><head><meta charset="utf-8" />
-        <style>
-          * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
-          body {{ background-color: transparent; color: #f8fafc; }}
-          table {{ border-collapse: collapse; width: 100%; font-size: 14px; user-select: text; border: 1px solid #334155; }}
-          th {{ background-color: #1e293b; color: #ffffff; padding: 10px; border: 1px solid #334155; text-align: center; font-weight: 700; }}
-          td {{ padding: 10px 12px; border: 1px solid #334155; }}
-          .col-center {{ text-align: center; }}
-          .col-bold {{ font-weight: bold; color: #38bdf8; }}
-        </style></head><body>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 15%;">회차</th>
-                <th style="width: 35%;">점검 주기</th>
-                <th style="width: 50%;">주요 점검 및 교환 항목</th>
-              </tr>
-            </thead>
-            <tbody>
-              {"".join([f'<tr><td class="col-center col-bold">{r["회차"]}</td><td class="col-center">{r["점검 주기"]}</td><td>{r["주요 점검 및 교환 항목"]}</td></tr>' for r in maint_data])}
-            </tbody>
-          </table>
+        <style>{maint_css}</style></head>
+        <body>
+          <div class="volvo-table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th class="row-header">항목(공임코드)</th>
+                  {header_cols_html}
+                </tr>
+              </thead>
+              <tbody>
+                {"".join(rows_html)}
+              </tbody>
+            </table>
+          </div>
+          <script>{maint_js}</script>
         </body></html>
         """
-        components.html(maint_table_html, height=270, scrolling=False)
+        components.html(full_maint_html, height=440, scrolling=False)
 
     with col_right:
-        # 우측에 새로운 표를 추가하실 수 있도록 비워둔 영역
+        # 2번 사진처럼 새로운 표를 배치하기 위해 비워둔 우측 영역
         st.empty()
