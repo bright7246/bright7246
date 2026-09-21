@@ -1,6 +1,7 @@
 from collections import OrderedDict, defaultdict
 import io
 import re
+import pdfplumber
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
