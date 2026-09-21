@@ -654,7 +654,7 @@ def render_mw_side_by_side_tables(df_main, df_diff):
                 main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
             else:
                 align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
-                main_tbody.append(f'<td class="{align_class}"">{val_str}</td>')
+                main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
         main_tbody.append("</tr>")
 
     diff_section = ""
