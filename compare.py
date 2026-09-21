@@ -2,11 +2,11 @@ from collections import OrderedDict, defaultdict
 import datetime
 import calendar
 import io
-import re
 import json
+import os
+import re
 import base64
-import urllib.request
-import urllib.error
+import requests
 import pdfplumber
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
@@ -14,6 +14,26 @@ from openpyxl.utils import get_column_letter
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+# ────────────────────────────────────────────────────────
+# 🚗 볼보 공식 로고 이미지
+# ────────────────────────────────────────────────────────
+def get_brand_logo():
+    if os.path.exists("logo.png"):
+        try:
+            with open("logo.png", "rb") as img_f:
+                return f"data:image/png;base64,{base64.b64encode(img_f.read()).decode('utf-8')}"
+        except Exception:
+            pass
+    svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#111111" stroke-width="8"/>
+      <path d="M 68 32 L 88 12 M 72 12 L 88 12 L 88 28" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="square" stroke-linejoin="miter"/>
+      <rect x="18" y="42" width="64" height="16" fill="#ffffff"/>
+      <text x="50" y="55" font-family="'Arial Black', sans-serif" font-weight="900" font-size="14" fill="#111111" text-anchor="middle" letter-spacing="2">VOLVO</text>
+    </svg>"""
+    return f"data:image/svg+xml;utf8,{svg_icon}"
+
+LOGO_DATA_URI = get_brand_logo()
 
 st.set_page_config(
     page_title="IRON WARRANTY",
@@ -46,7 +66,7 @@ st.markdown(
         border-radius: 10px !important;
     }
     div[data-testid="stHorizontalBlock"] div.stButton > button p {
-        font-size: 18px !important;
+        font-size: 16px !important;
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
@@ -173,88 +193,175 @@ st.markdown(
         font-weight: 600 !important;
         color: #38bdf8 !important;
     }
+    .brand-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .brand-logo-img {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: #ffffff;
+        padding: 3px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        flex-shrink: 0;
+    }
+    .sch-header-cell {
+        background-color: #d9d9d9;
+        color: #111111;
+        font-weight: 800;
+        font-size: 13px;
+        text-align: center;
+        padding: 6px 2px;
+        border: 1px solid #777777;
+        border-radius: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sch-item-cell {
+        background-color: #d9d9d9;
+        color: #111111;
+        font-weight: 700;
+        padding: 4px 4px;
+        text-align: center;
+        border: 1px solid #777777;
+        border-radius: 4px;
+        font-size: 11.5px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+    div.sch-grid-wrap div[data-baseweb="input"] {
+        height: 34px !important;
+        min-height: 34px !important;
+    }
+    div.sch-grid-wrap div[data-baseweb="input"] input {
+        height: 34px !important;
+        padding: 2px 4px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-align: center !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-APP_URL = "https://bright7246-cg4cltxcy2z2ksgwbsod2p.streamlit.app"
+APP_URL = "https://iron-warranty-app.streamlit.app"
 
 # ────────────────────────────────────────────────────────
-# ☁️ GitHub 영구 저장소 연동 함수
+# ☁️ GitHub 영구 저장소 연동 모듈
 # ────────────────────────────────────────────────────────
-def get_github_credentials():
+def get_github_auth():
     token = st.secrets.get("GITHUB_TOKEN", None)
     repo = st.secrets.get("GITHUB_REPO", None)
-    return token, repo
+    if token and repo:
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        return repo, headers
+    return None, None
 
-def github_load_json(filename, default_value):
-    token, repo = get_github_credentials()
-    if not token or not repo:
-        return default_value
-    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "Streamlit-App"
-    })
+def github_load_file(filename, default_data):
+    repo, headers = get_github_auth()
+    if repo and headers:
+        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        try:
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                content_b64 = res.json().get("content", "")
+                decoded = base64.b64decode(content_b64).decode("utf-8")
+                return json.loads(decoded)
+        except Exception:
+            pass
+            
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return default_data
+
+def github_save_file(filename, data):
+    repo, headers = get_github_auth()
+    content_str = json.dumps(data, ensure_ascii=False, indent=2)
+    
     try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            content = base64.b64decode(data['content']).decode('utf-8')
-            return json.loads(content)
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content_str)
     except Exception:
-        return default_value
+        pass
+        
+    if repo and headers:
+        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        try:
+            sha = None
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                sha = res.json().get("sha")
+                
+            payload = {
+                "message": f"Update {filename} via App",
+                "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
+            }
+            if sha:
+                payload["sha"] = sha
+            requests.put(url, headers=headers, json=payload, timeout=5)
+        except Exception:
+            pass
 
-def github_save_json(filename, content_dict):
-    token, repo = get_github_credentials()
-    if not token or not repo:
-        return False
-    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
-    sha = None
-    get_req = urllib.request.Request(url, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "Streamlit-App"
-    })
-    try:
-        with urllib.request.urlopen(get_req) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            sha = data.get('sha')
-    except Exception:
-        sha = None
+DEFAULT_SW_DATA = {
+    "VOLVO": [{"version": "5.2.16", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+    "V.ELEC": [{"version": "3.0.34", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+    "POL": [{"version": "4.2.14", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
+}
 
-    raw_json = json.dumps(content_dict, ensure_ascii=False, indent=2)
-    b64_content = base64.b64encode(raw_json.encode('utf-8')).decode('utf-8')
-    payload = {
-        "message": f"Update {filename} from Streamlit",
-        "content": b64_content
+DEFAULT_CALENDAR_DATA = [
+    {
+        "start_date": f"{datetime.date.today().year:04d}-{datetime.date.today().month:02d}-10",
+        "end_date": f"{datetime.date.today().year:04d}-{datetime.date.today().month:02d}-10",
+        "title": "MW 보증 청구 마감",
+        "category": "MW 마감",
+        "memo": "DMS 및 PDF 대조 완료 확인",
     }
-    if sha:
-        payload["sha"] = sha
-
-    post_req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-        "User-Agent": "Streamlit-App"
-    }, method='PUT')
-    try:
-        with urllib.request.urlopen(post_req) as resp:
-            return True
-    except Exception:
-        return False
+]
 
 # ────────────────────────────────────────────────────────
-# 🚗 S/W 버전 관리
+# 📋 4번째 탭 : 볼보 정기점검 빈 데이터 (모든 셀 완전 빈칸 초기화)
 # ────────────────────────────────────────────────────────
+EMPTY_SCHEDULE_DATA = {
+    "rows": [
+        {"item": "점검(17301)/(17300)", "vals": ["", "", "", "", "", ""]},
+        {"item": "마모점검(17302)", "vals": ["", "", "", "", "", ""]},
+        {"item": "변속기점검(17303)", "vals": ["", "", "", "", "", ""]},
+        {"item": "엔진오일(17301)", "vals": ["", "", "", "", "", ""]},
+        {"item": "에어컨필터(17432)", "vals": ["", "", "", "", "", ""]},
+        {"item": "에어크리너(17435)", "vals": ["", "", "", "", "", ""]},
+        {"item": "스파크 플러그(17424)", "vals": ["", "", "", "", "", ""]},
+        {"item": "전면유리 크리닝(17481)", "vals": ["", "", "", "", "", ""]},
+        {"item": "감속기오일", "vals": ["", "", "", "", "", ""]},
+        {"item": "브레이크 오일 (17406)", "vals": ["", "", "", "", "", ""]},
+    ],
+    "wiper_row1": ["", "", "", "", "", ""],
+    "sealant_row": ["", "", "", "", "", ""],
+    "wiper_notice": "※ 볼보 전기차 와이퍼 블레이드 : 22년식 정기점검 때만/23년식 1년에 1회만 가능 (5회) / 24년식 5년 10만km까지 5회 가능 / 25년식 이후 5년에 10만km까지 3회 가능\n( EC40, EX30 : 전면 와이퍼만 가능 / EX40 (XC40) : 전면,후면 와이퍼 블레이드 가능)"
+}
+
 if "sw_history" not in st.session_state:
-    default_sw = {
-        "VOLVO": [{"version": "5.2.16", "date": "2026-09-10", "memo": "정기 업데이트 배포"}],
-        "V.ELEC": [{"version": "3.0.34", "date": "2026-09-08", "memo": "전기차 배터리 제어 로직 개선"}],
-        "POL": [{"version": "4.2.14", "date": "2026-09-05", "memo": "인포테인먼트 안정화 패치"}],
-    }
-    st.session_state.sw_history = github_load_json("sw_history.json", default_sw)
+    st.session_state.sw_history = github_load_file("sw_data.json", DEFAULT_SW_DATA)
+
+if "calendar_events" not in st.session_state:
+    st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
+
+if "schedule_data" not in st.session_state:
+    st.session_state.schedule_data = github_load_file("service_schedule_data.json", EMPTY_SCHEDULE_DATA)
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
@@ -274,7 +381,7 @@ def manage_sw_dialog(car_key):
 
     new_memo_input = st.text_area(
         "메모 (특이사항 / 변경내역)",
-        placeholder="예: 내비게이션 오류 수정 및 배터리 로직 패치",
+        placeholder="특이사항이 있을 경우 작성해 주세요",
         height=75,
         key=f"input_sw_memo_{car_key}",
     )
@@ -282,6 +389,8 @@ def manage_sw_dialog(car_key):
     if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
         if new_ver_input.strip():
             today_str = datetime.date.today().strftime("%Y-%m-%d")
+            if car_key not in st.session_state.sw_history:
+                st.session_state.sw_history[car_key] = []
             st.session_state.sw_history[car_key].insert(
                 0, {
                     "version": new_ver_input.strip(),
@@ -289,8 +398,8 @@ def manage_sw_dialog(car_key):
                     "memo": new_memo_input.strip()
                 }
             )
-            github_save_json("sw_history.json", st.session_state.sw_history)
-            st.success(f"✅ {car_key} S/W 버전 및 메모가 등록되었습니다!")
+            github_save_file("sw_data.json", st.session_state.sw_history)
+            st.success(f"✅ {car_key} S/W 버전이 영구 저장되었습니다!")
             st.rerun()
         else:
             st.warning("⚠️ 버전을 입력해 주세요.")
@@ -314,9 +423,12 @@ def manage_sw_dialog(car_key):
             with c_h_del:
                 if st.button("삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True):
                     st.session_state.sw_history[car_key].pop(idx)
-                    github_save_json("sw_history.json", st.session_state.sw_history)
+                    github_save_file("sw_data.json", st.session_state.sw_history)
                     st.rerun()
-            st.markdown("<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>", unsafe_allow_html=True)
+            st.markdown(
+                "<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>",
+                unsafe_allow_html=True,
+            )
     else:
         st.info("등록된 버전 이력이 없습니다.")
 
@@ -371,7 +483,15 @@ head_col1, col_sw_lbl, col_sw_v, col_sw_ve, col_sw_p, head_col2 = st.columns(
 )
 
 with head_col1:
-    st.title("📊 아이언모터스 보증팀 지원 프로그램")
+    st.markdown(
+        f"""
+        <div class="brand-title-wrap">
+          <img src="{LOGO_DATA_URI}" class="brand-logo-img" alt="VOLVO" />
+          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">아이언모터스 보증팀 지원 프로그램</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 with col_sw_lbl:
     st.markdown(
@@ -402,7 +522,7 @@ latest_v = (
 )
 with col_sw_v:
     st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"VOLVO {latest_v}", use_container_width=True, key="btn_sw_volvo"):
+    if st.button(f"VOLVO  {latest_v}", use_container_width=True, key="btn_sw_volvo"):
         manage_sw_dialog("VOLVO")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -413,7 +533,7 @@ latest_ve = (
 )
 with col_sw_ve:
     st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"V.ELEC {latest_ve}", use_container_width=True, key="btn_sw_velec"):
+    if st.button(f"V.ELEC  {latest_ve}", use_container_width=True, key="btn_sw_velec"):
         manage_sw_dialog("V.ELEC")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -424,7 +544,7 @@ latest_p = (
 )
 with col_sw_p:
     st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"POL {latest_p}", use_container_width=True, key="btn_sw_pol"):
+    if st.button(f"POL  {latest_p}", use_container_width=True, key="btn_sw_pol"):
         manage_sw_dialog("POL")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -450,35 +570,9 @@ if "cal_year" not in st.session_state:
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = today_date.month
 
-if "calendar_events" not in st.session_state:
-    default_events = [
-        {
-            "start_date": f"{today_date.year:04d}-{today_date.month:02d}-10",
-            "end_date": f"{today_date.year:04d}-{today_date.month:02d}-10",
-            "title": "MW 보증 청구 마감",
-            "category": "MW 마감",
-            "memo": "DMS 및 PDF 대조 완료 확인",
-        },
-        {
-            "start_date": f"{today_date.year:04d}-{today_date.month:02d}-20",
-            "end_date": f"{today_date.year:04d}-{today_date.month:02d}-20",
-            "title": "쿠폰 보증 정산",
-            "category": "쿠폰 정산",
-            "memo": "공지 파일 차액 리스트 송부",
-        },
-    ]
-    st.session_state.calendar_events = github_load_json("calendar_data.json", default_events)
-
-VOLVO_ROWS = [
-    "점검(17301)/(17300)", "마모점검(17302)", "변속기점검(17303)", "엔진오일(17301)",
-    "에어컨필터(17432)", "에어크리너(17435)", "스파크 플러그(17424)", "전면유리 크리닝(17481)",
-    "감속기오일", "브레이크 오일 (17406)", "와이퍼 (36304)", "실런트"
-]
-VOLVO_COLS = ["1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
-
-if "volvo_table_data" not in st.session_state:
-    st.session_state.volvo_table_data = github_load_json("volvo_schedule.json", {})
-
+# ────────────────────────────────────────────────────────
+# 🧭 5개 탭 분할
+# ────────────────────────────────────────────────────────
 nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns(5)
 
 with nav_col1:
@@ -487,10 +581,11 @@ with nav_col1:
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary",
     )
-    if btn_mw and st.session_state.current_mode != "MW 보증 비교":
-        st.session_state.current_mode = "MW 보증 비교"
-        st.session_state.reset_trigger += 1
-        st.rerun()
+    if btn_mw:
+        if st.session_state.current_mode != "MW 보증 비교":
+            st.session_state.current_mode = "MW 보증 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 with nav_col2:
     btn_coupon = st.button(
@@ -498,10 +593,11 @@ with nav_col2:
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary",
     )
-    if btn_coupon and st.session_state.current_mode != "쿠폰 보증 비교":
-        st.session_state.current_mode = "쿠폰 보증 비교"
-        st.session_state.reset_trigger += 1
-        st.rerun()
+    if btn_coupon:
+        if st.session_state.current_mode != "쿠폰 보증 비교":
+            st.session_state.current_mode = "쿠폰 보증 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 with nav_col3:
     btn_labor = st.button(
@@ -509,20 +605,22 @@ with nav_col3:
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary",
     )
-    if btn_labor and st.session_state.current_mode != "공임코드 비교":
-        st.session_state.current_mode = "공임코드 비교"
-        st.session_state.reset_trigger += 1
-        st.rerun()
+    if btn_labor:
+        if st.session_state.current_mode != "공임코드 비교":
+            st.session_state.current_mode = "공임코드 비교"
+            st.session_state.reset_trigger += 1
+            st.rerun()
 
 with nav_col4:
-    btn_maint = st.button(
-        "📋 정기점검 주기표 (VOLVO)",
+    btn_sched = st.button(
+        "📋 정기점검 주기표\n(VOLVO)",
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "정기점검 주기표" else "secondary",
     )
-    if btn_maint and st.session_state.current_mode != "정기점검 주기표":
-        st.session_state.current_mode = "정기점검 주기표"
-        st.rerun()
+    if btn_sched:
+        if st.session_state.current_mode != "정기점검 주기표":
+            st.session_state.current_mode = "정기점검 주기표"
+            st.rerun()
 
 with nav_col5:
     btn_cal = st.button(
@@ -530,9 +628,10 @@ with nav_col5:
         use_container_width=True,
         type="primary" if st.session_state.current_mode == "캘린더" else "secondary",
     )
-    if btn_cal and st.session_state.current_mode != "캘린더":
-        st.session_state.current_mode = "캘린더"
-        st.rerun()
+    if btn_cal:
+        if st.session_state.current_mode != "캘린더":
+            st.session_state.current_mode = "캘린더"
+            st.rerun()
 
 st.divider()
 
@@ -569,7 +668,7 @@ def round_half_up(value):
     return int(value + 0.5)
 
 # ────────────────────────────────────────────────────────
-# 📊 [테이블 렌더링 - 대조 내역]
+# 📊 [테이블 렌더링]
 # ────────────────────────────────────────────────────────
 TABLE_COMMON_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -678,11 +777,13 @@ def render_mw_side_by_side_tables(df_main, df_diff):
             diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
             diff_tbody.append("</tr>")
 
-        th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
-                           f'<th class="col-id">{diff_headers[1]}</th>',
-                           f'<th class="col-type">{diff_headers[2]}</th>',
-                           f'<th class="col-desc">{diff_headers[3]}</th>',
-                           f'<th class="col-diff">{diff_headers[4]}</th>'])
+        th_html = "".join([
+            f'<th class="col-no">{diff_headers[0]}</th>',
+            f'<th class="col-id">{diff_headers[1]}</th>',
+            f'<th class="col-type">{diff_headers[2]}</th>',
+            f'<th class="col-desc">{diff_headers[3]}</th>',
+            f'<th class="col-diff">{diff_headers[4]}</th>',
+        ])
 
         diff_section = f"""
           <div class="table-card">
@@ -705,11 +806,13 @@ def render_mw_side_by_side_tables(df_main, df_diff):
           </div>
         """
 
-    main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
-                            f'<th class="col-id">{main_headers[1]}</th>',
-                            f'<th class="col-amt">{main_headers[2]}</th>',
-                            f'<th class="col-amt">{main_headers[3]}</th>',
-                            f'<th class="col-diff">{main_headers[4]}</th>'])
+    main_th_html = "".join([
+        f'<th class="col-no">{main_headers[0]}</th>',
+        f'<th class="col-id">{main_headers[1]}</th>',
+        f'<th class="col-amt">{main_headers[2]}</th>',
+        f'<th class="col-amt">{main_headers[3]}</th>',
+        f'<th class="col-diff">{main_headers[4]}</th>',
+    ])
 
     full_html = f"""
       <!DOCTYPE html><html><head><meta charset="utf-8" />
@@ -774,11 +877,13 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
             diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
             diff_tbody.append("</tr>")
 
-        th_html = "".join([f'<th class="col-no">{diff_headers[0]}</th>',
-                           f'<th class="col-id">{diff_headers[1]}</th>',
-                           f'<th class="col-type">{diff_headers[2]}</th>',
-                           f'<th class="col-desc">{diff_headers[3]}</th>',
-                           f'<th class="col-diff">{diff_headers[4]}</th>'])
+        th_html = "".join([
+            f'<th class="col-no">{diff_headers[0]}</th>',
+            f'<th class="col-id">{diff_headers[1]}</th>',
+            f'<th class="col-type">{diff_headers[2]}</th>',
+            f'<th class="col-desc">{diff_headers[3]}</th>',
+            f'<th class="col-diff">{diff_headers[4]}</th>',
+        ])
 
         diff_section = f"""
           <div class="table-card">
@@ -801,11 +906,13 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
           </div>
         """
 
-    main_th_html = "".join([f'<th class="col-no">{main_headers[0]}</th>',
-                            f'<th class="col-id">{main_headers[1]}</th>',
-                            f'<th class="col-amt">{main_headers[2]}</th>',
-                            f'<th class="col-amt">{main_headers[3]}</th>',
-                            f'<th class="col-diff">{main_headers[4]}</th>'])
+    main_th_html = "".join([
+        f'<th class="col-no">{main_headers[0]}</th>',
+        f'<th class="col-id">{main_headers[1]}</th>',
+        f'<th class="col-amt">{main_headers[2]}</th>',
+        f'<th class="col-amt">{main_headers[3]}</th>',
+        f'<th class="col-diff">{main_headers[4]}</th>',
+    ])
 
     full_html = f"""
       <!DOCTYPE html><html><head><meta charset="utf-8" />
@@ -887,8 +994,10 @@ def load_excel_mw(uploaded_file):
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
-    pdf_labour_cost = 0
-    pdf_material_cost = 0
+    line_labour_total = 0
+    line_material_total = 0
+    exact_labour_summary = 0
+    exact_material_summary = 0
 
     with pdfplumber.open(uploaded_file) as pdf:
         for page_num, page in enumerate(pdf.pages):
@@ -905,7 +1014,7 @@ def load_pdf_mw(uploaded_file):
                     continue
                 page_seen.add(line_stripped)
 
-                match = re.search(r"([A-Z]+\d+)", line_stripped)
+                match = re.search(r'([A-Z]+\d+)', line_stripped)
                 if match:
                     rep_order = match.group(1)
                     parts = line_stripped.split()
@@ -913,54 +1022,43 @@ def load_pdf_mw(uploaded_file):
                         total_str = parts[-1].replace(",", ".")
                         pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
+
+                        if len(parts) >= 6:
+                            l_val = float(parts[-3].replace(",", "."))
+                            m_val = float(parts[-2].replace(",", "."))
+                            line_labour_total += l_val
+                            line_material_total += m_val
                     except ValueError:
                         continue
 
-        if pdf.pages:
-            last_page = pdf.pages[-1]
-            last_text = last_page.extract_text() or ""
-            
-            m_labour = re.search(r'Labour\s*cost\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
-            if m_labour:
-                val_str = m_labour.group(1).strip().replace(" ", "").replace(",", "")
-                try:
-                    pdf_labour_cost = int(round_half_up(float(val_str)))
-                except Exception:
-                    pass
+        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
+        for p in reversed(pages_to_check):
+            p_text = p.extract_text() or ""
+            for line in p_text.split("\n"):
+                l_clean = line.strip()
+                if "***" in l_clean:
+                    after_stars = l_clean.split("***")[-1]
+                    parts = after_stars.split()
+                    numeric_tokens = []
+                    for pt in parts:
+                        cleaned = pt.replace(" ", "")
+                        if re.match(r'^\d+,\d{2}$', cleaned):
+                            numeric_tokens.append(cleaned)
 
-            m_mat = re.search(r'Material\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
-            if m_mat:
-                val_str = m_mat.group(1).strip().replace(" ", "").replace(",", "")
-                try:
-                    pdf_material_cost = int(round_half_up(float(val_str)))
-                except Exception:
-                    pass
+                    if len(numeric_tokens) >= 2:
+                        try:
+                            exact_labour_summary = round_half_up(float(numeric_tokens[0].replace(",", ".")))
+                            exact_material_summary = round_half_up(float(numeric_tokens[1].replace(",", ".")))
+                            break
+                        except Exception:
+                            pass
+            if exact_labour_summary > 0 and exact_material_summary > 0:
+                break
 
-            if pdf_labour_cost == 0 or pdf_material_cost == 0:
-                for line in last_text.split("\n"):
-                    l_clean = line.strip()
-                    if "LABOUR COST" in l_clean.upper() and pdf_labour_cost == 0:
-                        parts = l_clean.split()
-                        for p in reversed(parts):
-                            cleaned_p = p.replace(",", "").replace(".", "")
-                            if cleaned_p.isdigit():
-                                try:
-                                    pdf_labour_cost = int(round_half_up(float(p.replace(",", "."))))
-                                    break
-                                except Exception:
-                                    pass
-                    if "MATERIAL" in l_clean.upper() and pdf_material_cost == 0:
-                        parts = l_clean.split()
-                        for p in reversed(parts):
-                            cleaned_p = p.replace(",", "").replace(".", "")
-                            if cleaned_p.isdigit():
-                                try:
-                                    pdf_material_cost = int(round_half_up(float(p.replace(",", "."))))
-                                    break
-                                except Exception:
-                                    pass
+    final_pdf_labour = exact_labour_summary if exact_labour_summary > 0 else round_half_up(line_labour_total)
+    final_pdf_material = exact_material_summary if exact_material_summary > 0 else round_half_up(line_material_total)
 
-    return pdf_groups, pdf_labour_cost, pdf_material_cost
+    return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
@@ -1378,7 +1476,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     )
     st.write("")
 
-    left_col, right_col = st.columns([3.0, 7.0], gap="medium")
+    left_col, right_col = st.columns([3.2, 6.8], gap="medium")
 
     with left_col:
         if is_mw:
@@ -1436,7 +1534,9 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             if is_mw:
                 excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f2)
                 pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f1)
-                all_keys = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
+                all_keys = sorted(
+                    list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
+                )
 
                 matched_results = []
                 diff_over_100_results = []
@@ -1554,8 +1654,6 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     max_len = max(len(items_a), len(items_b))
 
                     for i in range(max_len):
-                        a_item = items_a[i] if i < len(items_a) else None
-                        b_item = items_b[i] if i < len(items_b) else None
                         val_a = a_item["amount"] if a_item else None
                         val_b = b_item["amount"] if b_item else None
                         r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
@@ -1681,10 +1779,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             )
     else:
         with right_col:
-            st.info(
-                "👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액"
-                " 리스트가 표시됩니다."
-            )
+            st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
 
 elif mode == "공임코드 비교":
     top_col1, top_col2 = st.columns([7.5, 2.5])
@@ -1844,15 +1939,22 @@ elif mode == "공임코드 비교":
         else:
             map_a = parse_labor_lines(combined_text_a)
             map_b = parse_labor_lines(combined_text_b)
-            map_c = parse_labor_lines(combined_text_c) if st.session_state.show_group_c else OrderedDict()
+            map_c = (
+                parse_labor_lines(combined_text_c)
+                if st.session_state.show_group_c
+                else OrderedDict()
+            )
 
             if st.session_state.show_group_c:
                 all_codes = set(list(map_a.keys()) + list(map_b.keys()) + list(map_c.keys()))
-                duplicate_codes = [code for code in all_codes if sum([code in map_a, code in map_b, code in map_c]) >= 2]
+                duplicate_codes = [
+                    code for code in all_codes if sum([code in map_a, code in map_b, code in map_c]) >= 2
+                ]
             else:
                 duplicate_codes = [code for code in map_a.keys() if code in map_b]
 
             st.divider()
+
             res_col_left, res_col_right = st.columns([3, 7], gap="large")
 
             with res_col_left:
@@ -1861,23 +1963,36 @@ elif mode == "공임코드 비교":
                 with sum_col1:
                     st.metric("A그룹 총 건수", f"{len(map_a)} 건")
                 with sum_col2:
-                    st.metric("A그룹 고유", f"{len([c for c in map_a if c not in map_b and c not in map_c])} 건")
+                    st.metric(
+                        "A그룹 고유",
+                        f"{len([c for c in map_a if c not in map_b and c not in map_c])} 건",
+                    )
 
                 sum_col3, sum_col4 = st.columns(2)
                 with sum_col3:
                     st.metric("B그룹 총 건수", f"{len(map_b)} 건")
                 with sum_col4:
-                    st.metric("B그룹 고유", f"{len([c for c in map_b if c not in map_a and c not in map_c])} 건")
+                    st.metric(
+                        "B그룹 고유",
+                        f"{len([c for c in map_b if c not in map_a and c not in map_c])} 건",
+                    )
 
                 if st.session_state.show_group_c:
                     sum_col5, sum_col6 = st.columns(2)
                     with sum_col5:
                         st.metric("C그룹 총 건수", f"{len(map_c)} 건")
                     with sum_col6:
-                        st.metric("C그룹 고유", f"{len([c for c in map_c if c not in map_a and c not in map_b])} 건")
+                        st.metric(
+                            "C그룹 고유",
+                            f"{len([c for c in map_c if c not in map_a and c not in map_b])} 건",
+                        )
 
                 st.write("")
-                st.metric("중복된 공임코드", f"{len(duplicate_codes)} 건", delta=("중복 발견" if duplicate_codes else None))
+                st.metric(
+                    "중복된 공임코드",
+                    f"{len(duplicate_codes)} 건",
+                    delta=("중복 발견" if duplicate_codes else None),
+                )
 
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
@@ -1885,7 +2000,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
@@ -1904,25 +2019,46 @@ elif mode == "공임코드 비교":
                     df_dup = pd.DataFrame(dup_rows)
                     df_dup.index = range(1, len(df_dup) + 1)
 
-                    header_a_name = f"{input_code_a.strip()} {input_desc_a.strip()}".strip() if input_code_a.strip() or input_desc_a.strip() else "A그룹 내용"
-                    header_b_name = f"{input_code_b.strip()} {input_desc_b.strip()}".strip() if input_code_b.strip() or input_desc_b.strip() else "B그룹 내용"
+                    header_a_name = (
+                        f"{input_code_a.strip()} {input_desc_a.strip()}".strip()
+                        if input_code_a.strip() or input_desc_a.strip()
+                        else "A그룹 내용"
+                    )
+                    header_b_name = (
+                        f"{input_code_b.strip()} {input_desc_b.strip()}".strip()
+                        if input_code_b.strip() or input_desc_b.strip()
+                        else "B그룹 내용"
+                    )
 
                     if st.session_state.show_group_c:
-                        header_c_name = f"{input_code_c.strip()} {input_desc_c.strip()}".strip() if input_code_c.strip() or input_desc_c.strip() else "C그룹 내용"
-                        main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name, header_c_name]
+                        header_c_name = (
+                            f"{input_code_c.strip()} {input_desc_c.strip()}".strip()
+                            if input_code_c.strip() or input_desc_c.strip()
+                            else "C그룹 내용"
+                        )
+                        main_headers = [
+                            "No.",
+                            "중복 공임코드",
+                            header_a_name,
+                            header_b_name,
+                            header_c_name,
+                        ]
                         main_tbody = []
                         for idx, row in df_dup.iterrows():
                             main_tbody.append(
-                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td>'
-                                f'<td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td><td class="col-amt">{row.iloc[3]}</td></tr>'
+                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td><td class="col-amt">{row.iloc[3]}</td></tr>'
                             )
                     else:
-                        main_headers = ["No.", "중복 공임코드", header_a_name, header_b_name]
+                        main_headers = [
+                            "No.",
+                            "중복 공임코드",
+                            header_a_name,
+                            header_b_name,
+                        ]
                         main_tbody = []
                         for idx, row in df_dup.iterrows():
                             main_tbody.append(
-                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td>'
-                                f'<td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>'
+                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>'
                             )
 
                     css_dup = """
@@ -1950,144 +2086,192 @@ elif mode == "공임코드 비교":
                     """
 
                     if st.session_state.show_group_c:
-                        th_tags = f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th><th>{main_headers[4]}</th>"
+                        th_tags = (
+                            f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th>"
+                            f"<th>{main_headers[2]}</th><th>{main_headers[3]}</th>"
+                            f"<th>{main_headers[4]}</th>"
+                        )
                     else:
-                        th_tags = f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th><th>{main_headers[2]}</th><th>{main_headers[3]}</th>"
+                        th_tags = (
+                            f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th>"
+                            f"<th>{main_headers[2]}</th><th>{main_headers[3]}</th>"
+                        )
 
-                    table_html = f"""
-                      <!DOCTYPE html><html><head><meta charset="utf-8" />
-                      <style>{css_dup}</style></head><body>
-                        <div id="toast">📋 복사 완료!</div>
-                        <table><thead><tr>{th_tags}</tr></thead>
-                        <tbody>{"".join(main_tbody)}</tbody></table>
-                        <script>{js_dup}</script>
-                      </body></html>
-                    """
-                    components.html(table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True)
+                    table_html = (
+                        '<!DOCTYPE html><html><head><meta charset="utf-8" />'
+                        f"<style>{css_dup}</style></head><body>"
+                        '<div id="toast">📋 복사 완료!</div>'
+                        f"<table><thead><tr>{th_tags}</tr></thead>"
+                        f'<tbody>{"".join(main_tbody)}</tbody></table>'
+                        f"<script>{js_dup}</script>"
+                        "</body></html>"
+                    )
+                    components.html(
+                        table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True
+                    )
                 else:
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
 
+# ────────────────────────────────────────────────────────
+# 4️⃣ [모드 4] 정기점검 주기표 (VOLVO)
+# ────────────────────────────────────────────────────────
 elif mode == "정기점검 주기표":
-    title_col, action_col = st.columns([6, 4])
-    with title_col:
+    sch_data = st.session_state.schedule_data
+    rows_data = sch_data.get("rows", EMPTY_SCHEDULE_DATA["rows"])
+    wiper_data = sch_data.get("wiper_row1", EMPTY_SCHEDULE_DATA["wiper_row1"])
+    sealant_data = sch_data.get("sealant_row", EMPTY_SCHEDULE_DATA.get("sealant_row", ["", "", "", "", "", ""]))
+    wiper_notice_data = sch_data.get("wiper_notice", EMPTY_SCHEDULE_DATA["wiper_notice"])
+
+    sch_top_col1, sch_top_col2, sch_top_col3 = st.columns([7.0, 1.5, 1.5])
+    with sch_top_col1:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
-    with action_col:
-        btn_c1, btn_c2 = st.columns([1, 1])
-        with btn_c1:
-            if st.button("🗑 전체 내용 비우기", use_container_width=True):
-                st.session_state.volvo_table_data = {}
-                github_save_json("volvo_schedule.json", {})
-                st.rerun()
-        with btn_c2:
-            if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
-                github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
-                st.success("✅ GitHub에 성공적으로 저장되었습니다!")
+    with sch_top_col2:
+        if st.button("🗑️ 전체 내용 비우기", use_container_width=True):
+            st.session_state.schedule_data = EMPTY_SCHEDULE_DATA
+            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            for r_idx in range(len(rows_data)):
+                for c_idx in range(6):
+                    st.session_state[f"sch_cell_{r_idx}_{c_idx}"] = ""
+            for c_idx in range(6):
+                st.session_state[f"sch_wiper_{c_idx}"] = ""
+                st.session_state[f"sch_sealant_c_{c_idx}"] = ""
+            st.session_state["sch_wiper_notice"] = EMPTY_SCHEDULE_DATA["wiper_notice"]
+            st.success("모든 내용이 깨끗하게 비워졌습니다.")
+            st.rerun()
+    with sch_top_col3:
+        if st.button("💾 변경내용 영구저장", type="primary", use_container_width=True):
+            updated_rows = []
+            for r_idx, r_item in enumerate(rows_data):
+                row_vals = []
+                for c_idx in range(6):
+                    k = f"sch_cell_{r_idx}_{c_idx}"
+                    v = st.session_state.get(k, r_item["vals"][c_idx] if c_idx < len(r_item["vals"]) else "")
+                    row_vals.append(v)
+                updated_rows.append({"item": r_item["item"], "vals": row_vals})
 
-    col_left, col_right = st.columns([1, 1], gap="large")
+            updated_wiper = []
+            for c_idx in range(6):
+                k = f"sch_wiper_{c_idx}"
+                v = st.session_state.get(k, wiper_data[c_idx] if c_idx < len(wiper_data) else "")
+                updated_wiper.append(v)
 
-    with col_left:
-        sub_t1, sub_t2 = st.columns([1, 1])
-        with sub_t1:
-            st.markdown(
-                """
-                <div style="
-                    background-color: #facc15;
-                    color: #000000;
-                    font-weight: 800;
-                    text-align: center;
-                    padding: 5px 0;
-                    border-radius: 4px;
-                    font-size: 13px;
-                    width: 140px;
-                    margin-bottom: 4px;
-                ">VOLVO</div>
-                """,
-                unsafe_allow_html=True
-            )
-        with sub_t2:
-            st.markdown(
-                """
-                <div style="text-align: right; font-size: 13px; font-weight: bold; padding-top: 5px;">
-                    <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
-                    <span style="color: #ef4444;">BEV=전기차</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            updated_sealant = []
+            for c_idx in range(6):
+                k = f"sch_sealant_c_{c_idx}"
+                v = st.session_state.get(k, sealant_data[c_idx] if c_idx < len(sealant_data) else "")
+                updated_sealant.append(v)
 
-        maint_css = """
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: transparent; color: #f8fafc; overflow: hidden; }
-        .volvo-table-container { width: 100%; border: 1px solid #334155; border-radius: 4px; overflow: hidden; margin: 0; }
-        table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 11px; }
-        th, td { border: 1px solid #334155; text-align: center; height: 30px; padding: 2px 3px; }
-        th { background-color: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; }
-        th.row-header { background-color: #e2e8f0; color: #0f172a; font-weight: 700; width: 26%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
-        td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; font-size: 11px; }
-        td.cell:hover { background-color: #334155; }
-        td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
-        td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
-        td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
-        """
+            updated_notice = st.session_state.get("sch_wiper_notice", wiper_notice_data)
 
-        header_cols_html = "".join([f"<th>{col}</th>" for col in VOLVO_COLS])
-        
-        rows_html = []
-        for r_idx, r_name in enumerate(VOLVO_ROWS):
-            cells_html = []
-            for c_idx, c_name in enumerate(VOLVO_COLS):
-                k = f"{r_idx}_{c_idx}"
-                v = st.session_state.volvo_table_data.get(k, "")
-                cls = ""
-                if v == "ICE": cls = "ice"
-                elif v == "BEV": cls = "bev"
-                elif v == "ICE/BEV": cls = "both"
-                cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
-            rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
+            st.session_state.schedule_data = {
+                "rows": updated_rows,
+                "wiper_row1": updated_wiper,
+                "sealant_row": updated_sealant,
+                "wiper_notice": updated_notice
+            }
+            github_save_file("service_schedule_data.json", st.session_state.schedule_data)
+            st.success("✅ 정기점검 주기표 내용이 영구 저장되었습니다!")
+            st.rerun()
 
-        maint_js = f"""
-        const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
-        function handleClick(el, key) {{
-            let curr = el.innerText.trim();
-            let nextIdx = (states.indexOf(curr) + 1) % states.length;
-            let nextVal = states[nextIdx];
-            el.innerText = nextVal;
-            el.className = 'cell';
-            if (nextVal === 'ICE') el.classList.add('ice');
-            else if (nextVal === 'BEV') el.classList.add('bev');
-            else if (nextVal === 'ICE/BEV') el.classList.add('both');
-            
-            let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
-            data[key] = nextVal;
-            localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
-        }}
-        """
+    # 1. 상단 VOLVO 배지와 우측 범례
+    volvo_head_c1, volvo_head_c2 = st.columns([1.1, 7.2])
+    with volvo_head_c1:
+        st.markdown(
+            """
+            <div style="
+                background-color: #ffff00;
+                color: #000000;
+                font-weight: 800;
+                font-size: 14px;
+                padding: 5px 0;
+                text-align: center;
+                border: 2px solid #000000;
+                border-radius: 4px;
+                margin-bottom: 4px;
+            ">
+                VOLVO
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with volvo_head_c2:
+        st.markdown(
+            """
+            <div style="
+                text-align: right;
+                font-size: 13px;
+                font-weight: 700;
+                padding-top: 6px;
+                margin-bottom: 4px;
+            ">
+                <span style="color: #f1f5f9; margin-right: 16px;">ICE=내연</span>
+                <span style="color: #ef4444;">BEV=전기차</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        full_maint_html = f"""
-        <!DOCTYPE html><html><head><meta charset="utf-8" />
-        <style>{maint_css}</style></head>
-        <body>
-          <div class="volvo-table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th class="row-header">항목(공임코드)</th>
-                  {header_cols_html}
-                </tr>
-              </thead>
-              <tbody>
-                {"".join(rows_html)}
-              </tbody>
-            </table>
-          </div>
-          <script>{maint_js}</script>
-        </body></html>
-        """
-        components.html(full_maint_html, width=700, height=450, scrolling=False)
+    # 2. 고정 테이블 헤더 행
+    h_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    columns_header = ["항목(공임코드)", "1년/1.5만", "2년/3만", "3년/4.5", "4년/6만", "5년/7.5만", "9만"]
+    for idx, h_name in enumerate(columns_header):
+        with h_cols[idx]:
+            st.markdown(f'<div class="sch-header-cell">{h_name}</div>', unsafe_allow_html=True)
 
-    with col_right:
-        st.empty()
+    st.write("")
 
+    # 3. 데이터 입력 그리드
+    st.markdown('<div class="sch-grid-wrap">', unsafe_allow_html=True)
+    for r_idx, row in enumerate(rows_data):
+        col_cells = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+        with col_cells[0]:
+            st.markdown(f"<div class='sch-item-cell'>{row['item']}</div>", unsafe_allow_html=True)
+
+        for c_idx in range(6):
+            with col_cells[c_idx + 1]:
+                val = row["vals"][c_idx] if c_idx < len(row["vals"]) else ""
+                st.text_input(
+                    f"r_{r_idx}_c_{c_idx}",
+                    value=val,
+                    label_visibility="collapsed",
+                    key=f"sch_cell_{r_idx}_{c_idx}"
+                )
+
+    # 와이퍼 행 (6칸 분할)
+    w_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    with w_cols[0]:
+        st.markdown("<div class='sch-item-cell'>와이퍼 (36304)</div>", unsafe_allow_html=True)
+
+    for c_idx in range(6):
+        with w_cols[c_idx + 1]:
+            val = wiper_data[c_idx] if c_idx < len(wiper_data) else ""
+            st.text_input(f"w_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_wiper_{c_idx}")
+
+    # 실런트 행 (6칸 분할)
+    s_cols = st.columns([1.1, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2])
+    with s_cols[0]:
+        st.markdown("<div class='sch-item-cell'>실런트</div>", unsafe_allow_html=True)
+
+    for c_idx in range(6):
+        with s_cols[c_idx + 1]:
+            val = sealant_data[c_idx] if c_idx < len(sealant_data) else ""
+            st.text_input(f"s_c_{c_idx}", value=val, label_visibility="collapsed", key=f"sch_sealant_c_{c_idx}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.write("")
+    st.markdown("<div style='font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;'>📝 와이퍼 블레이드 상세 안내 메모</div>", unsafe_allow_html=True)
+    st.text_area(
+        "와이퍼 통합 안내문구",
+        value=wiper_notice_data,
+        height=65,
+        key="sch_wiper_notice",
+        label_visibility="collapsed"
+    )
+
+# ────────────────────────────────────────────────────────
+# 5️⃣ [모드 5] 캘린더 (보증/업무 일정 관리)
+# ────────────────────────────────────────────────────────
 elif mode == "캘린더":
     st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
     st.write("")
@@ -2342,8 +2526,8 @@ elif mode == "캘린더":
                         "category": new_cat,
                         "memo": new_memo.strip(),
                     })
-                    github_save_json("calendar_data.json", st.session_state.calendar_events)
-                    st.success("✅ 일정이 등록되고 GitHub에 영구 저장되었습니다!")
+                    github_save_file("calendar_data.json", st.session_state.calendar_events)
+                    st.success("✅ 일정이 영구 저장되었습니다!")
                     st.rerun()
                 else:
                     st.warning("⚠️ 일정 제목을 입력해 주세요.")
@@ -2412,7 +2596,7 @@ elif mode == "캘린더":
                             st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
                             if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
                                 st.session_state.calendar_events.pop(orig_idx)
-                                github_save_json("calendar_data.json", st.session_state.calendar_events)
+                                github_save_file("calendar_data.json", st.session_state.calendar_events)
                                 st.rerun()
                             st.markdown("</div>", unsafe_allow_html=True)
             else:
