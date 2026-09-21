@@ -450,7 +450,6 @@ if "cal_year" not in st.session_state:
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = today_date.month
 
-# 캘린더 데이터 영구 저장 로드
 if "calendar_events" not in st.session_state:
     default_events = [
         {
@@ -470,7 +469,6 @@ if "calendar_events" not in st.session_state:
     ]
     st.session_state.calendar_events = github_load_json("calendar_data.json", default_events)
 
-# 정기점검 주기표 데이터 로드
 VOLVO_ROWS = [
     "점검(17301)/(17300)", "마모점검(17302)", "변속기점검(17303)", "엔진오일(17301)",
     "에어컨필터(17432)", "에어크리너(17435)", "스파크 플러그(17424)", "전면유리 크리닝(17481)",
@@ -1905,7 +1903,7 @@ elif mode == "공임코드 비교":
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
 
 elif mode == "정기점검 주기표":
-    # 2번 사진처럼 상단 제목 및 우측 버튼, 범례 배치
+    # 1. 상단 제목 및 우측 버튼
     title_col, action_col = st.columns([6, 4])
     with title_col:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
@@ -1921,106 +1919,114 @@ elif mode == "정기점검 주기표":
                 github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
                 st.success("✅ GitHub에 성공적으로 저장되었습니다!")
 
-    # 2번 사진 레이아웃: 좌측에 표를 680px 너비로 딱 고정 배치, 우측은 완전히 빈 영역
-    sub_t1, sub_t2, empty_space = st.columns([2.0, 3.5, 4.5])
-    with sub_t1:
-        st.markdown(
-            """
-            <div style="
-                background-color: #facc15;
-                color: #000000;
-                font-weight: 800;
-                text-align: center;
-                padding: 6px 0;
-                border-radius: 4px;
-                font-size: 13px;
-                width: 140px;
-                margin-bottom: 4px;
-            ">VOLVO</div>
-            """,
-            unsafe_allow_html=True
-        )
-    with sub_t2:
-        st.markdown(
-            """
-            <div style="text-align: right; font-size: 13px; font-weight: bold; padding-top: 6px; padding-right: 10px;">
-                <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
-                <span style="color: #ef4444;">BEV=전기차</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    # 2. 화면 분할: 좌측 컬럼에만 주기표를 넣고, 우측 컬럼은 새 표를 위해 비워둠
+    col_left, col_right = st.columns([1, 1], gap="large")
 
-    # iframe 내부 CSS를 가로 680px로 강제 고정하여 2번 사진과 똑같은 콤팩트 크기로 설정
-    maint_css = """
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: transparent; color: #f8fafc; overflow: hidden; }
-    .volvo-table-container { width: 680px; max-width: 680px; border: 1px solid #334155; border-radius: 4px; overflow: hidden; margin: 0; }
-    table { border-collapse: collapse; width: 680px; table-layout: fixed; font-size: 11px; }
-    th, td { border: 1px solid #334155; text-align: center; height: 30px; padding: 2px 3px; }
-    th { background-color: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; }
-    th.row-header { background-color: #e2e8f0; color: #0f172a; font-weight: 700; width: 155px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
-    td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; font-size: 11px; }
-    td.cell:hover { background-color: #334155; }
-    td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
-    td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
-    td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
-    """
+    with col_left:
+        # VOLVO 타이틀 박스 및 우측 상단 범례
+        sub_t1, sub_t2 = st.columns([1, 1])
+        with sub_t1:
+            st.markdown(
+                """
+                <div style="
+                    background-color: #facc15;
+                    color: #000000;
+                    font-weight: 800;
+                    text-align: center;
+                    padding: 5px 0;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    width: 140px;
+                    margin-bottom: 4px;
+                ">VOLVO</div>
+                """,
+                unsafe_allow_html=True
+            )
+        with sub_t2:
+            st.markdown(
+                """
+                <div style="text-align: right; font-size: 13px; font-weight: bold; padding-top: 5px;">
+                    <span style="color: #ffffff;">ICE=내연</span> &nbsp;&nbsp; 
+                    <span style="color: #ef4444;">BEV=전기차</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    header_cols_html = "".join([f'<th style="width: 87px;">{col}</th>' for col in VOLVO_COLS])
-    
-    rows_html = []
-    for r_idx, r_name in enumerate(VOLVO_ROWS):
-        cells_html = []
-        for c_idx, c_name in enumerate(VOLVO_COLS):
-            k = f"{r_idx}_{c_idx}"
-            v = st.session_state.volvo_table_data.get(k, "")
-            cls = ""
-            if v == "ICE": cls = "ice"
-            elif v == "BEV": cls = "bev"
-            elif v == "ICE/BEV": cls = "both"
-            cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
-        rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
+        maint_css = """
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: transparent; color: #f8fafc; overflow: hidden; }
+        .volvo-table-container { width: 100%; border: 1px solid #334155; border-radius: 4px; overflow: hidden; margin: 0; }
+        table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 11px; }
+        th, td { border: 1px solid #334155; text-align: center; height: 30px; padding: 2px 3px; }
+        th { background-color: #e2e8f0; color: #0f172a; font-weight: 800; font-size: 11px; }
+        th.row-header { background-color: #e2e8f0; color: #0f172a; font-weight: 700; width: 26%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+        td.cell { background-color: #1e293b; color: #ffffff; cursor: pointer; transition: background 0.15s; user-select: none; font-size: 11px; }
+        td.cell:hover { background-color: #334155; }
+        td.ice { background-color: rgba(56, 189, 248, 0.35) !important; color: #38bdf8 !important; font-weight: bold; }
+        td.bev { background-color: rgba(239, 68, 68, 0.35) !important; color: #f87171 !important; font-weight: bold; }
+        td.both { background-color: rgba(168, 85, 247, 0.35) !important; color: #c084fc !important; font-weight: bold; }
+        """
 
-    maint_js = f"""
-    const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
-    function handleClick(el, key) {{
-        let curr = el.innerText.trim();
-        let nextIdx = (states.indexOf(curr) + 1) % states.length;
-        let nextVal = states[nextIdx];
-        el.innerText = nextVal;
-        el.className = 'cell';
-        if (nextVal === 'ICE') el.classList.add('ice');
-        else if (nextVal === 'BEV') el.classList.add('bev');
-        else if (nextVal === 'ICE/BEV') el.classList.add('both');
+        header_cols_html = "".join([f"<th>{col}</th>" for col in VOLVO_COLS])
         
-        let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
-        data[key] = nextVal;
-        localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
-    }}
-    """
+        rows_html = []
+        for r_idx, r_name in enumerate(VOLVO_ROWS):
+            cells_html = []
+            for c_idx, c_name in enumerate(VOLVO_COLS):
+                k = f"{r_idx}_{c_idx}"
+                v = st.session_state.volvo_table_data.get(k, "")
+                cls = ""
+                if v == "ICE": cls = "ice"
+                elif v == "BEV": cls = "bev"
+                elif v == "ICE/BEV": cls = "both"
+                cells_html.append(f'<td class="cell {cls}" onclick="handleClick(this, \'{k}\')">{v}</td>')
+            rows_html.append(f'<tr><th class="row-header" title="{r_name}">{r_name}</th>{"".join(cells_html)}</tr>')
 
-    full_maint_html = f"""
-    <!DOCTYPE html><html><head><meta charset="utf-8" />
-    <style>{maint_css}</style></head>
-    <body>
-      <div class="volvo-table-container">
-        <table>
-          <thead>
-            <tr>
-              <th class="row-header">항목(공임코드)</th>
-              {header_cols_html}
-            </tr>
-          </thead>
-          <tbody>
-            {"".join(rows_html)}
-          </tbody>
-        </table>
-      </div>
-      <script>{maint_js}</script>
-    </body></html>
-    """
-    components.html(full_maint_html, height=440, scrolling=False)
+        maint_js = f"""
+        const states = ['', 'ICE', 'BEV', 'ICE/BEV'];
+        function handleClick(el, key) {{
+            let curr = el.innerText.trim();
+            let nextIdx = (states.indexOf(curr) + 1) % states.length;
+            let nextVal = states[nextIdx];
+            el.innerText = nextVal;
+            el.className = 'cell';
+            if (nextVal === 'ICE') el.classList.add('ice');
+            else if (nextVal === 'BEV') el.classList.add('bev');
+            else if (nextVal === 'ICE/BEV') el.classList.add('both');
+            
+            let data = JSON.parse(localStorage.getItem('volvo_maint_temp') || '{{}}');
+            data[key] = nextVal;
+            localStorage.setItem('volvo_maint_temp', JSON.stringify(data));
+        }}
+        """
+
+        full_maint_html = f"""
+        <!DOCTYPE html><html><head><meta charset="utf-8" />
+        <style>{maint_css}</style></head>
+        <body>
+          <div class="volvo-table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th class="row-header">항목(공임코드)</th>
+                  {header_cols_html}
+                </tr>
+              </thead>
+              <tbody>
+                {"".join(rows_html)}
+              </tbody>
+            </table>
+          </div>
+          <script>{maint_js}</script>
+        </body></html>
+        """
+        # width를 700으로 고정하여 부모 컨테이너(화면 절반) 안으로 쏙 들어가도록 명시
+        components.html(full_maint_html, width=700, height=450, scrolling=False)
+
+    with col_right:
+        # 우측에 새로운 표를 배치하기 위한 빈 공간
+        st.empty()
 
 elif mode == "캘린더":
     st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
