@@ -851,6 +851,9 @@ def load_excel_mw(uploaded_file):
     c_part = find_col_smart(df, ["부품청구액"])
     c_part_vat = find_col_smart(df, ["부품청구부가세"])
 
+    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor else 0
+    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part else 0
+
     df["Excel_Total"] = (
         (df[c_labor] if c_labor else 0)
         + (df[c_labor_vat] if c_labor_vat else 0)
@@ -880,10 +883,13 @@ def load_excel_mw(uploaded_file):
                 "claim_type": r_val if r_val and r_val != "nan" else "-",
                 "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
             })
-    return excel_groups
+    return excel_groups, raw_labor_sum, raw_part_sum
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
+    pdf_labour_cost = 0
+    pdf_material_cost = 0
+
     with pdfplumber.open(uploaded_file) as pdf:
         for page_num, page in enumerate(pdf.pages):
             if page_num % 2 != 0:
@@ -909,7 +915,52 @@ def load_pdf_mw(uploaded_file):
                         pdf_groups[rep_order].append(pdf_total_with_vat)
                     except ValueError:
                         continue
-    return pdf_groups
+
+        if pdf.pages:
+            last_page = pdf.pages[-1]
+            last_text = last_page.extract_text() or ""
+            
+            m_labour = re.search(r'Labour\s*cost\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
+            if m_labour:
+                val_str = m_labour.group(1).strip().replace(" ", "").replace(",", "")
+                try:
+                    pdf_labour_cost = int(round_half_up(float(val_str)))
+                except Exception:
+                    pass
+
+            m_mat = re.search(r'Material\s*[:\s]?\s*([\d\s\.,]+)', last_text, re.IGNORECASE)
+            if m_mat:
+                val_str = m_mat.group(1).strip().replace(" ", "").replace(",", "")
+                try:
+                    pdf_material_cost = int(round_half_up(float(val_str)))
+                except Exception:
+                    pass
+
+            if pdf_labour_cost == 0 or pdf_material_cost == 0:
+                for line in last_text.split("\n"):
+                    l_clean = line.strip()
+                    if "LABOUR COST" in l_clean.upper() and pdf_labour_cost == 0:
+                        parts = l_clean.split()
+                        for p in reversed(parts):
+                            cleaned_p = p.replace(",", "").replace(".", "")
+                            if cleaned_p.isdigit():
+                                try:
+                                    pdf_labour_cost = int(round_half_up(float(p.replace(",", "."))))
+                                    break
+                                except Exception:
+                                    pass
+                    if "MATERIAL" in l_clean.upper() and pdf_material_cost == 0:
+                        parts = l_clean.split()
+                        for p in reversed(parts):
+                            cleaned_p = p.replace(",", "").replace(".", "")
+                            if cleaned_p.isdigit():
+                                try:
+                                    pdf_material_cost = int(round_half_up(float(p.replace(",", "."))))
+                                    break
+                                except Exception:
+                                    pass
+
+    return pdf_groups, pdf_labour_cost, pdf_material_cost
 
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
@@ -1383,8 +1434,8 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     if f1 and f2:
         with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
             if is_mw:
-                excel_groups = load_excel_mw(f2)
-                pdf_groups = load_pdf_mw(f1)
+                excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f2)
+                pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f1)
                 all_keys = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
 
                 matched_results = []
@@ -1605,6 +1656,20 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             sub_c3, sub_c4 = st.columns(2)
             sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
             sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
+
+            if is_mw:
+                st.write("")
+                st.markdown(
+                    "<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;'>🔧 공임 / 부품 세부 내역 (VAT 제외)</div>",
+                    unsafe_allow_html=True,
+                )
+                labor_col1, labor_col2 = st.columns(2)
+                labor_col1.metric("청구 공임 합계", f"{raw_excel_labor:,}원")
+                labor_col2.metric("입금 공임 합계", f"{raw_pdf_labour:,}원")
+
+                part_col1, part_col2 = st.columns(2)
+                part_col1.metric("청구 부품 합계", f"{raw_excel_part:,}원")
+                part_col2.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
 
             st.write("")
             st.download_button(
@@ -1903,7 +1968,6 @@ elif mode == "공임코드 비교":
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
 
 elif mode == "정기점검 주기표":
-    # 1. 상단 제목 및 우측 버튼
     title_col, action_col = st.columns([6, 4])
     with title_col:
         st.markdown("### 📋 볼보 정기점검 항목 및 주기표")
@@ -1919,11 +1983,9 @@ elif mode == "정기점검 주기표":
                 github_save_json("volvo_schedule.json", st.session_state.volvo_table_data)
                 st.success("✅ GitHub에 성공적으로 저장되었습니다!")
 
-    # 2. 화면 분할: 좌측 컬럼에만 주기표를 넣고, 우측 컬럼은 새 표를 위해 비워둠
     col_left, col_right = st.columns([1, 1], gap="large")
 
     with col_left:
-        # VOLVO 타이틀 박스 및 우측 상단 범례
         sub_t1, sub_t2 = st.columns([1, 1])
         with sub_t1:
             st.markdown(
@@ -2021,11 +2083,9 @@ elif mode == "정기점검 주기표":
           <script>{maint_js}</script>
         </body></html>
         """
-        # width를 700으로 고정하여 부모 컨테이너(화면 절반) 안으로 쏙 들어가도록 명시
         components.html(full_maint_html, width=700, height=450, scrolling=False)
 
     with col_right:
-        # 우측에 새로운 표를 배치하기 위한 빈 공간
         st.empty()
 
 elif mode == "캘린더":
