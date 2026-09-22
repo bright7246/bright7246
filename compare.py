@@ -916,13 +916,12 @@ def load_excel_mw(uploaded_file):
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
-    line_labour_total = 0
-    line_material_total = 0
-    exact_labour_summary = 0
-    exact_material_summary = 0
+    total_net_from_rows = 0.0
+    total_labour_from_rows = 0.0
+    total_material_from_rows = 0.0
 
     with pdfplumber.open(uploaded_file) as pdf:
-        # 홀수 페이지에서 각 행 파싱 및 행별 공임/부품 누적
+        # 홀수 페이지에서 각 행 파싱 (Net 공급가액 및 공임/부품 누적)
         for page_num, page in enumerate(pdf.pages):
             if page_num % 2 != 0:
                 continue
@@ -942,48 +941,26 @@ def load_pdf_mw(uploaded_file):
                     rep_order = match.group(1)
                     parts = line_stripped.split()
                     try:
-                        total_str = parts[-1].replace(",", ".")
-                        pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
+                        net_total_str = parts[-1].replace(",", ".")
+                        net_val = float(net_total_str)
+                        pdf_total_with_vat = round_half_up(net_val * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
+                        total_net_from_rows += net_val
 
-                        # 표준 6컬럼 형태 (주문번호 완료일자 서브번호 공임 부품 합계) 파싱
+                        # 표준 컬럼 파싱 (공임, 부품 추출)
                         if len(parts) >= 6:
                             l_val = float(parts[-3].replace(",", "."))
                             m_val = float(parts[-2].replace(",", "."))
-                            line_labour_total += l_val
-                            line_material_total += m_val
+                            total_labour_from_rows += l_val
+                            total_material_from_rows += m_val
                     except ValueError:
                         continue
 
-        # 마지막 페이지에서 *** 줄의 합계 찾기
-        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
-        for p in reversed(pages_to_check):
-            p_text = p.extract_text() or ""
-            for line in p_text.split("\n"):
-                l_clean = line.strip()
-                if "***" in l_clean:
-                    # *** 이후의 텍스트에서 콤마 소수점 형태의 숫자만 분리
-                    after_stars = l_clean.split("***")[-1]
-                    parts = after_stars.split()
-                    numeric_tokens = []
-                    for pt in parts:
-                        cleaned = pt.replace(" ", "")
-                        if re.match(r'^\d+,\d{2}$', cleaned):
-                            numeric_tokens.append(cleaned)
-
-                    if len(numeric_tokens) >= 2:
-                        try:
-                            exact_labour_summary = round_half_up(float(numeric_tokens[0].replace(",", ".")))
-                            exact_material_summary = round_half_up(float(numeric_tokens[1].replace(",", ".")))
-                            break
-                        except Exception:
-                            pass
-            if exact_labour_summary > 0 and exact_material_summary > 0:
-                break
-
-    # *** 요약 줄이 깔끔하게 읽혔으면 그 값을 사용하고, 그렇지 않으면 행 누적값 적용
-    final_pdf_labour = exact_labour_summary if exact_labour_summary > 0 else round_half_up(line_labour_total)
-    final_pdf_material = exact_material_summary if exact_material_summary > 0 else round_half_up(line_material_total)
+    # 공임은 행별 누적값을 정확하게 반올림
+    final_pdf_labour = round_half_up(total_labour_from_rows)
+    # 전체 순공급가액(VAT제외)에서 공임을 제외한 나머지를 부품/기타로 정확히 산출하여 오차를 완전 해소
+    final_net_total = round_half_up(total_net_from_rows)
+    final_pdf_material = final_net_total - final_pdf_labour
 
     return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
@@ -1403,7 +1380,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     )
     st.write("")
 
-    left_col, right_col = st.columns([3.2, 6.8], gap="medium")
+    left_col, right_col = st.columns([3.0, 7.0], gap="medium")
 
     with left_col:
         if is_mw:
@@ -1680,6 +1657,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 delta=(f"{total_diff_sum:,}원" if total_diff_sum != 0 else None),
             )
 
+            # 상단 합계: PDF 실 수령액 vs DMS 청구 금액
             sub_c3, sub_c4 = st.columns(2)
             sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
             sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
@@ -1690,13 +1668,15 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     "<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;'>🔧 공임 / 부품 세부 내역 (VAT 제외)</div>",
                     unsafe_allow_html=True,
                 )
-                labor_col1, labor_col2 = st.columns(2)
-                labor_col1.metric("청구 공임 합계", f"{raw_excel_labor:,}원")
-                labor_col2.metric("입금 공임 합계", f"{raw_pdf_labour:,}원")
-
-                part_col1, part_col2 = st.columns(2)
-                part_col1.metric("청구 부품 합계", f"{raw_excel_part:,}원")
-                part_col2.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
+                
+                # 좌측: PDF 입금 공임/부품, 우측: DMS 청구 공임/부품 으로 직관적 매칭
+                col_box_pdf, col_box_dms = st.columns(2)
+                with col_box_pdf:
+                    st.metric("입금 공임 합계", f"{raw_pdf_labour:,}원")
+                    st.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
+                with col_box_dms:
+                    st.metric("청구 공임 합계", f"{raw_excel_labor:,}원")
+                    st.metric("청구 부품 합계", f"{raw_excel_part:,}원")
 
             st.write("")
             st.download_button(
