@@ -430,7 +430,6 @@ with head_col1:
     )
 
 with col_sw_lbl:
-    # 텍스트 노출 에러를 방지하기 위해 한 줄(Single Line)로 정돈된 HTML 사용
     st.markdown(
         '<div style="height:38px; margin-top:6px; display:flex; align-items:center; justify-content:center; background-color:#1e293b; border:1px solid #475569; border-radius:8px; font-weight:800; font-size:13px; color:#38bdf8;">S/W</div>',
         unsafe_allow_html=True,
@@ -572,7 +571,33 @@ def find_col_smart(df, keywords, fallback_idx=None):
     return None
 
 def round_half_up(value):
-    return int(value + 0.5)
+    if value >= 0:
+        return int(value + 0.5)
+    else:
+        return int(value - 0.5)
+
+# ────────────────────────────────────────────────────────
+# 🔍 볼보 PDF 금액 파싱 전용 함수 (후치 음수 '371726,10-' 대응)
+# ────────────────────────────────────────────────────────
+def parse_pdf_amount(val_str):
+    """
+    '371726,10-' 또는 '371726.10 -' 와 같이 끝에 음수(-) 기호가 붙는
+    볼보 고유 형식을 완벽한 실수(float)로 파싱합니다.
+    """
+    if not val_str:
+        return 0.0
+    s = str(val_str).strip()
+    is_negative = False
+    if s.endswith("-"):
+        is_negative = True
+        s = s[:-1].strip()
+    elif s.startswith("-"):
+        is_negative = True
+        s = s[1:].strip()
+
+    s = s.replace(" ", "").replace(",", ".")
+    val = float(s)
+    return -val if is_negative else val
 
 # ────────────────────────────────────────────────────────
 # 📊 [테이블 렌더링]
@@ -901,8 +926,8 @@ def load_excel_mw(uploaded_file):
 
 def load_pdf_mw(uploaded_file):
     pdf_groups = defaultdict(list)
-    line_labour_total = 0
-    line_material_total = 0
+    line_labour_total = 0.0
+    line_material_total = 0.0
     exact_labour_summary = 0
     exact_material_summary = 0
 
@@ -921,23 +946,33 @@ def load_pdf_mw(uploaded_file):
                     continue
                 page_seen.add(line_stripped)
 
+                # RepOrder(예: ZJQ7021 등) 감지
                 match = re.search(r'([A-Z]+\d+)', line_stripped)
                 if match:
                     rep_order = match.group(1)
                     parts = line_stripped.split()
+
+                    # 끝에 공백 두고 '-' 가 분리된 경우 (예: ['371726,10', '-']) 병합
+                    if parts and parts[-1] == "-" and len(parts) >= 2:
+                        parts[-2] = parts[-2] + "-"
+                        parts.pop()
+
                     try:
-                        total_str = parts[-1].replace(",", ".")
-                        pdf_total_with_vat = round_half_up(float(total_str) * 1.1)
+                        total_float = parse_pdf_amount(parts[-1])
+                        pdf_total_with_vat = round_half_up(total_float * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
 
+                        # 표준 6컬럼 이상 파싱 (RepOrder 완료일 Job Clmtype Labour Material Sublet Total)
                         if len(parts) >= 6:
-                            l_val = float(parts[-3].replace(",", "."))
-                            m_val = float(parts[-2].replace(",", "."))
+                            # Material 이나 Labour 끝의 '-' 기호까지 고려하여 파싱
+                            l_val = parse_pdf_amount(parts[-3])
+                            m_val = parse_pdf_amount(parts[-2])
                             line_labour_total += l_val
                             line_material_total += m_val
                     except ValueError:
                         continue
 
+        # 마지막 페이지 요약 줄(***) 탐색
         pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
         for p in reversed(pages_to_check):
             p_text = p.extract_text() or ""
@@ -946,24 +981,35 @@ def load_pdf_mw(uploaded_file):
                 if "***" in l_clean:
                     after_stars = l_clean.split("***")[-1]
                     parts = after_stars.split()
+
+                    # 요약 줄에서도 끝에 분리된 '-' 기호 병합
+                    idx_pt = 0
+                    merged_parts = []
+                    while idx_pt < len(parts):
+                        if parts[idx_pt] == "-" and merged_parts:
+                            merged_parts[-1] += "-"
+                        else:
+                            merged_parts.append(parts[idx_pt])
+                        idx_pt += 1
+
                     numeric_tokens = []
-                    for pt in parts:
+                    for pt in merged_parts:
                         cleaned = pt.replace(" ", "")
-                        if re.match(r'^\d+,\d{2}$', cleaned):
+                        if re.match(r'^-?\d+,\d{2}-?$', cleaned):
                             numeric_tokens.append(cleaned)
 
                     if len(numeric_tokens) >= 2:
                         try:
-                            exact_labour_summary = round_half_up(float(numeric_tokens[0].replace(",", ".")))
-                            exact_material_summary = round_half_up(float(numeric_tokens[1].replace(",", ".")))
+                            exact_labour_summary = round_half_up(parse_pdf_amount(numeric_tokens[0]))
+                            exact_material_summary = round_half_up(parse_pdf_amount(numeric_tokens[1]))
                             break
                         except Exception:
                             pass
-            if exact_labour_summary > 0 and exact_material_summary > 0:
+            if exact_labour_summary != 0 and exact_material_summary != 0:
                 break
 
-    final_pdf_labour = exact_labour_summary if exact_labour_summary > 0 else round_half_up(line_labour_total)
-    final_pdf_material = exact_material_summary if exact_material_summary > 0 else round_half_up(line_material_total)
+    final_pdf_labour = exact_labour_summary if exact_labour_summary != 0 else round_half_up(line_labour_total)
+    final_pdf_material = exact_material_summary if exact_material_summary != 0 else round_half_up(line_material_total)
 
     return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
@@ -1909,7 +1955,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
