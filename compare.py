@@ -580,10 +580,6 @@ def round_half_up(value):
 # 🔍 볼보 PDF 금액 파싱 전용 함수 (후치 음수 '371726,10-' 대응)
 # ────────────────────────────────────────────────────────
 def parse_pdf_amount(val_str):
-    """
-    '371726,10-' 또는 '371726.10 -' 와 같이 끝에 음수(-) 기호가 붙는
-    볼보 고유 형식을 완벽한 실수(float)로 파싱합니다.
-    """
     if not val_str:
         return 0.0
     s = str(val_str).strip()
@@ -946,13 +942,11 @@ def load_pdf_mw(uploaded_file):
                     continue
                 page_seen.add(line_stripped)
 
-                # RepOrder(예: ZJQ7021 등) 감지
                 match = re.search(r'([A-Z]+\d+)', line_stripped)
                 if match:
                     rep_order = match.group(1)
                     parts = line_stripped.split()
 
-                    # 끝에 공백 두고 '-' 가 분리된 경우 (예: ['371726,10', '-']) 병합
                     if parts and parts[-1] == "-" and len(parts) >= 2:
                         parts[-2] = parts[-2] + "-"
                         parts.pop()
@@ -962,9 +956,7 @@ def load_pdf_mw(uploaded_file):
                         pdf_total_with_vat = round_half_up(total_float * 1.1)
                         pdf_groups[rep_order].append(pdf_total_with_vat)
 
-                        # 표준 6컬럼 이상 파싱 (RepOrder 완료일 Job Clmtype Labour Material Sublet Total)
                         if len(parts) >= 6:
-                            # Material 이나 Labour 끝의 '-' 기호까지 고려하여 파싱
                             l_val = parse_pdf_amount(parts[-3])
                             m_val = parse_pdf_amount(parts[-2])
                             line_labour_total += l_val
@@ -972,7 +964,6 @@ def load_pdf_mw(uploaded_file):
                     except ValueError:
                         continue
 
-        # 마지막 페이지 요약 줄(***) 탐색
         pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
         for p in reversed(pages_to_check):
             p_text = p.extract_text() or ""
@@ -982,7 +973,6 @@ def load_pdf_mw(uploaded_file):
                     after_stars = l_clean.split("***")[-1]
                     parts = after_stars.split()
 
-                    # 요약 줄에서도 끝에 분리된 '-' 기호 병합
                     idx_pt = 0
                     merged_parts = []
                     while idx_pt < len(parts):
@@ -1706,9 +1696,16 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 delta=(f"{total_diff_sum:,}원" if total_diff_sum != 0 else None),
             )
 
+            # 🔄 위치 교체 및 텍스트 보강
             sub_c3, sub_c4 = st.columns(2)
-            sub_c3.metric(f"{'PDF' if is_mw else '공지 쿠폰'} 총 합계", f"{total_1_sum:,}원")
-            sub_c4.metric(f"{'DMS' if is_mw else 'DMS 쿠폰'} 총 합계", f"{total_2_sum:,}원")
+            sub_c3.metric(
+                f"{'DMS 총 합계 (청구 합계)' if is_mw else 'DMS 쿠폰 (청구 합계)'}",
+                f"{total_2_sum:,}원",
+            )
+            sub_c4.metric(
+                f"{'PDF 총 합계 (입금 합계)' if is_mw else '공지 쿠폰 (입금 합계)'}",
+                f"{total_1_sum:,}원",
+            )
 
             if is_mw:
                 st.write("")
@@ -1955,7 +1952,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
