@@ -1035,22 +1035,19 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         for th in target_headers
     }
 
-    month_str = "6월"
+    # 파일명 및 내용에서 월 판단 로직 (판단 불가 시 "X월")
+    month_str = "X월"
     file_name = getattr(uploaded_file_mw, "name", "")
-    m_fn = re.search(r"20\d{2}(\d{2})", file_name)
-    if m_fn:
-        month_str = f"{int(m_fn.group(1))}월"
+    
+    # 1. 파일명에서 '7월', '07월' 형태 확인
+    m_direct = re.search(r"(\d{1,2})월", file_name)
+    if m_direct:
+        month_str = f"{int(m_direct.group(1))}월"
     else:
-        for col in df_mw_raw.columns:
-            if any(keyword in str(col).upper() for keyword in ["일자", "DATE", "완결", "청구"]):
-                sample_dates = df_mw_raw[col].dropna().astype(str).tolist()
-                for d in sample_dates:
-                    m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
-                    if m:
-                        month_str = f"{int(m.group(1))}월"
-                        break
-                if month_str != "6월":
-                    break
+        # 2. 파일명에서 202607 형태의 연월 확인
+        m_fn = re.search(r"20\d{2}(\d{2})", file_name)
+        if m_fn and 1 <= int(m_fn.group(1)) <= 12:
+            month_str = f"{int(m_fn.group(1))}월"
 
     ws.merge_cells("A1:N1")
     ws["A1"] = f"{month_str} WARRANTY 수 령 내 역"
