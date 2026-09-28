@@ -867,174 +867,6 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
-# 1️⃣ [모드 1] MW 보증 비교
-# ────────────────────────────────────────────────────────
-def load_excel_mw(uploaded_file):
-    df = read_excel_smart_header(uploaded_file)
-    col_claim_no = find_col_smart(
-        df, ["CLAIM NO", "CLAIM_NO", "클레임번호", "청구번호", "CLAIM"], fallback_idx=0
-    )
-
-    target_cols = ["공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세"]
-    for col in target_cols:
-        matched_col = find_col_smart(df, [col])
-        if matched_col:
-            df[matched_col] = pd.to_numeric(df[matched_col], errors="coerce").fillna(0)
-
-    c_labor = find_col_smart(df, ["공임청구액"])
-    c_labor_vat = find_col_smart(df, ["공임청구부가세"])
-    c_part = find_col_smart(df, ["부품청구액"])
-    c_part_vat = find_col_smart(df, ["부품청구부가세"])
-
-    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor else 0
-    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part else 0
-
-    df["Excel_Total"] = (
-        (df[c_labor] if c_labor else 0)
-        + (df[c_labor_vat] if c_labor_vat else 0)
-        + (df[c_part] if c_part else 0)
-        + (df[c_part_vat] if c_part_vat else 0)
-    ).apply(round_half_up)
-
-    col_r = find_col_smart(
-        df,
-        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
-        fallback_idx=17,
-    )
-    col_v = find_col_smart(
-        df,
-        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
-        fallback_idx=21,
-    )
-
-    # 루프 밖에서 고정 정의하여 루프 내 오류 원천 방지
-    col_job_no = find_col_smart(df, ["JOB NO", "JOB_NO", "JOB", "작업번호"], fallback_idx=2)
-    col_ro_no = find_col_smart(df, ["R/O NO", "RO NO", "RO_NO", "RO", "차량번호", "주문번호"], fallback_idx=1)
-
-    excel_groups = defaultdict(list)
-    for _, row in df.iterrows():
-        claim_no = str(row.get(col_claim_no, "")).strip() if col_claim_no else ""
-        if claim_no and claim_no != "nan":
-            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
-            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
-            
-            job_val = str(row.get(col_job_no, "1")).strip() if col_job_no else "1"
-            ro_val = str(row.get(col_ro_no, "")).strip() if col_ro_no else ""
-
-            excel_groups[claim_no].append({
-                "amount": int(row["Excel_Total"]),
-                "claim_type": r_val if r_val and r_val != "nan" else "-",
-                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
-                "labor": int(row[c_labor]) if c_labor else 0,
-                "labor_vat": int(row[c_labor_vat]) if c_labor_vat else 0,
-                "part": int(row[c_part]) if c_part else 0,
-                "part_vat": int(row[c_part_vat]) if c_part_vat else 0,
-                "job_no": job_val,
-                "ro_no": ro_val
-            })
-    return excel_groups, raw_labor_sum, raw_part_sum
-
-def load_pdf_mw(uploaded_file):
-    pdf_groups = defaultdict(list)
-    line_labour_total = 0.0
-    line_material_total = 0.0
-    exact_labour_summary = 0
-    exact_material_summary = 0
-
-    with pdfplumber.open(uploaded_file) as pdf:
-        for page_num, page in enumerate(pdf.pages):
-            if page_num % 2 != 0:
-                continue
-            text = page.extract_text()
-            if not text:
-                continue
-            lines = text.split("\n")
-            page_seen = set()
-            for line in lines:
-                line_stripped = line.strip()
-                if line_stripped in page_seen:
-                    continue
-                page_seen.add(line_stripped)
-
-                match = re.search(r'([A-Z]+\d+)', line_stripped)
-                if match:
-                    rep_order = match.group(1)
-                    parts = line_stripped.split()
-
-                    if parts and parts[-1] == "-" and len(parts) >= 2:
-                        parts[-2] = parts[-2] + "-"
-                        parts.pop()
-
-                    try:
-                        total_float = parse_pdf_amount(parts[-1])
-                        pdf_total_with_vat = round_half_up(total_float * 1.1)
-
-                        ro_no = parts[1] if len(parts) >= 2 else ""
-                        job_no = parts[2] if len(parts) >= 3 else "1"
-                        clm_type = parts[3] if len(parts) >= 4 else ""
-
-                        # 뒤에서부터 명확한 인덱스 파싱
-                        l_cost = parse_pdf_amount(parts[-4]) if len(parts) >= 7 else (parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0)
-                        m_cost = parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0
-                        sublet = parse_pdf_amount(parts[-2]) if len(parts) >= 6 else 0.0
-
-                        pdf_groups[rep_order].append({
-                            "total_vat": pdf_total_with_vat,
-                            "ro_no": ro_no,
-                            "job_no": job_no,
-                            "clm_type": clm_type,
-                            "labour_cost": l_cost,
-                            "material": m_cost,
-                            "sublet": sublet,
-                            "total": total_float
-                        })
-
-                        if len(parts) >= 6:
-                            line_labour_total += l_cost
-                            line_material_total += m_cost
-                    except ValueError:
-                        continue
-
-        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
-        for p in reversed(pages_to_check):
-            p_text = p.extract_text() or ""
-            for line in p_text.split("\n"):
-                l_clean = line.strip()
-                if "***" in l_clean:
-                    after_stars = l_clean.split("***")[-1]
-                    parts = after_stars.split()
-
-                    idx_pt = 0
-                    merged_parts = []
-                    while idx_pt < len(parts):
-                        if parts[idx_pt] == "-" and merged_parts:
-                            merged_parts[-1] += "-"
-                        else:
-                            merged_parts.append(parts[idx_pt])
-                        idx_pt += 1
-
-                    numeric_tokens = []
-                    for pt in merged_parts:
-                        cleaned = pt.replace(" ", "")
-                        if re.match(r'^-?\d+,\d{2}-?$', cleaned):
-                            numeric_tokens.append(cleaned)
-
-                    if len(numeric_tokens) >= 2:
-                        try:
-                            exact_labour_summary = round_half_up(parse_pdf_amount(numeric_tokens[0]))
-                            exact_material_summary = round_half_up(parse_pdf_amount(numeric_tokens[1]))
-                            break
-                        except Exception:
-                            pass
-            if exact_labour_summary != 0 and exact_material_summary != 0:
-                break
-
-    final_pdf_labour = exact_labour_summary if exact_labour_summary != 0 else round_half_up(line_labour_total)
-    final_pdf_material = exact_material_summary if exact_material_summary != 0 else round_half_up(line_material_total)
-
-    return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
-
-# ────────────────────────────────────────────────────────
 # 📊 [MW 세부 대조 비교문서 (PDF vs DMS) 생성]
 # ────────────────────────────────────────────────────────
 def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
@@ -1069,21 +901,23 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     ws["B2"].alignment = align_center
     ws["B2"].fill = fill_yellow
 
+    ws.merge_cells("L2:N2")
     ws["L2"] = "PDF - DMS"
     ws["L2"].font = font_bold
     ws["L2"].alignment = align_center
     ws["L2"].fill = fill_diff_title
-    ws["L2"].border = thin_border
 
-    ws.merge_cells("N2:V2")
-    ws["N2"] = "DMS FILE"
-    ws["N2"].font = font_main_title
-    ws["N2"].alignment = align_center
-    ws["N2"].fill = fill_yellow
+    ws.merge_cells("P2:X2")
+    ws["P2"] = "DMS FILE"
+    ws["P2"].font = font_main_title
+    ws["P2"].alignment = align_center
+    ws["P2"].fill = fill_yellow
 
     for col in range(2, 11):
         ws.cell(row=2, column=col).border = thin_border
-    for col in range(14, 23):
+    for col in range(12, 15):
+        ws.cell(row=2, column=col).border = thin_border
+    for col in range(16, 25):
         ws.cell(row=2, column=col).border = thin_border
 
     # 2. 서브 헤더 바 (3행)
@@ -1095,14 +929,18 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
         c.fill = fill_header_gray
         c.border = thin_border
 
-    c_diff = ws.cell(row=3, column=12, value="차액")
-    c_diff.font = font_header
-    c_diff.alignment = align_center
-    c_diff.fill = fill_header_gray
-    c_diff.border = thin_border
+    # 중앙 차액 헤더 (공임차액, 부품차액, 총 차액)
+    diff_headers = ["공임차액", "부품차액", "총 차액"]
+    for i, h in enumerate(diff_headers, start=12):
+        c = ws.cell(row=3, column=i, value=h)
+        c.font = font_header
+        c.alignment = align_center
+        c.fill = fill_header_gray
+        c.border = thin_border
 
+    # 우측 DMS 헤더 (P열 ~ X열)
     right_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세", "TOTAL"]
-    for i, h in enumerate(right_headers, start=14):
+    for i, h in enumerate(right_headers, start=16):
         c = ws.cell(row=3, column=i, value=h)
         c.font = font_header
         c.alignment = align_center
@@ -1124,7 +962,17 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
 
             pdf_vat_total = p_data["total_vat"] if p_data else 0
             dms_vat_total = e_data["amount"] if e_data else 0
-            diff_amt = pdf_vat_total - dms_vat_total if (p_data and e_data) else (pdf_vat_total if p_data else -dms_vat_total)
+            diff_total = pdf_vat_total - dms_vat_total if (p_data and e_data) else (pdf_vat_total if p_data else -dms_vat_total)
+
+            # 세부 공임/부품 차액 계산
+            pdf_labor_val = p_data["labour_cost"] if p_data else 0.0
+            pdf_part_val = p_data["material"] if p_data else 0.0
+
+            dms_labor_total = (e_data["labor"] + e_data["labor_vat"]) if e_data else 0
+            dms_part_total = (e_data["part"] + e_data["part_vat"]) if e_data else 0
+
+            diff_labor = round_half_up(pdf_labor_val * 1.1) - dms_labor_total if (p_data and e_data) else (round_half_up(pdf_labor_val * 1.1) if p_data else -dms_labor_total)
+            diff_part = round_half_up(pdf_part_val * 1.1) - dms_part_total if (p_data and e_data) else (round_half_up(pdf_part_val * 1.1) if p_data else -dms_part_total)
 
             # 좌측 PDF 영역 (B~J): Labour cost -> Material -> Sublet -> Total -> TOTAL(VAT)
             ws.cell(row=cur_row, column=2, value=claim if p_data else "").alignment = align_center
@@ -1158,36 +1006,48 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
             c_tv.alignment = align_right
             c_tv.font = font_bold
 
-            # 중앙 차액 영역 (L)
-            c_df = ws.cell(row=cur_row, column=12, value=diff_amt)
-            c_df.number_format = "#,##0"
-            c_df.alignment = align_right
-            c_df.font = font_bold
-            c_df.fill = fill_diff_col
+            # 중앙 차액 영역 (12: 공임차액, 13: 부품차액, 14: 총 차액)
+            c_d_l = ws.cell(row=cur_row, column=12, value=diff_labor)
+            c_d_l.number_format = "#,##0"
+            c_d_l.alignment = align_right
+            c_d_l.font = font_bold
+            c_d_l.fill = fill_diff_col
 
-            # 우측 DMS 영역 (N~V)
-            ws.cell(row=cur_row, column=14, value=claim if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=15, value=e_data["ro_no"] if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=16, value=e_data["job_no"] if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=17, value=e_data["claim_type"] if e_data else "").alignment = align_center
+            c_d_p = ws.cell(row=cur_row, column=13, value=diff_part)
+            c_d_p.number_format = "#,##0"
+            c_d_p.alignment = align_right
+            c_d_p.font = font_bold
+            c_d_p.fill = fill_diff_col
 
-            c_el = ws.cell(row=cur_row, column=18, value=e_data["labor"] if e_data else "")
+            c_d_t = ws.cell(row=cur_row, column=14, value=diff_total)
+            c_d_t.number_format = "#,##0"
+            c_d_t.alignment = align_right
+            c_d_t.font = font_bold
+            c_d_t.fill = fill_diff_col
+
+            # 우측 DMS 영역 (P열~X열, 16~24)
+            ws.cell(row=cur_row, column=16, value=claim if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=17, value=e_data["ro_no"] if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=18, value=e_data["job_no"] if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=19, value=e_data["claim_type"] if e_data else "").alignment = align_center
+
+            c_el = ws.cell(row=cur_row, column=20, value=e_data["labor"] if e_data else "")
             c_el.number_format = "#,##0"
             c_el.alignment = align_right
 
-            c_elv = ws.cell(row=cur_row, column=19, value=e_data["labor_vat"] if e_data else "")
+            c_elv = ws.cell(row=cur_row, column=21, value=e_data["labor_vat"] if e_data else "")
             c_elv.number_format = "#,##0"
             c_elv.alignment = align_right
 
-            c_ep = ws.cell(row=cur_row, column=20, value=e_data["part"] if e_data else "")
+            c_ep = ws.cell(row=cur_row, column=22, value=e_data["part"] if e_data else "")
             c_ep.number_format = "#,##0"
             c_ep.alignment = align_right
 
-            c_epv = ws.cell(row=cur_row, column=21, value=e_data["part_vat"] if e_data else "")
+            c_epv = ws.cell(row=cur_row, column=23, value=e_data["part_vat"] if e_data else "")
             c_epv.number_format = "#,##0"
             c_epv.alignment = align_right
 
-            c_et = ws.cell(row=cur_row, column=22, value=dms_vat_total if e_data else "")
+            c_et = ws.cell(row=cur_row, column=24, value=dms_vat_total if e_data else "")
             c_et.number_format = "#,##0"
             c_et.alignment = align_right
             c_et.font = font_bold
@@ -1195,17 +1055,18 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
             for col in range(2, 11):
                 ws.cell(row=cur_row, column=col).border = thin_border
                 ws.cell(row=cur_row, column=col).font = font_data if col != 10 else font_bold
-            ws.cell(row=cur_row, column=12).border = thin_border
-            for col in range(14, 23):
+            for col in range(12, 15):
                 ws.cell(row=cur_row, column=col).border = thin_border
-                ws.cell(row=cur_row, column=col).font = font_data if col != 22 else font_bold
+            for col in range(16, 25):
+                ws.cell(row=cur_row, column=col).border = thin_border
+                ws.cell(row=cur_row, column=col).font = font_data if col != 24 else font_bold
 
             cur_row += 1
 
     col_widths = {
         "B": 11, "C": 12, "D": 8, "E": 11, "F": 13, "G": 14, "H": 8, "I": 14, "J": 13,
-        "L": 11,
-        "N": 11, "O": 15, "P": 8, "Q": 11, "R": 12, "S": 13, "T": 12, "U": 13, "V": 13
+        "L": 12, "M": 12, "N": 12,
+        "P": 11, "Q": 15, "R": 8, "S": 11, "T": 12, "U": 13, "V": 12, "W": 13, "X": 13
     }
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width
@@ -2173,7 +2034,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
@@ -2485,7 +2346,7 @@ elif mode == "캘린더":
 
     num_weeks = len(month_cal)
     calc_iframe_height = num_weeks * 95 + 50
-    components.html("".join(cal_html), height=calc_iframe_height, scrolling=False)
+    components.html(流入cal_html := "".join(cal_html), height=calc_iframe_height, scrolling=False)
 
     st.divider()
 
