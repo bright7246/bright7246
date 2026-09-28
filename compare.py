@@ -685,7 +685,7 @@ def render_mw_side_by_side_tables(df_main, df_diff):
                 main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
             else:
                 align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
-                main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
+                main_tbody.append(f'<td class="{align_class}"">{val_str}</td>')
         main_tbody.append("</tr>")
 
     diff_section = ""
@@ -869,6 +869,180 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
 
     calc_height = min(1160, max(320, len(df_main) * 44 + 100))
     components.html(full_html, height=calc_height, scrolling=False)
+
+# ────────────────────────────────────────────────────────
+# 1️⃣ [모드 1] MW 보증 비교
+# ────────────────────────────────────────────────────────
+def load_excel_mw(uploaded_file):
+    df = read_excel_smart_header(uploaded_file)
+    col_claim_no = find_col_smart(
+        df, ["CLAIM NO", "CLAIM_NO", "클레임번호", "청구번호", "CLAIM"], fallback_idx=0
+    )
+
+    c_labor = find_col_smart(df, ["공임청구액", "공임청구", "공임 청구액"])
+    c_labor_vat = find_col_smart(df, ["공임청구부가세", "공임청구 부가세", "공임부가세"])
+    c_part = find_col_smart(df, ["부품청구액", "부품청구", "부품 청구액"])
+    c_part_vat = find_col_smart(df, ["부품청구부가세", "부품청구 부가세", "부품부가세"])
+
+    if c_labor and c_labor in df.columns:
+        df[c_labor] = pd.to_numeric(df[c_labor], errors="coerce").fillna(0)
+    if c_labor_vat and c_labor_vat in df.columns:
+        df[c_labor_vat] = pd.to_numeric(df[c_labor_vat], errors="coerce").fillna(0)
+    if c_part and c_part in df.columns:
+        df[c_part] = pd.to_numeric(df[c_part], errors="coerce").fillna(0)
+    if c_part_vat and c_part_vat in df.columns:
+        df[c_part_vat] = pd.to_numeric(df[c_part_vat], errors="coerce").fillna(0)
+
+    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor and c_labor in df.columns else 0
+    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part and c_part in df.columns else 0
+
+    labor_series = df[c_labor] if c_labor and c_labor in df.columns else pd.Series(0, index=df.index)
+    labor_vat_series = df[c_labor_vat] if c_labor_vat and c_labor_vat in df.columns else pd.Series(0, index=df.index)
+    part_series = df[c_part] if c_part and c_part in df.columns else pd.Series(0, index=df.index)
+    part_vat_series = df[c_part_vat] if c_part_vat and c_part_vat in df.columns else pd.Series(0, index=df.index)
+
+    df["Excel_Total"] = (labor_series + labor_vat_series + part_series + part_vat_series).apply(round_half_up)
+
+    col_r = find_col_smart(
+        df,
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
+        fallback_idx=17,
+    )
+    col_v = find_col_smart(
+        df,
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
+        fallback_idx=21,
+    )
+
+    col_job_no = find_col_smart(df, ["JOB NO", "JOB_NO", "JOB", "작업번호"], fallback_idx=2)
+    col_ro_no = find_col_smart(df, ["R/O NO", "RO NO", "RO_NO", "RO", "차량번호", "주문번호"], fallback_idx=1)
+
+    excel_groups = defaultdict(list)
+    for _, row in df.iterrows():
+        claim_no = str(row.get(col_claim_no, "")).strip() if col_claim_no and col_claim_no in row else ""
+        if claim_no and claim_no != "nan":
+            r_val = str(row.get(col_r, "-")).strip() if col_r and col_r in row else "-"
+            raw_v = str(row.get(col_v, "-")).strip() if col_v and col_v in row else "-"
+            
+            job_val = str(row.get(col_job_no, "1")).strip() if col_job_no and col_job_no in row else "1"
+            ro_val = str(row.get(col_ro_no, "")).strip() if col_ro_no and col_ro_no in row else ""
+
+            val_labor = int(round_half_up(row.get(c_labor, 0))) if c_labor and c_labor in row else 0
+            val_labor_vat = int(round_half_up(row.get(c_labor_vat, 0))) if c_labor_vat and c_labor_vat in row else 0
+            val_part = int(round_half_up(row.get(c_part, 0))) if c_part and c_part in row else 0
+            val_part_vat = int(round_half_up(row.get(c_part_vat, 0))) if c_part_vat and c_part_vat in row else 0
+
+            excel_groups[claim_no].append({
+                "amount": int(row.get("Excel_Total", 0)),
+                "claim_type": r_val if r_val and r_val != "nan" else "-",
+                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
+                "labor": val_labor,
+                "labor_vat": val_labor_vat,
+                "part": val_part,
+                "part_vat": val_part_vat,
+                "job_no": job_val,
+                "ro_no": ro_val
+            })
+    return excel_groups, raw_labor_sum, raw_part_sum
+
+def load_pdf_mw(uploaded_file):
+    pdf_groups = defaultdict(list)
+    line_labour_total = 0.0
+    line_material_total = 0.0
+    exact_labour_summary = 0
+    exact_material_summary = 0
+
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            if page_num % 2 != 0:
+                continue
+            text = page.extract_text()
+            if not text:
+                continue
+            lines = text.split("\n")
+            page_seen = set()
+            for line in lines:
+                line_stripped = line.strip()
+                if line_stripped in page_seen:
+                    continue
+                page_seen.add(line_stripped)
+
+                match = re.search(r'([A-Z]+\d+)', line_stripped)
+                if match:
+                    rep_order = match.group(1)
+                    parts = line_stripped.split()
+
+                    if parts and parts[-1] == "-" and len(parts) >= 2:
+                        parts[-2] = parts[-2] + "-"
+                        parts.pop()
+
+                    try:
+                        total_float = parse_pdf_amount(parts[-1])
+                        pdf_total_with_vat = round_half_up(total_float * 1.1)
+
+                        ro_no = parts[1] if len(parts) >= 2 else ""
+                        job_no = parts[2] if len(parts) >= 3 else "1"
+                        clm_type = parts[3] if len(parts) >= 4 else ""
+
+                        l_cost = parse_pdf_amount(parts[-4]) if len(parts) >= 7 else (parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0)
+                        m_cost = parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0
+                        sublet = parse_pdf_amount(parts[-2]) if len(parts) >= 6 else 0.0
+
+                        pdf_groups[rep_order].append({
+                            "total_vat": pdf_total_with_vat,
+                            "ro_no": ro_no,
+                            "job_no": job_no,
+                            "clm_type": clm_type,
+                            "labour_cost": l_cost,
+                            "material": m_cost,
+                            "sublet": sublet,
+                            "total": total_float
+                        })
+
+                        if len(parts) >= 6:
+                            line_labour_total += l_cost
+                            line_material_total += m_cost
+                    except ValueError:
+                        continue
+
+        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
+        for p in reversed(pages_to_check):
+            p_text = p.extract_text() or ""
+            for line in p_text.split("\n"):
+                l_clean = line.strip()
+                if "***" in l_clean:
+                    after_stars = l_clean.split("***")[-1]
+                    parts = after_stars.split()
+
+                    idx_pt = 0
+                    merged_parts = []
+                    while idx_pt < len(parts):
+                        if parts[idx_pt] == "-" and merged_parts:
+                            merged_parts[-1] += "-"
+                        else:
+                            merged_parts.append(parts[idx_pt])
+                        idx_pt += 1
+
+                    numeric_tokens = []
+                    for pt in merged_parts:
+                        cleaned = pt.replace(" ", "")
+                        if re.match(r'^-?\d+,\d{2}-?$', cleaned):
+                            numeric_tokens.append(cleaned)
+
+                    if len(numeric_tokens) >= 2:
+                        try:
+                            exact_labour_summary = round_half_up(parse_pdf_amount(numeric_tokens[0]))
+                            exact_material_summary = round_half_up(parse_pdf_amount(numeric_tokens[1]))
+                            break
+                        except Exception:
+                            pass
+            if exact_labour_summary != 0 and exact_material_summary != 0:
+                break
+
+    final_pdf_labour = exact_labour_summary if exact_labour_summary != 0 else round_half_up(line_labour_total)
+    final_pdf_material = exact_material_summary if exact_material_summary != 0 else round_half_up(line_material_total)
+
+    return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
 # ────────────────────────────────────────────────────────
 # 📊 [MW 세부 대조 비교문서 (PDF vs DMS) 생성]
