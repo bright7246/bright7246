@@ -867,6 +867,174 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
+# 1️⃣ [모드 1] MW 보증 비교
+# ────────────────────────────────────────────────────────
+def load_excel_mw(uploaded_file):
+    df = read_excel_smart_header(uploaded_file)
+    col_claim_no = find_col_smart(
+        df, ["CLAIM NO", "CLAIM_NO", "클레임번호", "청구번호", "CLAIM"], fallback_idx=0
+    )
+
+    target_cols = ["공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세"]
+    for col in target_cols:
+        matched_col = find_col_smart(df, [col])
+        if matched_col:
+            df[matched_col] = pd.to_numeric(df[matched_col], errors="coerce").fillna(0)
+
+    c_labor = find_col_smart(df, ["공임청구액"])
+    c_labor_vat = find_col_smart(df, ["공임청구부가세"])
+    c_part = find_col_smart(df, ["부품청구액"])
+    c_part_vat = find_col_smart(df, ["부품청구부가세"])
+
+    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor else 0
+    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part else 0
+
+    df["Excel_Total"] = (
+        (df[c_labor] if c_labor else 0)
+        + (df[c_labor_vat] if c_labor_vat else 0)
+        + (df[c_part] if c_part else 0)
+        + (df[c_part_vat] if c_part_vat else 0)
+    ).apply(round_half_up)
+
+    col_r = find_col_smart(
+        df,
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
+        fallback_idx=17,
+    )
+    col_v = find_col_smart(
+        df,
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
+        fallback_idx=21,
+    )
+
+    # 루프 밖에서 고정 정의하여 루프 내 오류 원천 방지
+    col_job_no = find_col_smart(df, ["JOB NO", "JOB_NO", "JOB", "작업번호"], fallback_idx=2)
+    col_ro_no = find_col_smart(df, ["R/O NO", "RO NO", "RO_NO", "RO", "차량번호", "주문번호"], fallback_idx=1)
+
+    excel_groups = defaultdict(list)
+    for _, row in df.iterrows():
+        claim_no = str(row.get(col_claim_no, "")).strip() if col_claim_no else ""
+        if claim_no and claim_no != "nan":
+            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
+            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
+            
+            job_val = str(row.get(col_job_no, "1")).strip() if col_job_no else "1"
+            ro_val = str(row.get(col_ro_no, "")).strip() if col_ro_no else ""
+
+            excel_groups[claim_no].append({
+                "amount": int(row["Excel_Total"]),
+                "claim_type": r_val if r_val and r_val != "nan" else "-",
+                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
+                "labor": int(row[c_labor]) if c_labor else 0,
+                "labor_vat": int(row[c_labor_vat]) if c_labor_vat else 0,
+                "part": int(row[c_part]) if c_part else 0,
+                "part_vat": int(row[c_part_vat]) if c_part_vat else 0,
+                "job_no": job_val,
+                "ro_no": ro_val
+            })
+    return excel_groups, raw_labor_sum, raw_part_sum
+
+def load_pdf_mw(uploaded_file):
+    pdf_groups = defaultdict(list)
+    line_labour_total = 0.0
+    line_material_total = 0.0
+    exact_labour_summary = 0
+    exact_material_summary = 0
+
+    with pdfplumber.open(uploaded_file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            if page_num % 2 != 0:
+                continue
+            text = page.extract_text()
+            if not text:
+                continue
+            lines = text.split("\n")
+            page_seen = set()
+            for line in lines:
+                line_stripped = line.strip()
+                if line_stripped in page_seen:
+                    continue
+                page_seen.add(line_stripped)
+
+                match = re.search(r'([A-Z]+\d+)', line_stripped)
+                if match:
+                    rep_order = match.group(1)
+                    parts = line_stripped.split()
+
+                    if parts and parts[-1] == "-" and len(parts) >= 2:
+                        parts[-2] = parts[-2] + "-"
+                        parts.pop()
+
+                    try:
+                        total_float = parse_pdf_amount(parts[-1])
+                        pdf_total_with_vat = round_half_up(total_float * 1.1)
+
+                        ro_no = parts[1] if len(parts) >= 2 else ""
+                        job_no = parts[2] if len(parts) >= 3 else "1"
+                        clm_type = parts[3] if len(parts) >= 4 else ""
+
+                        # 뒤에서부터 명확한 인덱스 파싱
+                        l_cost = parse_pdf_amount(parts[-4]) if len(parts) >= 7 else (parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0)
+                        m_cost = parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0
+                        sublet = parse_pdf_amount(parts[-2]) if len(parts) >= 6 else 0.0
+
+                        pdf_groups[rep_order].append({
+                            "total_vat": pdf_total_with_vat,
+                            "ro_no": ro_no,
+                            "job_no": job_no,
+                            "clm_type": clm_type,
+                            "labour_cost": l_cost,
+                            "material": m_cost,
+                            "sublet": sublet,
+                            "total": total_float
+                        })
+
+                        if len(parts) >= 6:
+                            line_labour_total += l_cost
+                            line_material_total += m_cost
+                    except ValueError:
+                        continue
+
+        pages_to_check = pdf.pages[-2:] if len(pdf.pages) >= 2 else pdf.pages
+        for p in reversed(pages_to_check):
+            p_text = p.extract_text() or ""
+            for line in p_text.split("\n"):
+                l_clean = line.strip()
+                if "***" in l_clean:
+                    after_stars = l_clean.split("***")[-1]
+                    parts = after_stars.split()
+
+                    idx_pt = 0
+                    merged_parts = []
+                    while idx_pt < len(parts):
+                        if parts[idx_pt] == "-" and merged_parts:
+                            merged_parts[-1] += "-"
+                        else:
+                            merged_parts.append(parts[idx_pt])
+                        idx_pt += 1
+
+                    numeric_tokens = []
+                    for pt in merged_parts:
+                        cleaned = pt.replace(" ", "")
+                        if re.match(r'^-?\d+,\d{2}-?$', cleaned):
+                            numeric_tokens.append(cleaned)
+
+                    if len(numeric_tokens) >= 2:
+                        try:
+                            exact_labour_summary = round_half_up(parse_pdf_amount(numeric_tokens[0]))
+                            exact_material_summary = round_half_up(parse_pdf_amount(numeric_tokens[1]))
+                            break
+                        except Exception:
+                            pass
+            if exact_labour_summary != 0 and exact_material_summary != 0:
+                break
+
+    final_pdf_labour = exact_labour_summary if exact_labour_summary != 0 else round_half_up(line_labour_total)
+    final_pdf_material = exact_material_summary if exact_material_summary != 0 else round_half_up(line_material_total)
+
+    return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
+
+# ────────────────────────────────────────────────────────
 # 📊 [MW 세부 대조 비교문서 (PDF vs DMS) 생성]
 # ────────────────────────────────────────────────────────
 def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
@@ -1046,6 +1214,402 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     wb.save(output)
     output.seek(0)
     return output
+
+def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
+    df_mw_raw = read_excel_smart_header(uploaded_file_mw)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "WARRANTY 수령내역"
+    ws.print_title_rows = "1:3"
+
+    target_headers = [
+        "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
+        "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
+        "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세",
+    ]
+    alias_dict = {
+        "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
+        "차량번호": ["차량번호", "차량 번호", "CAR NO", "VEHICLE"],
+        "Job No": ["JOB NO", "JOB", "작업번호"],
+        "완결일자": ["완결일자", "완결일", "완결"],
+        "청구일자": ["청구일자", "청구일"],
+        "공임청구액": ["공임청구액", "공임청구", "공임 청구액"],
+        "공임청구부가세": ["공임청구부가세", "공임청구 부가세", "공임부가세"],
+        "부품청구액": ["부품청구액", "부품청구", "부품 청구액"],
+        "부품청구부가세": ["부품청구부가세", "부품청구 부가세", "부품부가세"],
+        "공임입금액": ["공임입금액", "공임입금", "공임승인액", "공임승인", "공임 입금액", "공임승인금액"],
+        "공임입금부가세": ["공임입금부가세", "공임입금 부가세", "공임승인부가세"],
+        "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액", "부품승인금액"],
+        "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"],
+    }
+    col_mapping = {
+        th: find_col_smart(df_mw_raw, alias_dict.get(th, [th]))
+        for th in target_headers
+    }
+
+    month_str = "X월"
+    file_name = getattr(uploaded_file_mw, "name", "")
+    m_direct = re.search(r"(\d{1,2})월", file_name)
+    if m_direct:
+        month_str = f"{int(m_direct.group(1))}월"
+    else:
+        m_fn = re.search(r"20\d{2}(\d{2})", file_name)
+        if m_fn and 1 <= int(m_fn.group(1)) <= 12:
+            month_str = f"{int(m_fn.group(1))}월"
+
+    ws.merge_cells("A1:N1")
+    ws["A1"] = f"{month_str} WARRANTY 수 령 내 역"
+    ws["A1"].font = Font(size=22, bold=True)
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 40
+
+    thin_border = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+    header_font = Font(size=10, bold=True)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    ws.row_dimensions[3].height = 25
+    cell_a = ws.cell(row=3, column=1, value="No.")
+    cell_a.font = header_font
+    cell_a.alignment = header_align
+    cell_a.border = thin_border
+
+    for col_pos, h_name in enumerate(target_headers, 2):
+        cell = ws.cell(row=3, column=col_pos, value=h_name)
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    current_row = 4
+    no_counter = 1
+    for _, row in df_mw_raw.iterrows():
+        if row.dropna().empty:
+            continue
+        ws.row_dimensions[current_row].height = 20
+        c_no = ws.cell(row=current_row, column=1, value=no_counter)
+        c_no.alignment = Alignment(horizontal="center", vertical="center")
+        c_no.border = thin_border
+
+        for col_pos, h_name in enumerate(target_headers, 2):
+            cell = ws.cell(row=current_row, column=col_pos)
+            mapped_col = col_mapping.get(h_name)
+            if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
+                val = row[mapped_col]
+                if isinstance(val, pd.Timestamp):
+                    val = val.strftime("%Y-%m-%d")
+                elif isinstance(val, str) and len(val) >= 10 and "00:00:00" in val:
+                    val = val.split()[0]
+                cell.value = val
+                if isinstance(val, (int, float)):
+                    cell.number_format = "#,##0"
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                else:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.value = ""
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+        current_row += 1
+        no_counter += 1
+
+    ws.row_dimensions[current_row].height = 25
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+    c_sum = ws.cell(row=current_row, column=1, value="합계")
+    c_sum.font = Font(bold=True)
+    c_sum.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=2).border = thin_border
+
+    ws.merge_cells(start_row=current_row, start_column=3, end_row=current_row, end_column=4)
+    c_cnt = ws.cell(row=current_row, column=3, value=f"댓수 : {count}")
+    c_cnt.font = Font(bold=True)
+    c_cnt.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=3).border = thin_border
+    ws.cell(row=current_row, column=4).border = thin_border
+
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=6).border = thin_border
+
+    c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
+    c_g.font = Font(bold=True)
+    c_g.alignment = Alignment(horizontal="center", vertical="center")
+    c_g.border = thin_border
+
+    c_h = ws.cell(row=current_row, column=8, value=total_pdf)
+    c_h.font = Font(bold=True)
+    c_h.number_format = "#,##0"
+    c_h.alignment = Alignment(horizontal="right", vertical="center")
+    c_h.border = thin_border
+
+    c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
+    c_i.font = Font(bold=True)
+    c_i.alignment = Alignment(horizontal="center", vertical="center")
+    c_i.border = thin_border
+
+    c_j = ws.cell(row=current_row, column=10, value=total_excel)
+    c_j.font = Font(bold=True)
+    c_j.number_format = "#,##0"
+    c_j.alignment = Alignment(horizontal="right", vertical="center")
+    c_j.border = thin_border
+
+    c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
+    c_k.font = Font(bold=True)
+    c_k.alignment = Alignment(horizontal="center", vertical="center")
+    c_k.border = thin_border
+
+    c_l = ws.cell(row=current_row, column=12, value=total_diff)
+    c_l.font = Font(bold=True)
+    c_l.number_format = "#,##0"
+    c_l.alignment = Alignment(horizontal="right", vertical="center")
+    c_l.border = thin_border
+
+    ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
+    c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
+    c_mn.font = Font(bold=True)
+    c_mn.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=13).border = thin_border
+    ws.cell(row=current_row, column=14).border = thin_border
+
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output, month_str
+
+# ────────────────────────────────────────────────────────
+# 2️⃣ [모드 2] 쿠폰 보증 비교
+# ────────────────────────────────────────────────────────
+def load_excel_coupon_a(uploaded_file):
+    df = read_excel_smart_header(uploaded_file)
+    col_car = find_col_smart(
+        df, ["차량번호", "CAR NO", "CAR_NO", "VEHICLE"], fallback_idx=3
+    )
+    col_part = find_col_smart(df, ["부품청구", "부품"], fallback_idx=8)
+    col_labour = find_col_smart(df, ["공임청구", "공임"], fallback_idx=9)
+    if col_part:
+        df[col_part] = pd.to_numeric(df[col_part], errors="coerce").fillna(0)
+    if col_labour:
+        df[col_labour] = pd.to_numeric(df[col_labour], errors="coerce").fillna(0)
+    df["Calc_Total"] = (
+        ((df[col_part] if col_part else 0) + (df[col_labour] if col_labour else 0)) * 1.1
+    ).apply(round_half_up)
+
+    col_r = find_col_smart(
+        df,
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
+        fallback_idx=17,
+    )
+    col_v = find_col_smart(
+        df,
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
+        fallback_idx=21,
+    )
+
+    a_groups = defaultdict(list)
+    for _, row in df.iterrows():
+        car_no = str(row.get(col_car, "")).strip() if col_car else "Unknown"
+        if car_no and car_no != "nan":
+            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
+            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
+            a_groups[car_no].append({
+                "amount": int(row["Calc_Total"]),
+                "claim_type": r_val if r_val and r_val != "nan" else "-",
+                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
+            })
+    return a_groups
+
+def load_excel_coupon_b(uploaded_file):
+    df = read_excel_smart_header(uploaded_file)
+    col_car = find_col_smart(
+        df, ["차량번호", "CAR NO", "CAR_NO", "VEHICLE"], fallback_idx=6
+    )
+    col_total = find_col_smart(df, ["합계금액", "합계", "TOTAL"], fallback_idx=18)
+    if col_total:
+        df[col_total] = pd.to_numeric(df[col_total], errors="coerce").fillna(0)
+
+    col_r = find_col_smart(
+        df,
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
+        fallback_idx=17,
+    )
+    col_v = find_col_smart(
+        df,
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
+        fallback_idx=21,
+    )
+
+    b_groups = defaultdict(list)
+    for _, row in df.iterrows():
+        car_no = str(row.get(col_car, "")).strip() if col_car else "Unknown"
+        if car_no and car_no != "nan":
+            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
+            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
+            b_groups[car_no].append({
+                "amount": round_half_up(row[col_total]) if col_total else 0,
+                "claim_type": r_val if r_val and r_val != "nan" else "-",
+                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
+            })
+    return b_groups
+
+def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff):
+    df_a_raw = read_excel_smart_header(uploaded_file_a)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "쿠폰 청구 현황"
+    ws.print_title_rows = "1:3"
+
+    month_str = "8월"
+    file_b_name = getattr(uploaded_file_b, "name", "")
+    m_fn = re.search(r"20\d{2}(\d{2})", file_b_name)
+    if m_fn:
+        month_str = f"{int(m_fn.group(1))}월"
+    else:
+        for col in df_a_raw.columns:
+            if any(keyword in str(col) for keyword in ["일자", "DATE", "승인", "청구", "입고", "출고"]):
+                sample_dates = df_a_raw[col].dropna().astype(str).tolist()
+                for d in sample_dates:
+                    m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
+                    if m:
+                        month_str = f"{int(m.group(1))}월"
+                        break
+                if month_str != "8월":
+                    break
+
+    ws.merge_cells("A1:N1")
+    ws["A1"] = f"{month_str} 쿠폰 청구 현황"
+    ws["A1"].font = Font(size=22, bold=True)
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 40
+
+    thin_border = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+    header_font = Font(size=10, bold=True)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    headers = list(df_a_raw.columns)
+    ws.row_dimensions[3].height = 25
+    for col_idx, h_name in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col_idx, value=str(h_name))
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    current_row = 4
+    for _, row in df_a_raw.iterrows():
+        ws.row_dimensions[current_row].height = 20
+        for col_idx, val in enumerate(row, 1):
+            cell = ws.cell(row=current_row, column=col_idx)
+            cell.value = "" if pd.isna(val) else val
+            cell.border = thin_border
+            if isinstance(val, (int, float)):
+                cell.number_format = "#,##0"
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+            else:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+        current_row += 1
+
+    current_row += 2
+    ws.row_dimensions[current_row].height = 30
+
+    c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
+    c_lbl1.font = Font(size=14, bold=True)
+    c_lbl1.alignment = Alignment(horizontal="right", vertical="center")
+    c_val1 = ws.cell(row=current_row, column=4, value=count)
+    c_val1.font = Font(size=14, bold=True)
+    c_val1.alignment = Alignment(horizontal="center", vertical="center")
+    c_unit1 = ws.cell(row=current_row, column=5, value="대")
+    c_unit1.font = Font(size=14, bold=True)
+    c_unit1.alignment = Alignment(horizontal="left", vertical="center")
+
+    c_lbl2 = ws.cell(row=current_row, column=7, value="총 청구 금액 :")
+    c_lbl2.font = Font(size=14, bold=True)
+    c_lbl2.alignment = Alignment(horizontal="right", vertical="center")
+    c_val2 = ws.cell(row=current_row, column=9, value=total_b)
+    c_val2.font = Font(size=14, bold=True)
+    c_val2.number_format = "#,##0"
+    c_val2.alignment = Alignment(horizontal="right", vertical="center")
+    c_unit2 = ws.cell(row=current_row, column=10, value="원")
+    c_unit2.font = Font(size=14, bold=True)
+    c_unit2.alignment = Alignment(horizontal="left", vertical="center")
+    c_vat1 = ws.cell(row=current_row, column=11, value="VAT 포함")
+    c_vat1.font = Font(size=10, bold=True)
+    c_vat1.alignment = Alignment(horizontal="left", vertical="center")
+
+    current_row += 2
+    ws.row_dimensions[current_row].height = 30
+
+    c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
+    c_lbl3.font = Font(size=14, bold=True)
+    c_lbl3.alignment = Alignment(horizontal="right", vertical="center")
+    c_val3 = ws.cell(row=current_row, column=4, value=total_diff)
+    c_val3.font = Font(size=14, bold=True)
+    c_val3.number_format = "#,##0"
+    c_val3.alignment = Alignment(horizontal="center", vertical="center")
+    c_unit3 = ws.cell(row=current_row, column=5, value="원")
+    c_unit3.font = Font(size=14, bold=True)
+    c_unit3.alignment = Alignment(horizontal="left", vertical="center")
+
+    c_lbl4 = ws.cell(row=current_row, column=7, value="총 입금 금액 :")
+    c_lbl4.font = Font(size=14, bold=True)
+    c_lbl4.alignment = Alignment(horizontal="right", vertical="center")
+    c_val4 = ws.cell(row=current_row, column=9, value=total_a)
+    c_val4.font = Font(size=14, bold=True)
+    c_val4.number_format = "#,##0"
+    c_val4.alignment = Alignment(horizontal="right", vertical="center")
+    c_unit4 = ws.cell(row=current_row, column=10, value="원")
+    c_unit4.font = Font(size=14, bold=True)
+    c_unit4.alignment = Alignment(horizontal="left", vertical="center")
+    c_vat2 = ws.cell(row=current_row, column=11, value="VAT 포함")
+    c_vat2.font = Font(size=10, bold=True)
+    c_vat2.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 5, 14)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output, month_str
+
+# ────────────────────────────────────────────────────────
+# 3️⃣ [모드 3] 공임코드 비교
+# ────────────────────────────────────────────────────────
+def parse_labor_lines(text):
+    code_map = OrderedDict()
+    if not text:
+        return code_map
+    pattern = re.compile(r"([A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4})")
+    for line in text.split("\n"):
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+        match = pattern.search(line_clean)
+        if match:
+            code = match.group(1).upper()
+            if code not in code_map:
+                code_map[code] = []
+            code_map[code].append(line_clean)
+    return code_map
 
 # ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
@@ -1343,6 +1907,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 delta=(f"{total_diff_sum:,}원" if total_diff_sum != 0 else None),
             )
 
+            # 🔄 위치 교체 및 텍스트 보강
             sub_c3, sub_c4 = st.columns(2)
             sub_c3.metric(
                 f"{'DMS 총 합계 (청구 합계)' if is_mw else 'DMS 쿠폰 (청구 합계)'}",
@@ -1608,7 +2173,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
