@@ -576,9 +576,6 @@ def round_half_up(value):
     else:
         return int(value - 0.5)
 
-# ────────────────────────────────────────────────────────
-# 🔍 볼보 PDF 금액 파싱 전용 함수 (후치 음수 '371726,10-' 대응)
-# ────────────────────────────────────────────────────────
 def parse_pdf_amount(val_str):
     if not val_str:
         return 0.0
@@ -867,24 +864,12 @@ def render_coupon_side_by_side_tables(df_main, df_diff):
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
-# 1️⃣ [모드 1] MW 보증 비교 데이터 로딩
+# 1️⃣ [모드 1] MW 보증 비교
 # ────────────────────────────────────────────────────────
 def load_excel_mw(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     col_claim_no = find_col_smart(
         df, ["CLAIM NO", "CLAIM_NO", "클레임번호", "청구번호", "CLAIM"], fallback_idx=0
-    )
-    col_ro_no = find_col_smart(df, ["R/O NO", "RO NO", "RO_NO", "RO번호", "정비번호", "작업지시서번호"], fallback_idx=1)
-    col_job_no = find_col_smart(df, ["JOB NO", "JOB_NO", "JOB번호", "JOB"], fallback_idx=2)
-    col_r = find_col_smart(
-        df,
-        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
-        fallback_idx=17,
-    )
-    col_v = find_col_smart(
-        df,
-        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
-        fallback_idx=21,
     )
 
     target_cols = ["공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세"]
@@ -908,34 +893,33 @@ def load_excel_mw(uploaded_file):
         + (df[c_part_vat] if c_part_vat else 0)
     ).apply(round_half_up)
 
+    col_r = find_col_smart(
+        df,
+        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
+        fallback_idx=17,
+    )
+    col_v = find_col_smart(
+        df,
+        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
+        fallback_idx=21,
+    )
+
     excel_groups = defaultdict(list)
     for _, row in df.iterrows():
         claim_no = str(row.get(col_claim_no, "")).strip() if col_claim_no else ""
         if claim_no and claim_no != "nan":
-            ro_val = str(row.get(col_ro_no, "-")).strip() if col_ro_no else "-"
-            job_val = str(row.get(col_job_no, "1")).strip() if col_job_no else "1"
-            # job_val이 '1.0' 형태로 들어올 경우 대비
-            if job_val.endswith(".0"):
-                job_val = job_val[:-2]
-
             r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
             raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
-            
-            l_amt = int(round_half_up(row[c_labor])) if c_labor else 0
-            l_vat = int(round_half_up(row[c_labor_vat])) if c_labor_vat else 0
-            p_amt = int(round_half_up(row[c_part])) if c_part else 0
-            p_vat = int(round_half_up(row[c_part_vat])) if c_part_vat else 0
-
             excel_groups[claim_no].append({
-                "ro_no": ro_val if ro_val and ro_val != "nan" else "-",
-                "job_no": job_val if job_val and job_val != "nan" else "1",
-                "claim_type": r_val if r_val and r_val != "nan" else "-",
-                "labor_cost": l_amt,
-                "labor_vat": l_vat,
-                "part_cost": p_amt,
-                "part_vat": p_vat,
                 "amount": int(row["Excel_Total"]),
+                "claim_type": r_val if r_val and r_val != "nan" else "-",
                 "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
+                "labor": int(row[c_labor]) if c_labor else 0,
+                "labor_vat": int(row[c_labor_vat]) if c_labor_vat else 0,
+                "part": int(row[c_part]) if c_part else 0,
+                "part_vat": int(row[c_part_vat]) if c_part_vat else 0,
+                "job_no": str(row.get(find_col_smart(df, ["JOB NO", "JOB", "작업번호"], fallback_idx=2), "1")).strip(),
+                "ro_no": str(row.get(find_col_smart(df, ["R/O NO", "RO NO", "RO", "차량번호"], fallback_idx=1), "")).strip()
             })
     return excel_groups, raw_labor_sum, raw_part_sum
 
@@ -966,37 +950,33 @@ def load_pdf_mw(uploaded_file):
                     rep_order = match.group(1)
                     parts = line_stripped.split()
 
-                    # 끝에 공백 두고 '-' 가 분리된 경우 (예: ['371726,10', '-']) 병합
                     if parts and parts[-1] == "-" and len(parts) >= 2:
                         parts[-2] = parts[-2] + "-"
                         parts.pop()
 
                     try:
-                        # RepOrder Suff Job Clmtype Labour Cost Material Sublet Total
-                        # 표준 볼보 크레딧노트 열 구조 파싱
-                        ro_no = parts[1] if len(parts) > 1 else "-"
-                        job_no = parts[2] if len(parts) > 2 else "1"
-                        clm_type = parts[3] if len(parts) > 3 else "-"
-                        
-                        l_cost = parse_pdf_amount(parts[-4]) if len(parts) >= 5 else 0.0
-                        m_cost = parse_pdf_amount(parts[-3]) if len(parts) >= 5 else 0.0
-                        sublet = parse_pdf_amount(parts[-2]) if len(parts) >= 5 else 0.0
                         total_float = parse_pdf_amount(parts[-1])
                         pdf_total_with_vat = round_half_up(total_float * 1.1)
 
+                        ro_no = parts[1] if len(parts) >= 2 else ""
+                        job_no = parts[2] if len(parts) >= 3 else "1"
+                        clm_type = parts[3] if len(parts) >= 4 else ""
+                        l_cost = parse_pdf_amount(parts[-3]) if len(parts) >= 6 else 0.0
+                        m_cost = parse_pdf_amount(parts[-2]) if len(parts) >= 6 else 0.0
+                        sublet = parse_pdf_amount(parts[-4]) if len(parts) >= 7 else 0.0
+
                         pdf_groups[rep_order].append({
-                            "claim_no": rep_order,
+                            "total_vat": pdf_total_with_vat,
                             "ro_no": ro_no,
                             "job_no": job_no,
-                            "claim_type": clm_type,
+                            "clm_type": clm_type,
                             "labour_cost": l_cost,
                             "material": m_cost,
                             "sublet": sublet,
-                            "total": total_float,
-                            "amount": pdf_total_with_vat
+                            "total": total_float
                         })
 
-                        if len(parts) >= 5:
+                        if len(parts) >= 6:
                             line_labour_total += l_cost
                             line_material_total += m_cost
                     except ValueError:
@@ -1042,17 +1022,217 @@ def load_pdf_mw(uploaded_file):
     return pdf_groups, int(final_pdf_labour), int(final_pdf_material)
 
 # ────────────────────────────────────────────────────────
-# 📑 사진과 완벽히 일치하는 MW 엑셀 리포트 생성기
+# 📊 [새로운 MW 세부 대조 비교문서 (PDF vs DMS) 생성]
 # ────────────────────────────────────────────────────────
-def create_mw_excel_report(uploaded_file_mw, pdf_groups, excel_groups):
+def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "MW비교"
-    ws.views.sheetView[0].showGridLines = True
+    ws.title = "비교 문서"
 
-    # 1. 월 판단 로직 (판단 불가 시 "X월")
-    file_name = getattr(uploaded_file_mw, "name", "")
+    font_main_title = Font(name="맑은 고딕", size=11, bold=True)
+    font_header = Font(name="맑은 고딕", size=9, bold=True)
+    font_data = Font(name="맑은 고딕", size=9)
+    font_bold = Font(name="맑은 고딕", size=9, bold=True)
+
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_right = Alignment(horizontal="right", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    fill_header_gray = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    fill_diff_col = PatternFill(start_color="BFBFBF", end_color="BFBFBF", fill_type="solid")
+    fill_diff_title = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+
+    thin_border = Border(
+        left=Side(style="thin", color="A6A6A6"),
+        right=Side(style="thin", color="A6A6A6"),
+        top=Side(style="thin", color="A6A6A6"),
+        bottom=Side(style="thin", color="A6A6A6")
+    )
+
+    # 1. 메인 타이틀 바 (2행)
+    ws.merge_cells("B2:J2")
+    ws["B2"] = "CREDIT PDF 6755"
+    ws["B2"].font = font_main_title
+    ws["B2"].alignment = align_center
+    ws["B2"].fill = fill_yellow
+
+    ws["L2"] = "PDF - DMS"
+    ws["L2"].font = font_bold
+    ws["L2"].alignment = align_center
+    ws["L2"].fill = fill_diff_title
+    ws["L2"].border = thin_border
+
+    ws.merge_cells("N2:V2")
+    ws["N2"] = "DMS FILE"
+    ws["N2"].font = font_main_title
+    ws["N2"].alignment = align_center
+    ws["N2"].fill = fill_yellow
+
+    for col in range(2, 11):
+        ws.cell(row=2, column=col).border = thin_border
+    for col in range(14, 23):
+        ws.cell(row=2, column=col).border = thin_border
+
+    # 2. 서브 헤더 바 (3행)
+    left_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "Labour cost", "Meterial", "sublet", "Total", "TOTAL"]
+    for i, h in enumerate(left_headers, start=2):
+        c = ws.cell(row=3, column=i, value=h)
+        c.font = font_header
+        c.alignment = align_center
+        c.fill = fill_header_gray
+        c.border = thin_border
+
+    c_diff = ws.cell(row=3, column=12, value="차액")
+    c_diff.font = font_header
+    c_diff.alignment = align_center
+    c_diff.fill = fill_header_gray
+    c_diff.border = thin_border
+
+    right_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세", "TOTAL"]
+    for i, h in enumerate(right_headers, start=14):
+        c = ws.cell(row=3, column=i, value=h)
+        c.font = font_header
+        c.alignment = align_center
+        c.fill = fill_header_gray
+        c.border = thin_border
+
+    # 3. 데이터 로우 작성 (4행부터)
+    all_claims = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
+    cur_row = 4
+
+    for claim in all_claims:
+        p_list = pdf_groups.get(claim, [])
+        e_list = excel_groups.get(claim, [])
+        max_cnt = max(len(p_list), len(e_list))
+
+        for idx in range(max_cnt):
+            p_data = p_list[idx] if idx < len(p_list) else None
+            e_data = e_list[idx] if idx < len(e_list) else None
+
+            pdf_vat_total = p_data["total_vat"] if p_data else 0
+            dms_vat_total = e_data["amount"] if e_data else 0
+            diff_amt = pdf_vat_total - dms_vat_total if (p_data and e_data) else (pdf_vat_total if p_data else -dms_vat_total)
+
+            # 좌측 PDF 영역 (B~J)
+            ws.cell(row=cur_row, column=2, value=claim if p_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=3, value=p_data["ro_no"] if p_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=4, value=p_data["job_no"] if p_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=5, value=p_data["clm_type"] if p_data else "").alignment = align_center
+
+            c_l = ws.cell(row=cur_row, column=6, value=p_data["labour_cost"] if p_data else "")
+            c_l.number_format = "#,##0.00" if (p_data and isinstance(p_data["labour_cost"], float) and p_data["labour_cost"] % 1 != 0) else "#,##0"
+            c_l.alignment = align_right
+
+            c_m = ws.cell(row=cur_row, column=7, value=p_data["material"] if p_data else "")
+            c_m.number_format = "#,##0.00" if (p_data and isinstance(p_data["material"], float) and p_data["material"] % 1 != 0) else "#,##0"
+            c_m.alignment = align_right
+
+            c_s = ws.cell(row=cur_row, column=8, value=p_data["sublet"] if p_data else "")
+            c_s.number_format = "#,##0.00" if (p_data and isinstance(p_data["sublet"], float) and p_data["sublet"] % 1 != 0) else "#,##0"
+            c_s.alignment = align_right
+
+            c_t = ws.cell(row=cur_row, column=9, value=p_data["total"] if p_data else "")
+            c_t.number_format = "#,##0.00" if (p_data and isinstance(p_data["total"], float) and p_data["total"] % 1 != 0) else "#,##0"
+            c_t.alignment = align_right
+
+            c_tv = ws.cell(row=cur_row, column=10, value=pdf_vat_total if p_data else "")
+            c_tv.number_format = "#,##0"
+            c_tv.alignment = align_right
+            c_tv.font = font_bold
+
+            # 중앙 차액 영역 (L)
+            c_df = ws.cell(row=cur_row, column=12, value=diff_amt)
+            c_df.number_format = "#,##0"
+            c_df.alignment = align_right
+            c_df.font = font_bold
+            c_df.fill = fill_diff_col
+
+            # 우측 DMS 영역 (N~V)
+            ws.cell(row=cur_row, column=14, value=claim if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=15, value=e_data["ro_no"] if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=16, value=e_data["job_no"] if e_data else "").alignment = align_center
+            ws.cell(row=cur_row, column=17, value=e_data["claim_type"] if e_data else "").alignment = align_center
+
+            c_el = ws.cell(row=cur_row, column=18, value=e_data["labor"] if e_data else "")
+            c_el.number_format = "#,##0"
+            c_el.alignment = align_right
+
+            c_elv = ws.cell(row=cur_row, column=19, value=e_data["labor_vat"] if e_data else "")
+            c_elv.number_format = "#,##0"
+            c_elv.alignment = align_right
+
+            c_ep = ws.cell(row=cur_row, column=20, value=e_data["part"] if e_data else "")
+            c_ep.number_format = "#,##0"
+            c_ep.alignment = align_right
+
+            c_epv = ws.cell(row=cur_row, column=21, value=e_data["part_vat"] if e_data else "")
+            c_epv.number_format = "#,##0"
+            c_epv.alignment = align_right
+
+            c_et = ws.cell(row=cur_row, column=22, value=dms_vat_total if e_data else "")
+            c_et.number_format = "#,##0"
+            c_et.alignment = align_right
+            c_et.font = font_bold
+
+            for col in range(2, 11):
+                ws.cell(row=cur_row, column=col).border = thin_border
+                ws.cell(row=cur_row, column=col).font = font_data if col != 10 else font_bold
+            ws.cell(row=cur_row, column=12).border = thin_border
+            for col in range(14, 23):
+                ws.cell(row=cur_row, column=col).border = thin_border
+                ws.cell(row=cur_row, column=col).font = font_data if col != 22 else font_bold
+
+            cur_row += 1
+
+    # 열 너비 자동 설정
+    col_widths = {
+        "B": 11, "C": 12, "D": 8, "E": 11, "F": 13, "G": 14, "H": 8, "I": 14, "J": 13,
+        "L": 11,
+        "N": 11, "O": 15, "P": 8, "Q": 11, "R": 12, "S": 13, "T": 12, "U": 13, "V": 13
+    }
+    for col_letter, width in col_widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
+    df_mw_raw = read_excel_smart_header(uploaded_file_mw)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "WARRANTY 수령내역"
+    ws.print_title_rows = "1:3"
+
+    target_headers = [
+        "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
+        "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
+        "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세",
+    ]
+    alias_dict = {
+        "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
+        "차량번호": ["차량번호", "차량 번호", "CAR NO", "VEHICLE"],
+        "Job No": ["JOB NO", "JOB", "작업번호"],
+        "완결일자": ["완결일자", "완결일", "완결"],
+        "청구일자": ["청구일자", "청구일"],
+        "공임청구액": ["공임청구액", "공임청구", "공임 청구액"],
+        "공임청구부가세": ["공임청구부가세", "공임청구 부가세", "공임부가세"],
+        "부품청구액": ["부품청구액", "부품청구", "부품 청구액"],
+        "부품청구부가세": ["부품청구부가세", "부품청구 부가세", "부품부가세"],
+        "공임입금액": ["공임입금액", "공임입금", "공임승인액", "공임승인", "공임 입금액", "공임승인금액"],
+        "공임입금부가세": ["공임입금부가세", "공임입금 부가세", "공임승인부가세"],
+        "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액", "부품승인금액"],
+        "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"],
+    }
+    col_mapping = {
+        th: find_col_smart(df_mw_raw, alias_dict.get(th, [th]))
+        for th in target_headers
+    }
+
     month_str = "X월"
+    file_name = getattr(uploaded_file_mw, "name", "")
     m_direct = re.search(r"(\d{1,2})월", file_name)
     if m_direct:
         month_str = f"{int(m_direct.group(1))}월"
@@ -1061,197 +1241,130 @@ def create_mw_excel_report(uploaded_file_mw, pdf_groups, excel_groups):
         if m_fn and 1 <= int(m_fn.group(1)) <= 12:
             month_str = f"{int(m_fn.group(1))}월"
 
-    # 스타일 정의
-    font_bold = Font(name="맑은 고딕", size=10, bold=True)
-    font_regular = Font(name="맑은 고딕", size=10)
-    font_num = Font(name="맑은 고딕", size=10)
+    ws.merge_cells("A1:N1")
+    ws["A1"] = f"{month_str} WARRANTY 수 령 내 역"
+    ws["A1"].font = Font(size=22, bold=True)
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 40
 
     thin_border = Border(
-        left=Side(style='thin', color='D9D9D9'),
-        right=Side(style='thin', color='D9D9D9'),
-        top=Side(style='thin', color='D9D9D9'),
-        bottom=Side(style='thin', color='D9D9D9')
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
     )
-    box_border = Border(
-        left=Side(style='medium', color='000000'),
-        right=Side(style='medium', color='000000'),
-        top=Side(style='medium', color='000000'),
-        bottom=Side(style='medium', color='000000')
-    )
+    header_font = Font(size=10, bold=True)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    gray_header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-    diff_fill = PatternFill(start_color="BFBFBF", end_color="BFBFBF", fill_type="solid")
+    ws.row_dimensions[3].height = 25
+    cell_a = ws.cell(row=3, column=1, value="No.")
+    cell_a.font = header_font
+    cell_a.alignment = header_align
+    cell_a.border = thin_border
 
-    align_center = Alignment(horizontal='center', vertical='center')
-    align_right = Alignment(horizontal='right', vertical='center')
-
-    # Row 2: 대주제 헤더
-    ws.row_dimensions[2].height = 24
-    ws.merge_cells('B2:J2')
-    ws['B2'] = "CREDIT PDF 6755"
-    ws['B2'].fill = yellow_fill
-    ws['B2'].font = font_bold
-    ws['B2'].alignment = align_center
-
-    ws['L2'] = "PDF - DMS"
-    ws['L2'].font = font_bold
-    ws['L2'].alignment = align_center
-    ws['L2'].border = box_border
-
-    ws.merge_cells('N2:V2')
-    ws['N2'] = "DMS FILE"
-    ws['N2'].fill = yellow_fill
-    ws['N2'].font = font_bold
-    ws['N2'].alignment = align_center
-
-    # Row 3: 서브 헤더
-    ws.row_dimensions[3].height = 22
-    pdf_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "Labour cost", "Meterial", "sublet", "Total", "TOTAL"]
-    for idx, h_name in enumerate(pdf_headers):
-        col_letter = get_column_letter(2 + idx) # B부터 시작
-        cell = ws[f'{col_letter}3']
-        cell.value = h_name
-        cell.font = font_bold
-        cell.fill = gray_header_fill
-        cell.alignment = align_center
+    for col_pos, h_name in enumerate(target_headers, 2):
+        cell = ws.cell(row=3, column=col_pos, value=h_name)
+        cell.font = header_font
+        cell.alignment = header_align
         cell.border = thin_border
 
-    # 차액 헤더
-    ws['L3'] = "차액"
-    ws['L3'].font = font_bold
-    ws['L3'].fill = diff_fill
-    ws['L3'].alignment = align_center
-    ws['L3'].border = box_border
-
-    dms_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세", "TOTAL"]
-    for idx, h_name in enumerate(dms_headers):
-        col_letter = get_column_letter(14 + idx) # N부터 시작
-        cell = ws[f'{col_letter}3']
-        cell.value = h_name
-        cell.font = font_bold
-        cell.fill = gray_header_fill
-        cell.alignment = align_center
-        cell.border = thin_border
-
-    # 데이터 입력
-    all_keys = sorted(list(set(list(pdf_groups.keys()) + list(excel_groups.keys()))))
     current_row = 4
+    no_counter = 1
+    for _, row in df_mw_raw.iterrows():
+        if row.dropna().empty:
+            continue
+        ws.row_dimensions[current_row].height = 20
+        c_no = ws.cell(row=current_row, column=1, value=no_counter)
+        c_no.alignment = Alignment(horizontal="center", vertical="center")
+        c_no.border = thin_border
 
-    for claim in all_keys:
-        p_list = pdf_groups.get(claim, [])
-        e_list = excel_groups.get(claim, [])
-        max_len = max(len(p_list), len(e_list))
-
-        for i in range(max_len):
-            ws.row_dimensions[current_row].height = 20
-            p_item = p_list[i] if i < len(p_list) else None
-            e_item = e_list[i] if i < len(e_list) else None
-
-            p_total = p_item["amount"] if p_item else 0
-            e_total = e_item["amount"] if e_item else 0
-            diff = p_total - e_total
-
-            # PDF 출력 (B~J)
-            if p_item:
-                ws[f'B{current_row}'] = p_item.get("claim_no", claim)
-                ws[f'B{current_row}'].alignment = align_center
-                ws[f'C{current_row}'] = p_item.get("ro_no", "-")
-                ws[f'C{current_row}'].alignment = align_center
-                ws[f'D{current_row}'] = p_item.get("job_no", "1")
-                ws[f'D{current_row}'].alignment = align_center
-                ws[f'E{current_row}'] = p_item.get("claim_type", "-")
-                ws[f'E{current_row}'].alignment = align_center
-
-                ws[f'F{current_row}'] = p_item.get("labour_cost", 0.0)
-                ws[f'F{current_row}'].number_format = '#,##0.00' if isinstance(p_item.get("labour_cost"), float) and not p_item.get("labour_cost").is_integer() else '#,##0'
-                ws[f'F{current_row}'].alignment = align_right
-
-                ws[f'G{current_row}'] = p_item.get("material", 0.0)
-                ws[f'G{current_row}'].number_format = '#,##0.00' if isinstance(p_item.get("material"), float) and not p_item.get("material").is_integer() else '#,##0'
-                ws[f'G{current_row}'].alignment = align_right
-
-                ws[f'H{current_row}'] = p_item.get("sublet", 0.0)
-                ws[f'H{current_row}'].number_format = '#,##0.00' if isinstance(p_item.get("sublet"), float) and not p_item.get("sublet").is_integer() else '#,##0'
-                ws[f'H{current_row}'].alignment = align_right
-
-                ws[f'I{current_row}'] = p_item.get("total", 0.0)
-                ws[f'I{current_row}'].number_format = '#,##0.00' if isinstance(p_item.get("total"), float) and not p_item.get("total").is_integer() else '#,##0'
-                ws[f'I{current_row}'].alignment = align_right
-
-                ws[f'J{current_row}'] = p_total
-                ws[f'J{current_row}'].number_format = '#,##0'
-                ws[f'J{current_row}'].alignment = align_right
+        for col_pos, h_name in enumerate(target_headers, 2):
+            cell = ws.cell(row=current_row, column=col_pos)
+            mapped_col = col_mapping.get(h_name)
+            if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
+                val = row[mapped_col]
+                if isinstance(val, pd.Timestamp):
+                    val = val.strftime("%Y-%m-%d")
+                elif isinstance(val, str) and len(val) >= 10 and "00:00:00" in val:
+                    val = val.split()[0]
+                cell.value = val
+                if isinstance(val, (int, float)):
+                    cell.number_format = "#,##0"
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                else:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
-                for c in range(2, 11):
-                    ws.cell(row=current_row, column=c, value="")
+                cell.value = ""
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+        current_row += 1
+        no_counter += 1
 
-            # 테두리 및 폰트 (B~J)
-            for c in range(2, 11):
-                cell = ws.cell(row=current_row, column=c)
-                cell.font = font_regular
-                cell.border = thin_border
+    ws.row_dimensions[current_row].height = 25
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+    c_sum = ws.cell(row=current_row, column=1, value="합계")
+    c_sum.font = Font(bold=True)
+    c_sum.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=1).border = thin_border
+    ws.cell(row=current_row, column=2).border = thin_border
 
-            # 차액 출력 (L)
-            cell_diff = ws[f'L{current_row}']
-            cell_diff.value = diff
-            cell_diff.number_format = '#,##0'
-            cell_diff.alignment = align_center
-            cell_diff.font = font_bold if diff != 0 else font_regular
-            cell_diff.fill = diff_fill
-            cell_diff.border = thin_border
+    ws.merge_cells(start_row=current_row, start_column=3, end_row=current_row, end_column=4)
+    c_cnt = ws.cell(row=current_row, column=3, value=f"댓수 : {count}")
+    c_cnt.font = Font(bold=True)
+    c_cnt.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=3).border = thin_border
+    ws.cell(row=current_row, column=4).border = thin_border
 
-            # DMS 출력 (N~V)
-            if e_item:
-                ws[f'N{current_row}'] = claim
-                ws[f'N{current_row}'].alignment = align_center
-                ws[f'O{current_row}'] = e_item.get("ro_no", "-")
-                ws[f'O{current_row}'].alignment = align_center
-                ws[f'P{current_row}'] = e_item.get("job_no", "1")
-                ws[f'P{current_row}'].alignment = align_center
-                ws[f'Q{current_row}'] = e_item.get("claim_type", "-")
-                ws[f'Q{current_row}'].alignment = align_center
+    ws.cell(row=current_row, column=5).border = thin_border
+    ws.cell(row=current_row, column=6).border = thin_border
 
-                ws[f'R{current_row}'] = e_item.get("labor_cost", 0)
-                ws[f'R{current_row}'].number_format = '#,##0'
-                ws[f'R{current_row}'].alignment = align_right
+    c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
+    c_g.font = Font(bold=True)
+    c_g.alignment = Alignment(horizontal="center", vertical="center")
+    c_g.border = thin_border
 
-                ws[f'S{current_row}'] = e_item.get("labor_vat", 0)
-                ws[f'S{current_row}'].number_format = '#,##0'
-                ws[f'S{current_row}'].alignment = align_right
+    c_h = ws.cell(row=current_row, column=8, value=total_pdf)
+    c_h.font = Font(bold=True)
+    c_h.number_format = "#,##0"
+    c_h.alignment = Alignment(horizontal="right", vertical="center")
+    c_h.border = thin_border
 
-                ws[f'T{current_row}'] = e_item.get("part_cost", 0)
-                ws[f'T{current_row}'].number_format = '#,##0'
-                ws[f'T{current_row}'].alignment = align_right
+    c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
+    c_i.font = Font(bold=True)
+    c_i.alignment = Alignment(horizontal="center", vertical="center")
+    c_i.border = thin_border
 
-                ws[f'U{current_row}'] = e_item.get("part_vat", 0)
-                ws[f'U{current_row}'].number_format = '#,##0'
-                ws[f'U{current_row}'].alignment = align_right
+    c_j = ws.cell(row=current_row, column=10, value=total_excel)
+    c_j.font = Font(bold=True)
+    c_j.number_format = "#,##0"
+    c_j.alignment = Alignment(horizontal="right", vertical="center")
+    c_j.border = thin_border
 
-                ws[f'V{current_row}'] = e_total
-                ws[f'V{current_row}'].number_format = '#,##0'
-                ws[f'V{current_row}'].alignment = align_right
-            else:
-                for c in range(14, 23):
-                    ws.cell(row=current_row, column=c, value="")
+    c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
+    c_k.font = Font(bold=True)
+    c_k.alignment = Alignment(horizontal="center", vertical="center")
+    c_k.border = thin_border
 
-            # 테두리 및 폰트 (N~V)
-            for c in range(14, 23):
-                cell = ws.cell(row=current_row, column=c)
-                cell.font = font_regular
-                cell.border = thin_border
+    c_l = ws.cell(row=current_row, column=12, value=total_diff)
+    c_l.font = Font(bold=True)
+    c_l.number_format = "#,##0"
+    c_l.alignment = Alignment(horizontal="right", vertical="center")
+    c_l.border = thin_border
 
-            current_row += 1
+    ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
+    c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
+    c_mn.font = Font(bold=True)
+    c_mn.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=current_row, column=13).border = thin_border
+    ws.cell(row=current_row, column=14).border = thin_border
 
-    # 열 너비 자동 조정
     for col in ws.columns:
+        max_len = 0
         col_letter = get_column_letter(col[0].column)
-        if col[0].column in [1, 11, 13]: # 여백 열
-            ws.column_dimensions[col_letter].width = 4
-        elif col[0].column == 12: # 차액 열
-            ws.column_dimensions[col_letter].width = 12
-        else:
-            ws.column_dimensions[col_letter].width = 15
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
     output = io.BytesIO()
     wb.save(output)
@@ -1569,10 +1682,12 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     max_len = max(len(items_pdf), len(items_excel))
 
                     for i in range(max_len):
-                        val_pdf = items_pdf[i]["amount"] if i < len(items_pdf) else None
+                        p_item = items_pdf[i] if i < len(items_pdf) else None
                         e_item = items_excel[i] if i < len(items_excel) else None
+
+                        val_pdf = p_item["total_vat"] if p_item else None
                         val_excel = e_item["amount"] if e_item else None
-                        r_val = e_item["claim_type"] if e_item else "-"
+                        r_val = e_item["claim_type"] if e_item else (p_item["clm_type"] if p_item else "-")
                         v_val = e_item["v_desc"] if e_item else "-"
 
                         label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
@@ -1631,10 +1746,16 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 res_df = pd.DataFrame(matched_results)
                 res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
 
-                # 💡 사진과 100% 동일한 서식의 엑셀 보고서 생성
-                excel_data, month_name = create_mw_excel_report(f2, pdf_groups, excel_groups)
+                excel_data, month_name = create_mw_excel_report(
+                    f2, total_cnt, total_pdf_sum, total_excel_sum, total_diff_sum
+                )
                 dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
                 dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
+
+                # 📊 새로운 비교문서 엑셀 데이터 생성
+                matrix_excel_data = create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name)
+                matrix_dl_label = f"📊 [{month_name} MW 세부 대조 비교문서 (PDF vs DMS)] 다운로드"
+                matrix_dl_name = f"{month_name}_MW_세부대조_비교문서.xlsx"
 
                 if diff_over_100_results:
                     diff_list_with_total = list(diff_over_100_results)
@@ -1672,10 +1793,12 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     max_len = max(len(items_a), len(items_b))
 
                     for i in range(max_len):
-                        val_a = items_a[i]["amount"] if i < len(items_a) else None
-                        val_b = items_b[i]["amount"] if i < len(items_b) else None
-                        r_val = items_b[i]["claim_type"] if i < len(items_b) else (items_a[i]["claim_type"] if i < len(items_a) else "-")
-                        v_val = items_b[i]["v_desc"] if i < len(items_b) else (items_a[i]["v_desc"] if i < len(items_a) else "-")
+                        a_item = items_a[i] if i < len(items_a) else None
+                        b_item = items_b[i] if i < len(items_b) else None
+                        val_a = a_item["amount"] if a_item else None
+                        val_b = b_item["amount"] if b_item else None
+                        r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
+                        v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
 
                         label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
 
@@ -1795,6 +1918,7 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 part_col2.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
 
             st.write("")
+            # 기존 보고서 다운로드
             st.download_button(
                 label=dl_label,
                 data=excel_data,
@@ -1802,6 +1926,17 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
+
+            # 📊 MW 모드일 때 추가 비교문서 다운로드 버튼 제공
+            if is_mw:
+                st.write("")
+                st.download_button(
+                    label=matrix_dl_label,
+                    data=matrix_excel_data,
+                    file_name=matrix_dl_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
     else:
         with right_col:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
