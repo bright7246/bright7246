@@ -1049,6 +1049,9 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     ws = wb.active
     ws.title = "비교 문서"
 
+    # 📌 3번째 줄까지 틀고정 (4행부터 스크롤되도록 고정)
+    ws.freeze_panes = "A4"
+
     font_main_title = Font(name="맑은 고딕", size=11, bold=True)
     font_header = Font(name="맑은 고딕", size=9, bold=True)
     font_data = Font(name="맑은 고딕", size=9)
@@ -2198,7 +2201,7 @@ elif mode == "공임코드 비교":
                     dup_rows = []
                     for idx, code in enumerate(duplicate_codes, 1):
                         lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
+                        lines_b_str = " | ".join(map_b[code]) if code in map_a else "-"
                         if st.session_state.show_group_c:
                             lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
                             dup_rows.append({
