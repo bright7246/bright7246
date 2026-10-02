@@ -544,7 +544,7 @@ st.divider()
 mode = st.session_state.current_mode
 
 # ────────────────────────────────────────────────────────
-# 🛠️ [공통 함수]
+# 🛠️️ [공통 함수]
 # ────────────────────────────────────────────────────────
 def read_excel_smart_header(uploaded_file):
     uploaded_file.seek(0)
@@ -685,7 +685,7 @@ def render_mw_side_by_side_tables(df_main, df_diff):
                 main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
             else:
                 align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
-                main_tbody.append(f'<td class="{align_class}"">{val_str}</td>')
+                main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
         main_tbody.append("</tr>")
 
     diff_section = ""
@@ -2374,6 +2374,8 @@ elif mode == "캘린더":
         "기타": "chip-etc",
     }
 
+    # 📌 일요일 시작 요일로 설정하여 요일 밀림 방지
+    calendar.setfirstweekday(calendar.SUNDAY)
     month_cal = calendar.monthcalendar(
         st.session_state.cal_year, st.session_state.cal_month
     )
