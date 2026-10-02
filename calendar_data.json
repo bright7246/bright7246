@@ -5,5 +5,12 @@
     "title": "EW 지급일자",
     "category": "기타",
     "memo": "0921.1515"
+  },
+  {
+    "start_date": "2026-10-16",
+    "end_date": "2026-10-16",
+    "title": "쿠폰 청구",
+    "category": "쿠폰 정산",
+    "memo": ""
   }
 ]
