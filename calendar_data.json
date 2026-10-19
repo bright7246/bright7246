@@ -12,5 +12,12 @@
     "title": "쿠폰 청구",
     "category": "쿠폰 정산",
     "memo": ""
+  },
+  {
+    "start_date": "2026-10-22",
+    "end_date": "2026-10-22",
+    "title": "EW 지급일",
+    "category": "기타",
+    "memo": ""
   }
 ]
