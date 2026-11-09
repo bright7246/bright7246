@@ -40,5 +40,12 @@
     "title": "쿠폰 청구 파일",
     "category": "쿠폰 정산",
     "memo": ""
+  },
+  {
+    "start_date": "2026-11-12",
+    "end_date": "2026-11-12",
+    "title": "허차장님 진주 방문",
+    "category": "기타",
+    "memo": ""
   }
 ]
