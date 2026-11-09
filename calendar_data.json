@@ -68,5 +68,12 @@
     "title": "이밝음 연차",
     "category": "휴가/당직",
     "memo": ""
+  },
+  {
+    "start_date": "2026-11-23",
+    "end_date": "2026-11-23",
+    "title": "EW 정산 예정",
+    "category": "기타",
+    "memo": ""
   }
 ]
