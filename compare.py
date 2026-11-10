@@ -683,6 +683,7 @@ TABLE_COMMON_CSS = """
   .col-no { width: 1%; min-width: 38px; text-align: center; font-weight: bold; }
   .col-id { width: 1%; min-width: 92px; text-align: center; }
   .col-amt { min-width: 108px; text-align: right; }
+  .col-src { width: 1%; min-width: 64px; text-align: center; font-weight: bold; color: #fbbf24; }
   .col-type { width: 1%; min-width: 80px; text-align: center; color: #38bdf8; }
   /* 제목 : 남은 폭을 모두 쓰고, 넘치면 … 으로 줄임 (마우스를 올리면 전체 제목 표시) */
   .col-desc { min-width: 140px; max-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
@@ -730,7 +731,7 @@ TABLE_COMMON_JS = """
 
 def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
     """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)
-    df_zero 를 주면 차액 리스트 아래에 'PDF 0원 리스트' 를 추가로 표시합니다. (MW 전용)"""
+    df_zero 를 주면 차액 리스트 아래에 '0원 리스트' 를 추가로 표시합니다. (MW 전용)"""
     main_tbody = []
     for idx, row in df_main.iterrows():
         is_total = "총합계" in str(row.iloc[0])
@@ -787,13 +788,14 @@ def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
             zero_tbody = "".join(
                 f'<tr><td class="col-no">{idx}</td>'
                 f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>'
-                f'<td class="col-type">{row.iloc[1]}</td>'
-                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[2]), quote=True)}">{row.iloc[2]}</td></tr>'
+                f'<td class="col-src">{row.iloc[1]}</td>'
+                f'<td class="col-type">{row.iloc[2]}</td>'
+                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[3]), quote=True)}">{row.iloc[3]}</td></tr>'
                 for idx, row in df_zero.iterrows()
             )
             zero_th_html = "".join(
                 f'<th class="{cls}">{name}</th>'
-                for cls, name in zip(["col-no", "col-id", "col-type", "col-desc"], ["No."] + list(df_zero.columns))
+                for cls, name in zip(["col-no", "col-id", "col-src", "col-type", "col-desc"], ["No."] + list(df_zero.columns))
             )
             zero_body = f"""
             <div class="scroll-wrap">
@@ -805,7 +807,7 @@ def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
         else:
             zero_body = """
             <div class="empty-box">
-              ✅ PDF 에 0원으로 등록된 항목이 없습니다.
+              ✅ PDF · DMS 모두 0원으로 등록된 항목이 없습니다.
             </div>"""
         zero_section = f"""
           <div class="table-card">
@@ -1397,17 +1399,22 @@ def _numbered_index(df):
 
 # 계산 결과 캐시 버전 : 대조/보고서 계산 방식을 바꾸면 이 숫자를 1 올립니다.
 # (서버가 새 코드로 바뀌어도 예전 코드로 계산해 둔 결과를 재사용하지 않도록)
-COMPUTE_VERSION = 2
+COMPUTE_VERSION = 5
 
-def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn):
+def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn,
+                   name_1="자료1", name_2="자료2", missing_2_text="-"):
     """두 자료를 키(주문번호/차량번호)별로 맞대어 금액을 대조합니다. (MW · 쿠폰 공용)
     - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
     - 차액 = 1번 자료 금액 - 2번 자료 금액, |차액| 100원 이상은 차액 리스트에 추가
     - meta_fn(item_1, item_2) → (Claim Type, 제목)
+    - 0원 리스트 : 1번 자료 금액이 0원인 건 → 구분 name_1
+                  2번 자료 금액이 0원이거나, 2번 자료에 아예 없는 건('-' 표시) → 구분 name_2
+                  (MW 기준 : PDF 에는 있는데 DMS 엑셀에 주문번호가 없는 건도 'DMS' 로 표시)
+                  2번 자료에 아예 없는 건의 제목은 missing_2_text 로 표시
     """
     matched_results = []
     diff_over_100_results = []
-    zero_1_results = []   # 1번 자료(MW 에서는 PDF)에 0원으로 등록된 건
+    zero_results = []   # 0원 리스트 (설명은 위 참고)
     total_1_sum = 0
     total_2_sum = 0
     total_diff_100_sum = 0
@@ -1436,8 +1443,14 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
                 "차액": f"{diff_val:,}원",
             })
 
+            zero_sources = []
             if val_1 == 0:
-                zero_1_results.append({key_col: label_item, "Claim Type": r_val, "제목": v_val})
+                zero_sources.append(name_1)
+            if val_2 == 0 or (item_2 is None and item_1 is not None):
+                zero_sources.append(name_2)
+            if zero_sources:
+                zero_desc = missing_2_text if (item_2 is None and item_1 is not None) else v_val
+                zero_results.append({key_col: label_item, "구분": " · ".join(zero_sources), "Claim Type": r_val, "제목": zero_desc})
 
             if abs(diff_val) >= 100:
                 total_diff_100_sum += diff_val
@@ -1470,7 +1483,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     else:
         diff_df = pd.DataFrame(columns=[key_col, "Claim Type", "제목", "차액"])
 
-    zero_df = pd.DataFrame(zero_1_results, columns=[key_col, "Claim Type", "제목"])
+    zero_df = pd.DataFrame(zero_results, columns=[key_col, "구분", "Claim Type", "제목"])
     zero_df.index = [str(i) for i in range(1, len(zero_df) + 1)]
 
     return {
@@ -1498,6 +1511,7 @@ def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name, version=COMPUTE_VERSI
             e["claim_type"] if e else (p["clm_type"] if p else "-"),
             e["v_desc"] if e else "-",
         ),
+        name_1="PDF", name_2="DMS", missing_2_text="엑셀파일에 주문번호가 존재하지 않음",
     )
 
     excel_data, month_name = create_mw_excel_report(
@@ -1529,6 +1543,7 @@ def compute_coupon(a_bytes, a_name, b_bytes, b_name, version=COMPUTE_VERSION):
             b["claim_type"] if b else (a["claim_type"] if a else "-"),
             b["v_desc"] if b else (a["v_desc"] if a else "-"),
         ),
+        name_1="공지", name_2="DMS",
     )
 
     excel_data, month_name = create_coupon_excel_report(
@@ -1554,7 +1569,7 @@ COMPARE_MODES = {
             ("2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)", "엑셀 파일 업로드", "xlsx"),
         ],
         "label_1": "PDF 총 합계 (입금 합계)",
-        "zero_title": "📭 PDF 0원 리스트",
+        "zero_title": "📭 0원 리스트",
         "label_2": "DMS 총 합계 (청구 합계)",
         "compute": compute_mw,
     },
