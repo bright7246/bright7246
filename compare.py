@@ -1383,6 +1383,10 @@ def _numbered_index(df):
     df.index = [str(i) for i in range(1, len(df))] + [""]
     return df
 
+# 계산 결과 캐시 버전 : 대조/보고서 계산 방식을 바꾸면 이 숫자를 1 올립니다.
+# (서버가 새 코드로 바뀌어도 예전 코드로 계산해 둔 결과를 재사용하지 않도록)
+COMPUTE_VERSION = 2
+
 def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn):
     """두 자료를 키(주문번호/차량번호)별로 맞대어 금액을 대조합니다. (MW · 쿠폰 공용)
     - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
@@ -1468,7 +1472,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     }
 
 @st.cache_data(max_entries=5, show_spinner=False)
-def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
+def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name, version=COMPUTE_VERSION):
     f_pdf = NamedBytesIO(pdf_bytes, pdf_name)
     f_xlsx = NamedBytesIO(xlsx_bytes, xlsx_name)
 
@@ -1502,7 +1506,7 @@ def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
     return r
 
 @st.cache_data(max_entries=5, show_spinner=False)
-def compute_coupon(a_bytes, a_name, b_bytes, b_name):
+def compute_coupon(a_bytes, a_name, b_bytes, b_name, version=COMPUTE_VERSION):
     f_a = NamedBytesIO(a_bytes, a_name)
     f_b = NamedBytesIO(b_bytes, b_name)
 
@@ -1587,10 +1591,10 @@ if mode in COMPARE_MODES:
 
     if f1 and f2:
         with st.spinner(f"{cfg['prefix']} 보증 데이터 교차 대조 중..."):
-            r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name)
+            r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name, COMPUTE_VERSION)
 
         with right_col:
-            if cfg.get("zero_title"):
+            if cfg.get("zero_title") and "zero_df" in r:
                 render_side_by_side_tables(r["res_df"], r["diff_df"], r["zero_df"], cfg["zero_title"])
             else:
                 render_side_by_side_tables(r["res_df"], r["diff_df"])
