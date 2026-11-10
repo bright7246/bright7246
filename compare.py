@@ -652,6 +652,9 @@ TABLE_COMMON_CSS = """
   .table-card { flex: 0 0 auto; }
   .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
   .scroll-wrap { max-height: 1120px; overflow-y: auto; overflow-x: auto; border: 1px solid #334155; border-radius: 6px; }
+  .side-stack { display: flex; flex-direction: column; gap: 20px; flex: 0 0 auto; }
+  .side-stack .scroll-wrap { max-height: 520px; }
+  .empty-box { padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; }
   .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
   .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
   .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -713,8 +716,9 @@ TABLE_COMMON_JS = """
   }
 """
 
-def render_side_by_side_tables(df_main, df_diff):
-    """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)"""
+def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
+    """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)
+    df_zero 를 주면 차액 리스트 아래에 'PDF 0원 리스트' 를 추가로 표시합니다. (MW 전용)"""
     main_tbody = []
     for idx, row in df_main.iterrows():
         is_total = "총합계" in str(row.iloc[0])
@@ -761,9 +765,40 @@ def render_side_by_side_tables(df_main, df_diff):
             </div>"""
     else:
         diff_body = """
-            <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+            <div class="empty-box">
               ✅ 차액 100원 이상 발생 항목이 없습니다.
             </div>"""
+
+    zero_section = ""
+    if df_zero is not None:
+        if len(df_zero) > 0:
+            zero_tbody = "".join(
+                f'<tr><td class="col-no">{idx}</td>'
+                f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>'
+                f'<td class="col-type">{row.iloc[1]}</td>'
+                f'<td class="col-desc">{row.iloc[2]}</td></tr>'
+                for idx, row in df_zero.iterrows()
+            )
+            zero_th_html = "".join(
+                f'<th class="{cls}">{name}</th>'
+                for cls, name in zip(["col-no", "col-id", "col-type", "col-desc"], ["No."] + list(df_zero.columns))
+            )
+            zero_body = f"""
+            <div class="scroll-wrap">
+              <table class="compact-table">
+                <thead><tr>{zero_th_html}</tr></thead>
+                <tbody>{zero_tbody}</tbody>
+              </table>
+            </div>"""
+        else:
+            zero_body = """
+            <div class="empty-box">
+              ✅ PDF 에 0원으로 등록된 항목이 없습니다.
+            </div>"""
+        zero_section = f"""
+          <div class="table-card">
+            <div class="card-title">{zero_title} ({len(df_zero)}건)</div>{zero_body}
+          </div>"""
 
     main_th_html = "".join(
         f'<th class="{cls}">{name}</th>'
@@ -785,15 +820,27 @@ def render_side_by_side_tables(df_main, df_diff):
               </table>
             </div>
           </div>
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>{diff_body}
+          <div class="side-stack">
+            <div class="table-card">
+              <div class="card-title">🚨 차액 리스트 (100원 이상)</div>{diff_body}
+            </div>{zero_section}
           </div>
         </div>
         <script>{TABLE_COMMON_JS}</script>
       </body></html>
     """
 
-    calc_height = min(1160, max(320, len(df_main) * 44 + 100))
+    # 높이 : 왼쪽 상세 표와 오른쪽(차액 + 0원 리스트) 중 더 긴 쪽에 맞춤
+    def side_block_height(df):
+        if df is None:
+            return 0
+        rows = len(df) if len(df) > 0 else 1
+        return min(520, (rows + 1) * 44) + 60
+
+    right_height = side_block_height(df_diff if df_diff is not None else pd.DataFrame())
+    if df_zero is not None:
+        right_height += 20 + side_block_height(df_zero)
+    calc_height = min(1160, max(320, len(df_main) * 44 + 100, right_height + 20))
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
@@ -1344,6 +1391,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     """
     matched_results = []
     diff_over_100_results = []
+    zero_1_results = []   # 1번 자료(MW 에서는 PDF)에 0원으로 등록된 건
     total_1_sum = 0
     total_2_sum = 0
     total_diff_100_sum = 0
@@ -1371,6 +1419,9 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
                 col_2: f"{val_2:,}원" if val_2 is not None else "-",
                 "차액": f"{diff_val:,}원",
             })
+
+            if val_1 == 0:
+                zero_1_results.append({key_col: label_item, "Claim Type": r_val, "제목": v_val})
 
             if abs(diff_val) >= 100:
                 total_diff_100_sum += diff_val
@@ -1403,9 +1454,13 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     else:
         diff_df = pd.DataFrame(columns=[key_col, "Claim Type", "제목", "차액"])
 
+    zero_df = pd.DataFrame(zero_1_results, columns=[key_col, "Claim Type", "제목"])
+    zero_df.index = [str(i) for i in range(1, len(zero_df) + 1)]
+
     return {
         "res_df": res_df,
         "diff_df": diff_df,
+        "zero_df": zero_df,
         "total_cnt": total_cnt,
         "total_diff_sum": total_diff_sum,
         "total_1_sum": total_1_sum,
@@ -1483,6 +1538,7 @@ COMPARE_MODES = {
             ("2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)", "엑셀 파일 업로드", "xlsx"),
         ],
         "label_1": "PDF 총 합계 (입금 합계)",
+        "zero_title": "📭 PDF 0원 리스트",
         "label_2": "DMS 총 합계 (청구 합계)",
         "compute": compute_mw,
     },
@@ -1534,7 +1590,10 @@ if mode in COMPARE_MODES:
             r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name)
 
         with right_col:
-            render_side_by_side_tables(r["res_df"], r["diff_df"])
+            if cfg.get("zero_title"):
+                render_side_by_side_tables(r["res_df"], r["diff_df"], r["zero_df"], cfg["zero_title"])
+            else:
+                render_side_by_side_tables(r["res_df"], r["diff_df"])
 
         with left_col:
             st.divider()
