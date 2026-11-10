@@ -2,6 +2,7 @@ from collections import OrderedDict, defaultdict
 import datetime
 import calendar
 import copy
+import html as html_lib
 import io
 import json
 import os
@@ -213,6 +214,12 @@ st.markdown(
 )
 
 APP_URL = "https://iron-warranty-app.streamlit.app"
+
+# 화면 상단 제목 (서버별로 다르게 사용)
+#   main  : 아이언모터스 보증팀 지원 프로그램
+#   test  : TEST 용 서버
+#   test2 : 클로드 테스트용 서버
+APP_TITLE = "아이언모터스 보증팀 지원 프로그램"
 
 # ────────────────────────────────────────────────────────
 # ☁️ GitHub 영구 저장소 연동 모듈
@@ -500,7 +507,7 @@ with head_col1:
         f"""
         <div class="brand-title-wrap">
           <img src="{LOGO_DATA_URI}" class="brand-logo-img" alt="VOLVO" />
-          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">아이언모터스 보증팀 지원 프로그램</h1>
+          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">{APP_TITLE}</h1>
         </div>
         """,
         unsafe_allow_html=True,
@@ -648,16 +655,22 @@ def clean_text(value):
 TABLE_COMMON_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
-  .flex-container { display: flex; gap: 20px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
-  .table-card { flex: 0 0 auto; }
-  .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
+  /* 왼쪽 상세 표는 내용 폭 그대로, 오른쪽(차액 / 0원 리스트)은 남은 폭에 맞춰 줄어듦 */
+  .flex-container { display: flex; gap: 14px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
+  .table-card { flex: 0 0 auto; min-width: 0; }
+  .card-title { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #f1f5f9; white-space: nowrap; }
   .scroll-wrap { max-height: 1120px; overflow-y: auto; overflow-x: auto; border: 1px solid #334155; border-radius: 6px; }
+  .side-stack { display: flex; flex-direction: column; gap: 16px; flex: 1 1 0; min-width: 0; }
+  .side-stack .table-card { width: 100%; }
+  .side-stack .scroll-wrap { max-height: 520px; }
+  .side-stack .compact-table { width: 100%; }
+  .empty-box { padding: 14px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; font-size: 14px; }
   .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
   .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
   .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-  .compact-table { border-collapse: collapse; width: max-content; font-size: 15px; user-select: text; }
-  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 12px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
-  .compact-table tbody td { padding: 9px 12px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+  .compact-table { border-collapse: collapse; width: max-content; font-size: 13.5px; user-select: text; }
+  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 8px 9px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
+  .compact-table tbody td { padding: 7px 9px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
   
   .compact-table tbody td.copyable { cursor: pointer; }
   .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
@@ -667,12 +680,14 @@ TABLE_COMMON_CSS = """
   
   .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
   .diff-red { color: #ef4444 !important; font-weight: bold; }
-  .col-no { min-width: 44px; text-align: center; font-weight: bold; }
-  .col-id { min-width: 110px; text-align: center; }
-  .col-amt { min-width: 130px; text-align: right; }
-  .col-type { min-width: 105px; text-align: center; color: #38bdf8; }
-  .col-desc { min-width: 190px; text-align: left; }
-  .col-diff { min-width: 100px; text-align: right; }
+  .col-no { width: 1%; min-width: 38px; text-align: center; font-weight: bold; }
+  .col-id { width: 1%; min-width: 92px; text-align: center; }
+  .col-amt { min-width: 108px; text-align: right; }
+  .col-type { width: 1%; min-width: 80px; text-align: center; color: #38bdf8; }
+  /* 제목 : 남은 폭을 모두 쓰고, 넘치면 … 으로 줄임 (마우스를 올리면 전체 제목 표시) */
+  .col-desc { min-width: 140px; max-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+  th.col-desc { max-width: none; }
+  .col-diff { width: 1%; min-width: 84px; text-align: right; }
   #toast { visibility: hidden; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #ffffff; padding: 9px 18px; border-radius: 6px; font-weight: bold; font-size: 14px; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
   #toast.show { visibility: visible; animation: fadein 0.2s, fadeout 0.3s 1.1s; }
   @keyframes fadein { from { opacity: 0; top: 0px; } to { opacity: 1; top: 14px; } }
@@ -713,8 +728,9 @@ TABLE_COMMON_JS = """
   }
 """
 
-def render_side_by_side_tables(df_main, df_diff):
-    """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)"""
+def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
+    """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)
+    df_zero 를 주면 차액 리스트 아래에 'PDF 0원 리스트' 를 추가로 표시합니다. (MW 전용)"""
     main_tbody = []
     for idx, row in df_main.iterrows():
         is_total = "총합계" in str(row.iloc[0])
@@ -744,7 +760,7 @@ def render_side_by_side_tables(df_main, df_diff):
             diff_tbody.append(
                 f'<tr{tr_class}><td class="col-no">{idx}</td>{id_cell}'
                 f'<td class="col-type">{row.iloc[1]}</td>'
-                f'<td class="col-desc">{row.iloc[2]}</td>'
+                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[2]), quote=True)}">{row.iloc[2]}</td>'
                 f'<td class="col-diff{diff_color}">{row.iloc[3]}</td></tr>'
             )
 
@@ -761,9 +777,40 @@ def render_side_by_side_tables(df_main, df_diff):
             </div>"""
     else:
         diff_body = """
-            <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
+            <div class="empty-box">
               ✅ 차액 100원 이상 발생 항목이 없습니다.
             </div>"""
+
+    zero_section = ""
+    if df_zero is not None:
+        if len(df_zero) > 0:
+            zero_tbody = "".join(
+                f'<tr><td class="col-no">{idx}</td>'
+                f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>'
+                f'<td class="col-type">{row.iloc[1]}</td>'
+                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[2]), quote=True)}">{row.iloc[2]}</td></tr>'
+                for idx, row in df_zero.iterrows()
+            )
+            zero_th_html = "".join(
+                f'<th class="{cls}">{name}</th>'
+                for cls, name in zip(["col-no", "col-id", "col-type", "col-desc"], ["No."] + list(df_zero.columns))
+            )
+            zero_body = f"""
+            <div class="scroll-wrap">
+              <table class="compact-table">
+                <thead><tr>{zero_th_html}</tr></thead>
+                <tbody>{zero_tbody}</tbody>
+              </table>
+            </div>"""
+        else:
+            zero_body = """
+            <div class="empty-box">
+              ✅ PDF 에 0원으로 등록된 항목이 없습니다.
+            </div>"""
+        zero_section = f"""
+          <div class="table-card">
+            <div class="card-title">{zero_title} ({len(df_zero)}건)</div>{zero_body}
+          </div>"""
 
     main_th_html = "".join(
         f'<th class="{cls}">{name}</th>'
@@ -785,15 +832,27 @@ def render_side_by_side_tables(df_main, df_diff):
               </table>
             </div>
           </div>
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>{diff_body}
+          <div class="side-stack">
+            <div class="table-card">
+              <div class="card-title">🚨 차액 리스트 (100원 이상)</div>{diff_body}
+            </div>{zero_section}
           </div>
         </div>
         <script>{TABLE_COMMON_JS}</script>
       </body></html>
     """
 
-    calc_height = min(1160, max(320, len(df_main) * 44 + 100))
+    # 높이 : 왼쪽 상세 표와 오른쪽(차액 + 0원 리스트) 중 더 긴 쪽에 맞춤
+    def side_block_height(df):
+        if df is None:
+            return 0
+        rows = len(df) if len(df) > 0 else 1
+        return min(520, (rows + 1) * 36) + 50
+
+    right_height = side_block_height(df_diff if df_diff is not None else pd.DataFrame())
+    if df_zero is not None:
+        right_height += 20 + side_block_height(df_zero)
+    calc_height = min(1160, max(320, len(df_main) * 36 + 90, right_height + 20))
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
@@ -1336,6 +1395,10 @@ def _numbered_index(df):
     df.index = [str(i) for i in range(1, len(df))] + [""]
     return df
 
+# 계산 결과 캐시 버전 : 대조/보고서 계산 방식을 바꾸면 이 숫자를 1 올립니다.
+# (서버가 새 코드로 바뀌어도 예전 코드로 계산해 둔 결과를 재사용하지 않도록)
+COMPUTE_VERSION = 2
+
 def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn):
     """두 자료를 키(주문번호/차량번호)별로 맞대어 금액을 대조합니다. (MW · 쿠폰 공용)
     - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
@@ -1344,6 +1407,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     """
     matched_results = []
     diff_over_100_results = []
+    zero_1_results = []   # 1번 자료(MW 에서는 PDF)에 0원으로 등록된 건
     total_1_sum = 0
     total_2_sum = 0
     total_diff_100_sum = 0
@@ -1371,6 +1435,9 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
                 col_2: f"{val_2:,}원" if val_2 is not None else "-",
                 "차액": f"{diff_val:,}원",
             })
+
+            if val_1 == 0:
+                zero_1_results.append({key_col: label_item, "Claim Type": r_val, "제목": v_val})
 
             if abs(diff_val) >= 100:
                 total_diff_100_sum += diff_val
@@ -1403,9 +1470,13 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     else:
         diff_df = pd.DataFrame(columns=[key_col, "Claim Type", "제목", "차액"])
 
+    zero_df = pd.DataFrame(zero_1_results, columns=[key_col, "Claim Type", "제목"])
+    zero_df.index = [str(i) for i in range(1, len(zero_df) + 1)]
+
     return {
         "res_df": res_df,
         "diff_df": diff_df,
+        "zero_df": zero_df,
         "total_cnt": total_cnt,
         "total_diff_sum": total_diff_sum,
         "total_1_sum": total_1_sum,
@@ -1413,7 +1484,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     }
 
 @st.cache_data(max_entries=5, show_spinner=False)
-def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
+def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name, version=COMPUTE_VERSION):
     f_pdf = NamedBytesIO(pdf_bytes, pdf_name)
     f_xlsx = NamedBytesIO(xlsx_bytes, xlsx_name)
 
@@ -1447,7 +1518,7 @@ def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
     return r
 
 @st.cache_data(max_entries=5, show_spinner=False)
-def compute_coupon(a_bytes, a_name, b_bytes, b_name):
+def compute_coupon(a_bytes, a_name, b_bytes, b_name, version=COMPUTE_VERSION):
     f_a = NamedBytesIO(a_bytes, a_name)
     f_b = NamedBytesIO(b_bytes, b_name)
 
@@ -1483,6 +1554,7 @@ COMPARE_MODES = {
             ("2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)", "엑셀 파일 업로드", "xlsx"),
         ],
         "label_1": "PDF 총 합계 (입금 합계)",
+        "zero_title": "📭 PDF 0원 리스트",
         "label_2": "DMS 총 합계 (청구 합계)",
         "compute": compute_mw,
     },
@@ -1531,10 +1603,13 @@ if mode in COMPARE_MODES:
 
     if f1 and f2:
         with st.spinner(f"{cfg['prefix']} 보증 데이터 교차 대조 중..."):
-            r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name)
+            r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name, COMPUTE_VERSION)
 
         with right_col:
-            render_side_by_side_tables(r["res_df"], r["diff_df"])
+            if cfg.get("zero_title") and "zero_df" in r:
+                render_side_by_side_tables(r["res_df"], r["diff_df"], r["zero_df"], cfg["zero_title"])
+            else:
+                render_side_by_side_tables(r["res_df"], r["diff_df"])
 
         with left_col:
             st.divider()
