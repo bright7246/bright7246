@@ -1399,7 +1399,7 @@ def _numbered_index(df):
 
 # 계산 결과 캐시 버전 : 대조/보고서 계산 방식을 바꾸면 이 숫자를 1 올립니다.
 # (서버가 새 코드로 바뀌어도 예전 코드로 계산해 둔 결과를 재사용하지 않도록)
-COMPUTE_VERSION = 3
+COMPUTE_VERSION = 4
 
 def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn,
                    name_1="자료1", name_2="자료2"):
@@ -1407,11 +1407,13 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
     - 차액 = 1번 자료 금액 - 2번 자료 금액, |차액| 100원 이상은 차액 리스트에 추가
     - meta_fn(item_1, item_2) → (Claim Type, 제목)
-    - 어느 한쪽이라도 금액이 0원인 건은 0원 리스트에 추가 (구분 : name_1 / name_2 / 둘 다)
+    - 0원 리스트 : 1번 자료 금액이 0원인 건 → 구분 name_1
+                  2번 자료 금액이 0원이거나, 2번 자료에 아예 없는 건('-' 표시) → 구분 name_2
+                  (MW 기준 : PDF 에는 있는데 DMS 엑셀에 주문번호가 없는 건도 'DMS' 로 표시)
     """
     matched_results = []
     diff_over_100_results = []
-    zero_results = []   # 어느 한쪽이라도 0원으로 등록된 건
+    zero_results = []   # 0원 리스트 (설명은 위 참고)
     total_1_sum = 0
     total_2_sum = 0
     total_diff_100_sum = 0
@@ -1440,7 +1442,11 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
                 "차액": f"{diff_val:,}원",
             })
 
-            zero_sources = [name for name, val in ((name_1, val_1), (name_2, val_2)) if val == 0]
+            zero_sources = []
+            if val_1 == 0:
+                zero_sources.append(name_1)
+            if val_2 == 0 or (item_2 is None and item_1 is not None):
+                zero_sources.append(name_2)
             if zero_sources:
                 zero_results.append({key_col: label_item, "구분": " · ".join(zero_sources), "Claim Type": r_val, "제목": v_val})
 
