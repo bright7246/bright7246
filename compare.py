@@ -2,6 +2,7 @@ from collections import OrderedDict, defaultdict
 import datetime
 import calendar
 import copy
+import html as html_lib
 import io
 import json
 import os
@@ -654,19 +655,22 @@ def clean_text(value):
 TABLE_COMMON_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { background-color: transparent; color: #f8fafc; overflow-x: hidden; }
-  .flex-container { display: flex; gap: 20px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
-  .table-card { flex: 0 0 auto; }
-  .card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
+  /* 왼쪽 상세 표는 내용 폭 그대로, 오른쪽(차액 / 0원 리스트)은 남은 폭에 맞춰 줄어듦 */
+  .flex-container { display: flex; gap: 14px; align-items: flex-start; justify-content: flex-start; flex-wrap: nowrap; width: 100%; }
+  .table-card { flex: 0 0 auto; min-width: 0; }
+  .card-title { font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #f1f5f9; white-space: nowrap; }
   .scroll-wrap { max-height: 1120px; overflow-y: auto; overflow-x: auto; border: 1px solid #334155; border-radius: 6px; }
-  .side-stack { display: flex; flex-direction: column; gap: 20px; flex: 0 0 auto; }
+  .side-stack { display: flex; flex-direction: column; gap: 16px; flex: 1 1 0; min-width: 0; }
+  .side-stack .table-card { width: 100%; }
   .side-stack .scroll-wrap { max-height: 520px; }
-  .empty-box { padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; }
+  .side-stack .compact-table { width: 100%; }
+  .empty-box { padding: 14px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155; font-size: 14px; }
   .scroll-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
   .scroll-wrap::-webkit-scrollbar-track { background: #0f172a; }
   .scroll-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-  .compact-table { border-collapse: collapse; width: max-content; font-size: 15px; user-select: text; }
-  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 10px 12px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
-  .compact-table tbody td { padding: 9px 12px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
+  .compact-table { border-collapse: collapse; width: max-content; font-size: 13.5px; user-select: text; }
+  .compact-table thead th { position: sticky; top: 0; background-color: #1e293b; color: #ffffff; padding: 8px 9px; font-weight: 700; border-bottom: 2px solid #475569; border-right: 1px solid #334155; white-space: nowrap; z-index: 2; }
+  .compact-table tbody td { padding: 7px 9px; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; transition: background-color 0.15s ease; }
   
   .compact-table tbody td.copyable { cursor: pointer; }
   .compact-table tbody td.copyable:hover { background-color: rgba(14, 165, 233, 0.25) !important; }
@@ -676,12 +680,14 @@ TABLE_COMMON_CSS = """
   
   .total-row { background-color: #0f172a !important; font-weight: bold; color: #38bdf8 !important; }
   .diff-red { color: #ef4444 !important; font-weight: bold; }
-  .col-no { min-width: 44px; text-align: center; font-weight: bold; }
-  .col-id { min-width: 110px; text-align: center; }
-  .col-amt { min-width: 130px; text-align: right; }
-  .col-type { min-width: 105px; text-align: center; color: #38bdf8; }
-  .col-desc { min-width: 190px; text-align: left; }
-  .col-diff { min-width: 100px; text-align: right; }
+  .col-no { width: 1%; min-width: 38px; text-align: center; font-weight: bold; }
+  .col-id { width: 1%; min-width: 92px; text-align: center; }
+  .col-amt { min-width: 108px; text-align: right; }
+  .col-type { width: 1%; min-width: 80px; text-align: center; color: #38bdf8; }
+  /* 제목 : 남은 폭을 모두 쓰고, 넘치면 … 으로 줄임 (마우스를 올리면 전체 제목 표시) */
+  .col-desc { min-width: 140px; max-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+  th.col-desc { max-width: none; }
+  .col-diff { width: 1%; min-width: 84px; text-align: right; }
   #toast { visibility: hidden; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); background-color: #0284c7; color: #ffffff; padding: 9px 18px; border-radius: 6px; font-weight: bold; font-size: 14px; z-index: 999999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
   #toast.show { visibility: visible; animation: fadein 0.2s, fadeout 0.3s 1.1s; }
   @keyframes fadein { from { opacity: 0; top: 0px; } to { opacity: 1; top: 14px; } }
@@ -754,7 +760,7 @@ def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
             diff_tbody.append(
                 f'<tr{tr_class}><td class="col-no">{idx}</td>{id_cell}'
                 f'<td class="col-type">{row.iloc[1]}</td>'
-                f'<td class="col-desc">{row.iloc[2]}</td>'
+                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[2]), quote=True)}">{row.iloc[2]}</td>'
                 f'<td class="col-diff{diff_color}">{row.iloc[3]}</td></tr>'
             )
 
@@ -782,7 +788,7 @@ def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
                 f'<tr><td class="col-no">{idx}</td>'
                 f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>'
                 f'<td class="col-type">{row.iloc[1]}</td>'
-                f'<td class="col-desc">{row.iloc[2]}</td></tr>'
+                f'<td class="col-desc" title="{html_lib.escape(str(row.iloc[2]), quote=True)}">{row.iloc[2]}</td></tr>'
                 for idx, row in df_zero.iterrows()
             )
             zero_th_html = "".join(
@@ -841,12 +847,12 @@ def render_side_by_side_tables(df_main, df_diff, df_zero=None, zero_title=""):
         if df is None:
             return 0
         rows = len(df) if len(df) > 0 else 1
-        return min(520, (rows + 1) * 44) + 60
+        return min(520, (rows + 1) * 36) + 50
 
     right_height = side_block_height(df_diff if df_diff is not None else pd.DataFrame())
     if df_zero is not None:
         right_height += 20 + side_block_height(df_zero)
-    calc_height = min(1160, max(320, len(df_main) * 44 + 100, right_height + 20))
+    calc_height = min(1160, max(320, len(df_main) * 36 + 90, right_height + 20))
     components.html(full_html, height=calc_height, scrolling=False)
 
 # ────────────────────────────────────────────────────────
