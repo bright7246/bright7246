@@ -1399,10 +1399,10 @@ def _numbered_index(df):
 
 # 계산 결과 캐시 버전 : 대조/보고서 계산 방식을 바꾸면 이 숫자를 1 올립니다.
 # (서버가 새 코드로 바뀌어도 예전 코드로 계산해 둔 결과를 재사용하지 않도록)
-COMPUTE_VERSION = 4
+COMPUTE_VERSION = 5
 
 def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn,
-                   name_1="자료1", name_2="자료2"):
+                   name_1="자료1", name_2="자료2", missing_2_text="-"):
     """두 자료를 키(주문번호/차량번호)별로 맞대어 금액을 대조합니다. (MW · 쿠폰 공용)
     - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
     - 차액 = 1번 자료 금액 - 2번 자료 금액, |차액| 100원 이상은 차액 리스트에 추가
@@ -1410,6 +1410,7 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
     - 0원 리스트 : 1번 자료 금액이 0원인 건 → 구분 name_1
                   2번 자료 금액이 0원이거나, 2번 자료에 아예 없는 건('-' 표시) → 구분 name_2
                   (MW 기준 : PDF 에는 있는데 DMS 엑셀에 주문번호가 없는 건도 'DMS' 로 표시)
+                  2번 자료에 아예 없는 건의 제목은 missing_2_text 로 표시
     """
     matched_results = []
     diff_over_100_results = []
@@ -1448,7 +1449,8 @@ def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_
             if val_2 == 0 or (item_2 is None and item_1 is not None):
                 zero_sources.append(name_2)
             if zero_sources:
-                zero_results.append({key_col: label_item, "구분": " · ".join(zero_sources), "Claim Type": r_val, "제목": v_val})
+                zero_desc = missing_2_text if (item_2 is None and item_1 is not None) else v_val
+                zero_results.append({key_col: label_item, "구분": " · ".join(zero_sources), "Claim Type": r_val, "제목": zero_desc})
 
             if abs(diff_val) >= 100:
                 total_diff_100_sum += diff_val
@@ -1509,7 +1511,7 @@ def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name, version=COMPUTE_VERSI
             e["claim_type"] if e else (p["clm_type"] if p else "-"),
             e["v_desc"] if e else "-",
         ),
-        name_1="PDF", name_2="DMS",
+        name_1="PDF", name_2="DMS", missing_2_text="엑셀파일에 주문번호가 존재하지 않음",
     )
 
     excel_data, month_name = create_mw_excel_report(
