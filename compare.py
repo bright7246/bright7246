@@ -1,6 +1,7 @@
 from collections import OrderedDict, defaultdict
 import datetime
 import calendar
+import copy
 import io
 import json
 import os
@@ -70,19 +71,20 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
-    div.share-btn-wrap div.stButton > button {
+    /* 버튼 개별 스타일: 버튼 key 로 자동 생성되는 st-key-<key> 클래스를 이용 */
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-sharebtn"] button {
         height: 38px !important;
         min-height: 38px !important;
         padding: 4px 12px !important;
         border-radius: 8px !important;
         margin-top: 6px !important;
     }
-    div.share-btn-wrap div.stButton > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-sharebtn"] button p {
         font-size: 13px !important;
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
-    div.sw-btn-wrap div.stButton > button {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button {
         height: 38px !important;
         min-height: 38px !important;
         padding: 4px 8px !important;
@@ -93,12 +95,12 @@ st.markdown(
         color: #f8fafc !important;
         white-space: nowrap !important;
     }
-    div.sw-btn-wrap div.stButton > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button p {
         font-size: 13px !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
     }
-    div.sw-btn-wrap div.stButton > button:hover {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button:hover {
         background-color: #1e293b !important;
         border-color: #0ea5e9 !important;
         color: #38bdf8 !important;
@@ -164,7 +166,7 @@ st.markdown(
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button {
         height: 72px !important;
         min-height: 72px !important;
         border-radius: 8px !important;
@@ -174,21 +176,19 @@ st.markdown(
         padding: 0 !important;
         margin-bottom: 8px !important;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button p {
         font-size: 13px !important;
         font-weight: 700 !important;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button:hover {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button:hover {
         background-color: #7f1d1d !important;
         border-color: #ef4444 !important;
         color: #ffffff !important;
     }
-    .single-day-checkbox {
-        display: flex;
-        align-items: center;
-        margin-top: 36px;
+    div[class*="st-key-cal_single_day"] {
+        margin-top: 10px;
     }
-    .single-day-checkbox label p {
+    div[class*="st-key-cal_single_day"] label p {
         font-size: 15px !important;
         font-weight: 600 !important;
         color: #38bdf8 !important;
@@ -228,54 +228,121 @@ def get_github_auth():
         return repo, headers
     return None, None
 
-def github_load_file(filename, default_data):
-    repo, headers = get_github_auth()
-    if repo and headers:
-        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                content_b64 = res.json().get("content", "")
-                decoded = base64.b64decode(content_b64).decode("utf-8")
-                return json.loads(decoded)
-        except Exception:
-            pass
-            
+def _local_load(filename, default_data):
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    return default_data
+    return copy.deepcopy(default_data)
 
-def github_save_file(filename, data):
-    repo, headers = get_github_auth()
-    content_str = json.dumps(data, ensure_ascii=False, indent=2)
-    
+def _local_save(filename, data):
     try:
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(content_str)
+            f.write(json.dumps(data, ensure_ascii=False, indent=2))
+        return True
     except Exception:
-        pass
-        
-    if repo and headers:
-        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        return False
+
+def _github_get(filename):
+    """GitHub 에서 파일을 읽어옵니다.
+    반환: (상태, 데이터, sha, 오류메시지)  상태 = "ok" / "missing" / "error" / "nolink"
+    """
+    repo, headers = get_github_auth()
+    if not (repo and headers):
+        return "nolink", None, None, "GitHub 연동 정보(GITHUB_TOKEN / GITHUB_REPO)가 없습니다."
+    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+    try:
+        res = requests.get(url, headers=headers, timeout=8)
+    except requests.RequestException as e:
+        return "error", None, None, f"GitHub 연결 실패 ({type(e).__name__})"
+    if res.status_code == 200:
         try:
-            sha = None
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                sha = res.json().get("sha")
-                
-            payload = {
-                "message": f"Update {filename} via App",
-                "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
-            }
-            if sha:
-                payload["sha"] = sha
-            requests.put(url, headers=headers, json=payload, timeout=5)
-        except Exception:
-            pass
+            body = res.json()
+            decoded = base64.b64decode(body.get("content", "")).decode("utf-8")
+            return "ok", json.loads(decoded), body.get("sha"), ""
+        except Exception as e:
+            return "error", None, None, f"GitHub 데이터 해석 실패 ({type(e).__name__})"
+    if res.status_code == 404:
+        return "missing", None, None, ""
+    return "error", None, None, f"GitHub 응답 오류 (코드 {res.status_code})"
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_shared_data(filename, default_data):
+    """모든 접속자가 공유하는 데이터(S/W 이력, 캘린더)를 읽어옵니다.
+    30초마다 GitHub 에서 최신본을 다시 읽어, 다른 사람이 등록한 내용도 반영됩니다."""
+    status, data, _, _ = _github_get(filename)
+    if status == "ok":
+        return data
+    if status == "missing":
+        return copy.deepcopy(default_data)
+    return _local_load(filename, default_data)
+
+def update_shared_data(filename, default_data, mutate_fn):
+    """저장 직전에 GitHub 최신본을 다시 읽고, 그 위에 변경사항(mutate_fn)만 적용해 저장합니다.
+    → 여러 명이 동시에 사용해도 다른 사람이 등록한 내용을 덮어쓰지 않습니다.
+    mutate_fn(data) 는 실제로 변경했으면 True, 변경할 대상이 없으면 False 를 반환합니다.
+    반환: (결과, 메시지)  결과 = "success" / "warning" / "info" / "error"
+    """
+    repo, headers = get_github_auth()
+
+    # GitHub 연동 정보가 없는 경우 : 서버 로컬 파일에만 저장
+    if not (repo and headers):
+        data = _local_load(filename, default_data)
+        if not mutate_fn(data):
+            load_shared_data.clear()
+            return "info", "이미 삭제되었거나 변경된 항목입니다. 최신 내용으로 새로 고쳤습니다."
+        _local_save(filename, data)
+        load_shared_data.clear()
+        return "warning", (
+            "GitHub 연동 정보가 없어 서버에 임시로만 저장되었습니다. "
+            "서버가 재시작되면 사라질 수 있습니다."
+        )
+
+    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+    for _ in range(3):
+        status, data, sha, err_msg = _github_get(filename)
+        if status == "error":
+            return "error", f"저장 실패 : {err_msg}. 잠시 후 다시 시도해 주세요."
+        if status == "missing":
+            data, sha = copy.deepcopy(default_data), None
+
+        if not mutate_fn(data):
+            load_shared_data.clear()
+            return "info", "이미 삭제되었거나 변경된 항목입니다. 최신 내용으로 새로 고쳤습니다."
+
+        content_str = json.dumps(data, ensure_ascii=False, indent=2)
+        payload = {
+            "message": f"Update {filename} via App",
+            "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8"),
+        }
+        if sha:
+            payload["sha"] = sha
+        try:
+            res = requests.put(url, headers=headers, json=payload, timeout=10)
+        except requests.RequestException as e:
+            return "error", f"저장 실패 : GitHub 연결 실패 ({type(e).__name__}). 잠시 후 다시 시도해 주세요."
+
+        if res.status_code in (200, 201):
+            _local_save(filename, data)
+            load_shared_data.clear()
+            return "success", ""
+        if res.status_code in (409, 422):
+            # 그 사이 다른 사람이 먼저 저장함 → 최신본을 다시 읽어 재시도
+            continue
+        return "error", f"저장 실패 : GitHub 응답 오류 (코드 {res.status_code}). 잠시 후 다시 시도해 주세요."
+
+    return "error", "다른 사용자와 동시에 저장되어 저장하지 못했습니다. 다시 시도해 주세요."
+
+def set_flash(level, message):
+    """st.rerun() 후에도 보이도록 알림 메시지를 보관합니다."""
+    st.session_state.flash_msg = (level, message)
+
+def save_shared_and_rerun(filename, default_data, mutate_fn, success_msg):
+    result, msg = update_shared_data(filename, default_data, mutate_fn)
+    set_flash(result, success_msg if result == "success" else msg)
+    st.rerun()
 
 DEFAULT_SW_DATA = {
     "VOLVO": [{"version": "5.2.16", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
@@ -293,21 +360,19 @@ DEFAULT_CALENDAR_DATA = [
     }
 ]
 
-if "sw_history" not in st.session_state:
-    st.session_state.sw_history = github_load_file("sw_data.json", DEFAULT_SW_DATA)
+# 매 실행마다 공유 데이터를 다시 읽음 (30초 캐시) → 다른 접속자의 변경사항도 반영
+st.session_state.sw_history = load_shared_data("sw_data.json", DEFAULT_SW_DATA)
+st.session_state.calendar_events = load_shared_data("calendar_data.json", DEFAULT_CALENDAR_DATA)
 
-if "calendar_events" not in st.session_state:
-    st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
+def latest_sw_version(car_key):
+    """해당 차종의 최신 S/W 버전 (없으면 '-')"""
+    history = st.session_state.sw_history.get(car_key)
+    return history[0]["version"] if history else "-"
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
     st.markdown(f"### ⚙️ **{car_key}** S/W 버전 기록")
-    curr_ver = (
-        st.session_state.sw_history[car_key][0]["version"]
-        if st.session_state.sw_history.get(car_key)
-        else "-"
-    )
-    st.info(f"현재 등록된 최신 버전 : **{curr_ver}**")
+    st.info(f"현재 등록된 최신 버전 : **{latest_sw_version(car_key)}**")
 
     new_ver_input = st.text_input(
         "새 S/W 버전 입력",
@@ -324,19 +389,20 @@ def manage_sw_dialog(car_key):
 
     if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
         if new_ver_input.strip():
-            today_str = datetime.date.today().strftime("%Y-%m-%d")
-            if car_key not in st.session_state.sw_history:
-                st.session_state.sw_history[car_key] = []
-            st.session_state.sw_history[car_key].insert(
-                0, {
-                    "version": new_ver_input.strip(),
-                    "date": today_str,
-                    "memo": new_memo_input.strip()
-                }
+            new_item = {
+                "version": new_ver_input.strip(),
+                "date": datetime.date.today().strftime("%Y-%m-%d"),
+                "memo": new_memo_input.strip(),
+            }
+
+            def _add_version(data):
+                data.setdefault(car_key, []).insert(0, new_item)
+                return True
+
+            save_shared_and_rerun(
+                "sw_data.json", DEFAULT_SW_DATA, _add_version,
+                f"✅ {car_key} S/W 버전이 영구 저장되었습니다!",
             )
-            github_save_file("sw_data.json", st.session_state.sw_history)
-            st.success(f"✅ {car_key} S/W 버전이 영구 저장되었습니다!")
-            st.rerun()
         else:
             st.warning("⚠️ 버전을 입력해 주세요.")
 
@@ -358,9 +424,18 @@ def manage_sw_dialog(car_key):
                 )
             with c_h_del:
                 if st.button("삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True):
-                    st.session_state.sw_history[car_key].pop(idx)
-                    github_save_file("sw_data.json", st.session_state.sw_history)
-                    st.rerun()
+                    # 순번이 아니라 내용으로 찾아서 삭제 (그 사이 목록이 바뀌어도 안전)
+                    def _del_version(data, target=dict(item)):
+                        items = data.get(car_key, [])
+                        if target in items:
+                            items.remove(target)
+                            return True
+                        return False
+
+                    save_shared_and_rerun(
+                        "sw_data.json", DEFAULT_SW_DATA, _del_version,
+                        f"🗑️ {car_key} S/W 버전 기록이 삭제되었습니다.",
+                    )
             st.markdown(
                 "<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>",
                 unsafe_allow_html=True,
@@ -414,7 +489,9 @@ def share_modal():
 # ────────────────────────────────────────────────────────
 # 🔝 상단 헤더
 # ────────────────────────────────────────────────────────
-head_col1, col_sw_lbl, col_sw_v, col_sw_ve, col_sw_p, head_col2 = st.columns(
+SW_BUTTONS = [("VOLVO", "swbtn_volvo"), ("V.ELEC", "swbtn_velec"), ("POL", "swbtn_pol")]
+
+head_col1, col_sw_lbl, *sw_cols, head_col2 = st.columns(
     [4.3, 0.6, 1.4, 1.4, 1.3, 1.0]
 )
 
@@ -435,111 +512,52 @@ with col_sw_lbl:
         unsafe_allow_html=True,
     )
 
-latest_v = (
-    st.session_state.sw_history["VOLVO"][0]["version"]
-    if st.session_state.sw_history.get("VOLVO")
-    else "-"
-)
-with col_sw_v:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"VOLVO  {latest_v}", use_container_width=True, key="btn_sw_volvo"):
-        manage_sw_dialog("VOLVO")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-latest_ve = (
-    st.session_state.sw_history["V.ELEC"][0]["version"]
-    if st.session_state.sw_history.get("V.ELEC")
-    else "-"
-)
-with col_sw_ve:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"V.ELEC  {latest_ve}", use_container_width=True, key="btn_sw_velec"):
-        manage_sw_dialog("V.ELEC")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-latest_p = (
-    st.session_state.sw_history["POL"][0]["version"]
-    if st.session_state.sw_history.get("POL")
-    else "-"
-)
-with col_sw_p:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"POL  {latest_p}", use_container_width=True, key="btn_sw_pol"):
-        manage_sw_dialog("POL")
-    st.markdown("</div>", unsafe_allow_html=True)
+for sw_col, (car_key, btn_key) in zip(sw_cols, SW_BUTTONS):
+    with sw_col:
+        if st.button(f"{car_key}  {latest_sw_version(car_key)}", use_container_width=True, key=btn_key):
+            manage_sw_dialog(car_key)
 
 with head_col2:
-    st.markdown('<div class="share-btn-wrap">', unsafe_allow_html=True)
-    if st.button("🔗 공유 / QR", use_container_width=True):
+    if st.button("🔗 공유 / QR", use_container_width=True, key="sharebtn"):
         share_modal()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 today_date = datetime.date.today()
 
-if "current_mode" not in st.session_state:
-    st.session_state.current_mode = "MW 보증 비교"
-if "prev_mode" not in st.session_state:
-    st.session_state.prev_mode = st.session_state.current_mode
-if "reset_trigger" not in st.session_state:
-    st.session_state.reset_trigger = 0
-if "show_group_c" not in st.session_state:
-    st.session_state.show_group_c = False
+for _state_key, _default in {
+    "current_mode": "MW 보증 비교",
+    "reset_trigger": 0,
+    "show_group_c": False,
+    "cal_year": today_date.year,
+    "cal_month": today_date.month,
+}.items():
+    if _state_key not in st.session_state:
+        st.session_state[_state_key] = _default
 
-if "cal_year" not in st.session_state:
-    st.session_state.cal_year = today_date.year
-if "cal_month" not in st.session_state:
-    st.session_state.cal_month = today_date.month
+# (모드 이름, 버튼 문구, 모드 전환 시 첨부파일 초기화 여부)
+NAV_MODES = [
+    ("MW 보증 비교", "📋 MW 보증 비교\n(PDF vs 엑셀)", True),
+    ("쿠폰 보증 비교", "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)", True),
+    ("공임코드 비교", "🔧 공임코드 비교\n(중복 작업 검증)", True),
+    ("캘린더", "📅 캘린더\n(보증/업무 일정 관리)", False),
+]
 
-nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
-
-with nav_col1:
-    btn_mw = st.button(
-        "📋 MW 보증 비교\n(PDF vs 엑셀)",
-        use_container_width=True,
-        type="primary" if st.session_state.current_mode == "MW 보증 비교" else "secondary",
-    )
-    if btn_mw:
-        if st.session_state.current_mode != "MW 보증 비교":
-            st.session_state.current_mode = "MW 보증 비교"
-            st.session_state.reset_trigger += 1
-            st.rerun()
-
-with nav_col2:
-    btn_coupon = st.button(
-        "🚗 쿠폰 보증 비교\n(엑셀 vs 엑셀)",
-        use_container_width=True,
-        type="primary" if st.session_state.current_mode == "쿠폰 보증 비교" else "secondary",
-    )
-    if btn_coupon:
-        if st.session_state.current_mode != "쿠폰 보증 비교":
-            st.session_state.current_mode = "쿠폰 보증 비교"
-            st.session_state.reset_trigger += 1
-            st.rerun()
-
-with nav_col3:
-    btn_labor = st.button(
-        "🔧 공임코드 비교\n(중복 작업 검증)",
-        use_container_width=True,
-        type="primary" if st.session_state.current_mode == "공임코드 비교" else "secondary",
-    )
-    if btn_labor:
-        if st.session_state.current_mode != "공임코드 비교":
-            st.session_state.current_mode = "공임코드 비교"
-            st.session_state.reset_trigger += 1
-            st.rerun()
-
-with nav_col4:
-    btn_cal = st.button(
-        "📅 캘린더\n(보증/업무 일정 관리)",
-        use_container_width=True,
-        type="primary" if st.session_state.current_mode == "캘린더" else "secondary",
-    )
-    if btn_cal:
-        if st.session_state.current_mode != "캘린더":
-            st.session_state.current_mode = "캘린더"
-            st.rerun()
+for nav_col, (nav_mode, nav_label, nav_reset) in zip(st.columns(len(NAV_MODES)), NAV_MODES):
+    with nav_col:
+        is_current = st.session_state.current_mode == nav_mode
+        if st.button(nav_label, use_container_width=True, type="primary" if is_current else "secondary"):
+            if not is_current:
+                st.session_state.current_mode = nav_mode
+                if nav_reset:
+                    st.session_state.reset_trigger += 1
+                st.rerun()
 
 st.divider()
+
+# 저장 결과 알림 (st.rerun 이후에도 표시)
+_flash = st.session_state.pop("flash_msg", None)
+if _flash:
+    _level, _message = _flash
+    {"success": st.success, "warning": st.warning, "info": st.info}.get(_level, st.error)(_message)
 
 mode = st.session_state.current_mode
 
@@ -598,6 +616,31 @@ def parse_pdf_amount(val_str):
         return -val if is_negative else val
     except ValueError:
         return 0.0
+
+
+# 3개 로더(MW 엑셀, 쿠폰 A, 쿠폰 B)가 공통으로 쓰는 열 검색 키워드
+CLAIM_TYPE_KEYWORDS = ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"]
+DESC_KEYWORDS = ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"]
+
+def find_type_desc_cols(df):
+    """Claim Type 열과 제목(작업내용) 열을 찾습니다."""
+    col_r = find_col_smart(df, CLAIM_TYPE_KEYWORDS, fallback_idx=17)
+    col_v = find_col_smart(df, DESC_KEYWORDS, fallback_idx=21)
+    return col_r, col_v
+
+def to_numeric_cols(df, cols):
+    """찾은 열들을 숫자로 변환 (숫자가 아니면 0)"""
+    for c in cols:
+        if c:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+
+def cell_str(row, col, default):
+    """행에서 열 값을 문자열로 꺼냅니다. 열이 없으면 기본값."""
+    return str(row.get(col, default)).strip() if col and col in row else default
+
+def clean_text(value):
+    """비어있거나 'nan' 이면 '-' 로 표시"""
+    return value if value and value != "nan" else "-"
 
 # ────────────────────────────────────────────────────────
 # 📊 [테이블 렌더링]
@@ -670,8 +713,8 @@ TABLE_COMMON_JS = """
   }
 """
 
-def render_mw_side_by_side_tables(df_main, df_diff):
-    main_headers = ["No."] + list(df_main.columns)
+def render_side_by_side_tables(df_main, df_diff):
+    """왼쪽 : 상세 대조 내역 / 오른쪽 : 차액 리스트 (MW · 쿠폰 공용)"""
     main_tbody = []
     for idx, row in df_main.iterrows():
         is_total = "총합계" in str(row.iloc[0])
@@ -688,63 +731,44 @@ def render_mw_side_by_side_tables(df_main, df_diff):
                 main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
         main_tbody.append("</tr>")
 
-    diff_section = ""
     if df_diff is not None and len(df_diff) > 0:
-        diff_headers = ["No."] + list(df_diff.columns)
         diff_tbody = []
         for idx, row in df_diff.iterrows():
             is_total = "총합계" in str(row.iloc[0])
             tr_class = ' class="total-row"' if is_total else ""
-            diff_tbody.append(f"<tr{tr_class}>")
-            diff_tbody.append(f'<td class="col-no">{idx}</td>')
-
-            if not is_total:
-                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-            else:
-                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
-
-            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
+            id_cell = (
+                f'<td class="col-id">{row.iloc[0]}</td>' if is_total
+                else f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>'
+            )
             diff_color = "" if is_total else " diff-red"
-            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-            diff_tbody.append("</tr>")
+            diff_tbody.append(
+                f'<tr{tr_class}><td class="col-no">{idx}</td>{id_cell}'
+                f'<td class="col-type">{row.iloc[1]}</td>'
+                f'<td class="col-desc">{row.iloc[2]}</td>'
+                f'<td class="col-diff{diff_color}">{row.iloc[3]}</td></tr>'
+            )
 
-        th_html = "".join([
-            f'<th class="col-no">{diff_headers[0]}</th>',
-            f'<th class="col-id">{diff_headers[1]}</th>',
-            f'<th class="col-type">{diff_headers[2]}</th>',
-            f'<th class="col-desc">{diff_headers[3]}</th>',
-            f'<th class="col-diff">{diff_headers[4]}</th>',
-        ])
-
-        diff_section = f"""
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        diff_th_html = "".join(
+            f'<th class="{cls}">{name}</th>'
+            for cls, name in zip(["col-no", "col-id", "col-type", "col-desc", "col-diff"], ["No."] + list(df_diff.columns))
+        )
+        diff_body = f"""
             <div class="scroll-wrap">
               <table class="compact-table">
-                <thead><tr>{th_html}</tr></thead>
+                <thead><tr>{diff_th_html}</tr></thead>
                 <tbody>{"".join(diff_tbody)}</tbody>
               </table>
-            </div>
-          </div>
-        """
+            </div>"""
     else:
-        diff_section = """
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
+        diff_body = """
             <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
               ✅ 차액 100원 이상 발생 항목이 없습니다.
-            </div>
-          </div>
-        """
+            </div>"""
 
-    main_th_html = "".join([
-        f'<th class="col-no">{main_headers[0]}</th>',
-        f'<th class="col-id">{main_headers[1]}</th>',
-        f'<th class="col-amt">{main_headers[2]}</th>',
-        f'<th class="col-amt">{main_headers[3]}</th>',
-        f'<th class="col-diff">{main_headers[4]}</th>',
-    ])
+    main_th_html = "".join(
+        f'<th class="{cls}">{name}</th>'
+        for cls, name in zip(["col-no", "col-id", "col-amt", "col-amt", "col-diff"], ["No."] + list(df_main.columns))
+    )
 
     full_html = f"""
       <!DOCTYPE html><html><head><meta charset="utf-8" />
@@ -761,7 +785,9 @@ def render_mw_side_by_side_tables(df_main, df_diff):
               </table>
             </div>
           </div>
-          {diff_section}
+          <div class="table-card">
+            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>{diff_body}
+          </div>
         </div>
         <script>{TABLE_COMMON_JS}</script>
       </body></html>
@@ -770,105 +796,60 @@ def render_mw_side_by_side_tables(df_main, df_diff):
     calc_height = min(1160, max(320, len(df_main) * 44 + 100))
     components.html(full_html, height=calc_height, scrolling=False)
 
-def render_coupon_side_by_side_tables(df_main, df_diff):
-    main_headers = ["No."] + list(df_main.columns)
-    main_tbody = []
-    for idx, row in df_main.iterrows():
-        is_total = "총합계" in str(row.iloc[0])
-        tr_class = ' class="total-row"' if is_total else ""
-        main_tbody.append(f"<tr{tr_class}>")
-        main_tbody.append(f'<td class="col-no">{idx}</td>')
-        for c_idx, val in enumerate(row):
-            val_str = str(val)
-            if c_idx in [0, 1] and not is_total and val_str != "-":
-                align_class = "col-id copyable" if c_idx == 0 else "col-amt copyable"
-                main_tbody.append(f'<td class="{align_class}" onclick="toggleCellColor(this)">{val_str}</td>')
-            else:
-                align_class = "col-id" if c_idx == 0 else ("col-diff" if c_idx == len(row) - 1 else "col-amt")
-                main_tbody.append(f'<td class="{align_class}">{val_str}</td>')
-        main_tbody.append("</tr>")
+# ────────────────────────────────────────────────────────
+# 📑 [엑셀 서식 공통 도우미]
+# ────────────────────────────────────────────────────────
+def _thin_border(color):
+    side = Side(style="thin", color=color)
+    return Border(left=side, right=side, top=side, bottom=side)
 
-    diff_section = ""
-    if df_diff is not None and len(df_diff) > 0:
-        diff_headers = ["No."] + list(df_diff.columns)
-        diff_tbody = []
-        for idx, row in df_diff.iterrows():
-            is_total = "총합계" in str(row.iloc[0])
-            tr_class = ' class="total-row"' if is_total else ""
-            diff_tbody.append(f"<tr{tr_class}>")
-            diff_tbody.append(f'<td class="col-no">{idx}</td>')
+BORDER_BLACK = _thin_border("000000")
+BORDER_GRAY = _thin_border("A6A6A6")
+ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+ALIGN_RIGHT = Alignment(horizontal="right", vertical="center")
+ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
+FMT_INT = "#,##0"
 
-            if not is_total:
-                diff_tbody.append(f'<td class="col-id copyable" onclick="toggleCellColor(this)">{row.iloc[0]}</td>')
-            else:
-                diff_tbody.append(f'<td class="col-id">{row.iloc[0]}</td>')
+def xl_cell(ws, row, col, value=None, font=None, align=None, fill=None, border=None, fmt=None):
+    """셀 하나에 값과 서식을 한 번에 지정합니다. (None 인 항목은 건드리지 않음)"""
+    c = ws.cell(row=row, column=col)
+    if value is not None:
+        c.value = value
+    if font is not None:
+        c.font = font
+    if align is not None:
+        c.alignment = align
+    if fill is not None:
+        c.fill = fill
+    if border is not None:
+        c.border = border
+    if fmt is not None:
+        c.number_format = fmt
+    return c
 
-            diff_tbody.append(f'<td class="col-type">{row.iloc[1]}</td>')
-            diff_tbody.append(f'<td class="col-desc">{row.iloc[2]}</td>')
-            diff_color = "" if is_total else " diff-red"
-            diff_tbody.append(f'<td class="col-diff{diff_color}">{row.iloc[3]}</td>')
-            diff_tbody.append("</tr>")
+def amount_fmt(value):
+    """소수점이 있는 금액은 소수 2자리까지, 아니면 정수로 표시"""
+    return "#,##0.00" if isinstance(value, float) and value % 1 != 0 else FMT_INT
 
-        th_html = "".join([
-            f'<th class="col-no">{diff_headers[0]}</th>',
-            f'<th class="col-id">{diff_headers[1]}</th>',
-            f'<th class="col-type">{diff_headers[2]}</th>',
-            f'<th class="col-desc">{diff_headers[3]}</th>',
-            f'<th class="col-diff">{diff_headers[4]}</th>',
-        ])
+def write_report_title(ws, text):
+    ws.merge_cells("A1:N1")
+    xl_cell(ws, 1, 1, text, font=Font(size=22, bold=True), align=ALIGN_CENTER)
+    ws.row_dimensions[1].height = 40
 
-        diff_section = f"""
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
-            <div class="scroll-wrap">
-              <table class="compact-table">
-                <thead><tr>{th_html}</tr></thead>
-                <tbody>{"".join(diff_tbody)}</tbody>
-              </table>
-            </div>
-          </div>
-        """
-    else:
-        diff_section = """
-          <div class="table-card">
-            <div class="card-title">🚨 차액 리스트 (100원 이상)</div>
-            <div style="padding: 16px; color: #10b981; font-weight: bold; background: #0f172a; border-radius: 6px; border: 1px solid #334155;">
-              ✅ 차액 100원 이상 발생 항목이 없습니다.
-            </div>
-          </div>
-        """
+def autofit_columns(ws, padding, min_width):
+    """4행 이후 데이터 길이에 맞춰 열 너비 자동 조정"""
+    for col in ws.columns:
+        max_len = 0
+        for cell in col:
+            if cell.row > 3 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_len + padding, min_width)
 
-    main_th_html = "".join([
-        f'<th class="col-no">{main_headers[0]}</th>',
-        f'<th class="col-id">{main_headers[1]}</th>',
-        f'<th class="col-amt">{main_headers[2]}</th>',
-        f'<th class="col-amt">{main_headers[3]}</th>',
-        f'<th class="col-diff">{main_headers[4]}</th>',
-    ])
-
-    full_html = f"""
-      <!DOCTYPE html><html><head><meta charset="utf-8" />
-      <style>{TABLE_COMMON_CSS}</style></head>
-      <body>
-        <div id="toast">📋 복사 완료!</div>
-        <div class="flex-container">
-          <div class="table-card">
-            <div class="card-title">📋 상세 대조 내역</div>
-            <div class="scroll-wrap">
-              <table class="compact-table">
-                <thead><tr>{main_th_html}</tr></thead>
-                <tbody>{"".join(main_tbody)}</tbody>
-              </table>
-            </div>
-          </div>
-          {diff_section}
-        </div>
-        <script>{TABLE_COMMON_JS}</script>
-      </body></html>
-    """
-
-    calc_height = min(1160, max(320, len(df_main) * 44 + 100))
-    components.html(full_html, height=calc_height, scrolling=False)
+def workbook_to_bytes(wb):
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
 # ────────────────────────────────────────────────────────
 # 1️⃣ [모드 1] MW 보증 비교
@@ -883,65 +864,39 @@ def load_excel_mw(uploaded_file):
     c_labor_vat = find_col_smart(df, ["공임청구부가세", "공임청구 부가세", "공임부가세"])
     c_part = find_col_smart(df, ["부품청구액", "부품청구", "부품 청구액"])
     c_part_vat = find_col_smart(df, ["부품청구부가세", "부품청구 부가세", "부품부가세"])
+    amount_cols = [c_labor, c_labor_vat, c_part, c_part_vat]
+    to_numeric_cols(df, amount_cols)
 
-    if c_labor and c_labor in df.columns:
-        df[c_labor] = pd.to_numeric(df[c_labor], errors="coerce").fillna(0)
-    if c_labor_vat and c_labor_vat in df.columns:
-        df[c_labor_vat] = pd.to_numeric(df[c_labor_vat], errors="coerce").fillna(0)
-    if c_part and c_part in df.columns:
-        df[c_part] = pd.to_numeric(df[c_part], errors="coerce").fillna(0)
-    if c_part_vat and c_part_vat in df.columns:
-        df[c_part_vat] = pd.to_numeric(df[c_part_vat], errors="coerce").fillna(0)
+    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor else 0
+    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part else 0
 
-    raw_labor_sum = int(round_half_up(df[c_labor].sum())) if c_labor and c_labor in df.columns else 0
-    raw_part_sum = int(round_half_up(df[c_part].sum())) if c_part and c_part in df.columns else 0
+    total_series = pd.Series(0, index=df.index)
+    for c in amount_cols:
+        if c:
+            total_series = total_series + df[c]
+    df["Excel_Total"] = total_series.apply(round_half_up)
 
-    labor_series = df[c_labor] if c_labor and c_labor in df.columns else pd.Series(0, index=df.index)
-    labor_vat_series = df[c_labor_vat] if c_labor_vat and c_labor_vat in df.columns else pd.Series(0, index=df.index)
-    part_series = df[c_part] if c_part and c_part in df.columns else pd.Series(0, index=df.index)
-    part_vat_series = df[c_part_vat] if c_part_vat and c_part_vat in df.columns else pd.Series(0, index=df.index)
-
-    df["Excel_Total"] = (labor_series + labor_vat_series + part_series + part_vat_series).apply(round_half_up)
-
-    col_r = find_col_smart(
-        df,
-        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
-        fallback_idx=17,
-    )
-    col_v = find_col_smart(
-        df,
-        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
-        fallback_idx=21,
-    )
-
+    col_r, col_v = find_type_desc_cols(df)
     col_job_no = find_col_smart(df, ["JOB NO", "JOB_NO", "JOB", "작업번호"], fallback_idx=2)
     col_ro_no = find_col_smart(df, ["R/O NO", "RO NO", "RO_NO", "RO", "차량번호", "주문번호"], fallback_idx=1)
 
+    def amount_of(row, col):
+        return int(round_half_up(row.get(col, 0))) if col and col in row else 0
+
     excel_groups = defaultdict(list)
     for _, row in df.iterrows():
-        claim_no = str(row.get(col_claim_no, "")).strip() if col_claim_no and col_claim_no in row else ""
+        claim_no = cell_str(row, col_claim_no, "")
         if claim_no and claim_no != "nan":
-            r_val = str(row.get(col_r, "-")).strip() if col_r and col_r in row else "-"
-            raw_v = str(row.get(col_v, "-")).strip() if col_v and col_v in row else "-"
-            
-            job_val = str(row.get(col_job_no, "1")).strip() if col_job_no and col_job_no in row else "1"
-            ro_val = str(row.get(col_ro_no, "")).strip() if col_ro_no and col_ro_no in row else ""
-
-            val_labor = int(round_half_up(row.get(c_labor, 0))) if c_labor and c_labor in row else 0
-            val_labor_vat = int(round_half_up(row.get(c_labor_vat, 0))) if c_labor_vat and c_labor_vat in row else 0
-            val_part = int(round_half_up(row.get(c_part, 0))) if c_part and c_part in row else 0
-            val_part_vat = int(round_half_up(row.get(c_part_vat, 0))) if c_part_vat and c_part_vat in row else 0
-
             excel_groups[claim_no].append({
                 "amount": int(row.get("Excel_Total", 0)),
-                "claim_type": r_val if r_val and r_val != "nan" else "-",
-                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
-                "labor": val_labor,
-                "labor_vat": val_labor_vat,
-                "part": val_part,
-                "part_vat": val_part_vat,
-                "job_no": job_val,
-                "ro_no": ro_val
+                "claim_type": clean_text(cell_str(row, col_r, "-")),
+                "v_desc": clean_text(cell_str(row, col_v, "-")),
+                "labor": amount_of(row, c_labor),
+                "labor_vat": amount_of(row, c_labor_vat),
+                "part": amount_of(row, c_part),
+                "part_vat": amount_of(row, c_part_vat),
+                "job_no": cell_str(row, col_job_no, "1"),
+                "ro_no": cell_str(row, col_ro_no, ""),
             })
     return excel_groups, raw_labor_sum, raw_part_sum
 
@@ -1060,176 +1015,83 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     font_data = Font(name="맑은 고딕", size=9)
     font_bold = Font(name="맑은 고딕", size=9, bold=True)
 
-    align_center = Alignment(horizontal="center", vertical="center")
-    align_right = Alignment(horizontal="right", vertical="center")
-
     fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     fill_header_gray = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     fill_diff_col = PatternFill(start_color="BFBFBF", end_color="BFBFBF", fill_type="solid")
     fill_diff_title = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
 
-    thin_border = Border(
-        left=Side(style="thin", color="A6A6A6"),
-        right=Side(style="thin", color="A6A6A6"),
-        top=Side(style="thin", color="A6A6A6"),
-        bottom=Side(style="thin", color="A6A6A6")
-    )
-
-    # 1. 메인 타이틀 바 (2행)
-    ws.merge_cells("B2:J2")
-    ws["B2"] = "CREDIT PDF 6755"
-    ws["B2"].font = font_main_title
-    ws["B2"].alignment = align_center
-    ws["B2"].fill = fill_yellow
-
-    ws.merge_cells("L2:N2")
-    ws["L2"] = "PDF - DMS"
-    ws["L2"].font = font_bold
-    ws["L2"].alignment = align_center
-    ws["L2"].fill = fill_diff_title
-
-    ws.merge_cells("P2:X2")
-    ws["P2"] = "DMS FILE"
-    ws["P2"].font = font_main_title
-    ws["P2"].alignment = align_center
-    ws["P2"].fill = fill_yellow
-
-    for col in range(2, 11):
-        ws.cell(row=2, column=col).border = thin_border
-    for col in range(12, 15):
-        ws.cell(row=2, column=col).border = thin_border
-    for col in range(16, 25):
-        ws.cell(row=2, column=col).border = thin_border
+    # 1. 메인 타이틀 바 (2행) : (병합범위, 제목, 글꼴, 배경, 시작열, 끝열)
+    title_blocks = [
+        ("B2:J2", "CREDIT PDF 6755", font_main_title, fill_yellow, 2, 10),
+        ("L2:N2", "PDF - DMS", font_bold, fill_diff_title, 12, 14),
+        ("P2:X2", "DMS FILE", font_main_title, fill_yellow, 16, 24),
+    ]
+    for merge_range, title, font, fill, start_col, end_col in title_blocks:
+        ws.merge_cells(merge_range)
+        xl_cell(ws, 2, start_col, title, font=font, align=ALIGN_CENTER, fill=fill)
+        for col in range(start_col, end_col + 1):
+            ws.cell(row=2, column=col).border = BORDER_GRAY
 
     # 2. 서브 헤더 바 (3행)
-    left_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "Labour cost", "Meterial", "sublet", "Total", "TOTAL"]
-    for i, h in enumerate(left_headers, start=2):
-        c = ws.cell(row=3, column=i, value=h)
-        c.font = font_header
-        c.alignment = align_center
-        c.fill = fill_header_gray
-        c.border = thin_border
-
-    diff_headers = ["공임차액", "부품차액", "총 차액"]
-    for i, h in enumerate(diff_headers, start=12):
-        c = ws.cell(row=3, column=i, value=h)
-        c.font = font_header
-        c.alignment = align_center
-        c.fill = fill_header_gray
-        c.border = thin_border
-
-    right_headers = ["Claim No", "R/O No", "Job No", "Claim Type", "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세", "TOTAL"]
-    for i, h in enumerate(right_headers, start=16):
-        c = ws.cell(row=3, column=i, value=h)
-        c.font = font_header
-        c.alignment = align_center
-        c.fill = fill_header_gray
-        c.border = thin_border
+    header_groups = [
+        (2, ["Claim No", "R/O No", "Job No", "Claim Type", "Labour cost", "Meterial", "sublet", "Total", "TOTAL"]),
+        (12, ["공임차액", "부품차액", "총 차액"]),
+        (16, ["Claim No", "R/O No", "Job No", "Claim Type", "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세", "TOTAL"]),
+    ]
+    for start_col, headers in header_groups:
+        for i, h in enumerate(headers, start=start_col):
+            xl_cell(ws, 3, i, h, font=font_header, align=ALIGN_CENTER, fill=fill_header_gray, border=BORDER_GRAY)
 
     # 3. 데이터 로우 작성 (4행부터)
-    all_claims = sorted(list(set(list(excel_groups.keys()) + list(pdf_groups.keys()))))
+    all_claims = sorted(set(excel_groups) | set(pdf_groups))
     cur_row = 4
 
     for claim in all_claims:
         p_list = pdf_groups.get(claim, [])
         e_list = excel_groups.get(claim, [])
-        max_cnt = max(len(p_list), len(e_list))
 
-        for idx in range(max_cnt):
+        for idx in range(max(len(p_list), len(e_list))):
             p_data = p_list[idx] if idx < len(p_list) else None
             e_data = e_list[idx] if idx < len(e_list) else None
 
             pdf_vat_total = p_data["total_vat"] if p_data else 0
             dms_vat_total = e_data["amount"] if e_data else 0
-            diff_total = pdf_vat_total - dms_vat_total if (p_data and e_data) else (pdf_vat_total if p_data else -dms_vat_total)
-
-            pdf_labor_val = p_data["labour_cost"] if p_data else 0.0
-            pdf_part_val = p_data["material"] if p_data else 0.0
-
+            pdf_labor_vat = round_half_up(p_data["labour_cost"] * 1.1) if p_data else 0
+            pdf_part_vat = round_half_up(p_data["material"] * 1.1) if p_data else 0
             dms_labor_total = (e_data["labor"] + e_data["labor_vat"]) if e_data else 0
             dms_part_total = (e_data["part"] + e_data["part_vat"]) if e_data else 0
 
-            diff_labor = round_half_up(pdf_labor_val * 1.1) - dms_labor_total if (p_data and e_data) else (round_half_up(pdf_labor_val * 1.1) if p_data else -dms_labor_total)
-            diff_part = round_half_up(pdf_part_val * 1.1) - dms_part_total if (p_data and e_data) else (round_half_up(pdf_part_val * 1.1) if p_data else -dms_part_total)
+            # 한쪽에만 있는 경우 없는 쪽은 0 으로 계산
+            diff_values = [
+                pdf_labor_vat - dms_labor_total,
+                pdf_part_vat - dms_part_total,
+                pdf_vat_total - dms_vat_total,
+            ]
 
-            ws.cell(row=cur_row, column=2, value=claim if p_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=3, value=p_data["ro_no"] if p_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=4, value=p_data["job_no"] if p_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=5, value=p_data["clm_type"] if p_data else "").alignment = align_center
+            # ◀ PDF 영역 (B~J)
+            p_texts = [claim, p_data["ro_no"], p_data["job_no"], p_data["clm_type"]] if p_data else [""] * 4
+            for i, v in enumerate(p_texts):
+                xl_cell(ws, cur_row, 2 + i, v, font=font_data, align=ALIGN_CENTER, border=BORDER_GRAY)
+            for i, key in enumerate(["labour_cost", "material", "sublet", "total"]):
+                v = p_data[key] if p_data else ""
+                xl_cell(ws, cur_row, 6 + i, v, font=font_data, align=ALIGN_RIGHT, border=BORDER_GRAY, fmt=amount_fmt(v))
+            xl_cell(ws, cur_row, 10, pdf_vat_total if p_data else "", font=font_bold, align=ALIGN_RIGHT,
+                    border=BORDER_GRAY, fmt=FMT_INT)
 
-            c_l = ws.cell(row=cur_row, column=6, value=p_data["labour_cost"] if p_data else "")
-            c_l.number_format = "#,##0.00" if (p_data and isinstance(p_data["labour_cost"], float) and p_data["labour_cost"] % 1 != 0) else "#,##0"
-            c_l.alignment = align_right
+            # ■ 차액 영역 (L~N)
+            for i, v in enumerate(diff_values):
+                xl_cell(ws, cur_row, 12 + i, v, font=font_bold, align=ALIGN_RIGHT, fill=fill_diff_col,
+                        border=BORDER_GRAY, fmt=FMT_INT)
 
-            c_m = ws.cell(row=cur_row, column=7, value=p_data["material"] if p_data else "")
-            c_m.number_format = "#,##0.00" if (p_data and isinstance(p_data["material"], float) and p_data["material"] % 1 != 0) else "#,##0"
-            c_m.alignment = align_right
-
-            c_s = ws.cell(row=cur_row, column=8, value=p_data["sublet"] if p_data else "")
-            c_s.number_format = "#,##0.00" if (p_data and isinstance(p_data["sublet"], float) and p_data["sublet"] % 1 != 0) else "#,##0"
-            c_s.alignment = align_right
-
-            c_t = ws.cell(row=cur_row, column=9, value=p_data["total"] if p_data else "")
-            c_t.number_format = "#,##0.00" if (p_data and isinstance(p_data["total"], float) and p_data["total"] % 1 != 0) else "#,##0"
-            c_t.alignment = align_right
-
-            c_tv = ws.cell(row=cur_row, column=10, value=pdf_vat_total if p_data else "")
-            c_tv.number_format = "#,##0"
-            c_tv.alignment = align_right
-            c_tv.font = font_bold
-
-            c_d_l = ws.cell(row=cur_row, column=12, value=diff_labor)
-            c_d_l.number_format = "#,##0"
-            c_d_l.alignment = align_right
-            c_d_l.font = font_bold
-            c_d_l.fill = fill_diff_col
-
-            c_d_p = ws.cell(row=cur_row, column=13, value=diff_part)
-            c_d_p.number_format = "#,##0"
-            c_d_p.alignment = align_right
-            c_d_p.font = font_bold
-            c_d_p.fill = fill_diff_col
-
-            c_d_t = ws.cell(row=cur_row, column=14, value=diff_total)
-            c_d_t.number_format = "#,##0"
-            c_d_t.alignment = align_right
-            c_d_t.font = font_bold
-            c_d_t.fill = fill_diff_col
-
-            ws.cell(row=cur_row, column=16, value=claim if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=17, value=e_data["ro_no"] if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=18, value=e_data["job_no"] if e_data else "").alignment = align_center
-            ws.cell(row=cur_row, column=19, value=e_data["claim_type"] if e_data else "").alignment = align_center
-
-            c_el = ws.cell(row=cur_row, column=20, value=e_data["labor"] if e_data else "")
-            c_el.number_format = "#,##0"
-            c_el.alignment = align_right
-
-            c_elv = ws.cell(row=cur_row, column=21, value=e_data["labor_vat"] if e_data else "")
-            c_elv.number_format = "#,##0"
-            c_elv.alignment = align_right
-
-            c_ep = ws.cell(row=cur_row, column=22, value=e_data["part"] if e_data else "")
-            c_ep.number_format = "#,##0"
-            c_ep.alignment = align_right
-
-            c_epv = ws.cell(row=cur_row, column=23, value=e_data["part_vat"] if e_data else "")
-            c_epv.number_format = "#,##0"
-            c_epv.alignment = align_right
-
-            c_et = ws.cell(row=cur_row, column=24, value=dms_vat_total if e_data else "")
-            c_et.number_format = "#,##0"
-            c_et.alignment = align_right
-            c_et.font = font_bold
-
-            for col in range(2, 11):
-                ws.cell(row=cur_row, column=col).border = thin_border
-                ws.cell(row=cur_row, column=col).font = font_data if col != 10 else font_bold
-            for col in range(12, 15):
-                ws.cell(row=cur_row, column=col).border = thin_border
-            for col in range(16, 25):
-                ws.cell(row=cur_row, column=col).border = thin_border
-                ws.cell(row=cur_row, column=col).font = font_data if col != 24 else font_bold
+            # ▶ DMS 영역 (P~X)
+            e_texts = [claim, e_data["ro_no"], e_data["job_no"], e_data["claim_type"]] if e_data else [""] * 4
+            for i, v in enumerate(e_texts):
+                xl_cell(ws, cur_row, 16 + i, v, font=font_data, align=ALIGN_CENTER, border=BORDER_GRAY)
+            for i, key in enumerate(["labor", "labor_vat", "part", "part_vat"]):
+                xl_cell(ws, cur_row, 20 + i, e_data[key] if e_data else "", font=font_data, align=ALIGN_RIGHT,
+                        border=BORDER_GRAY, fmt=FMT_INT)
+            xl_cell(ws, cur_row, 24, dms_vat_total if e_data else "", font=font_bold, align=ALIGN_RIGHT,
+                    border=BORDER_GRAY, fmt=FMT_INT)
 
             cur_row += 1
 
@@ -1241,10 +1103,17 @@ def create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name):
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width
 
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
+    return workbook_to_bytes(wb)
+
+def detect_month_from_filename(file_name):
+    """파일명에서 월 찾기 : '10월' 표기 → 'YYYYMM' 숫자 순서. 못 찾으면 None"""
+    m_direct = re.search(r"(\d{1,2})월", file_name)
+    if m_direct:
+        return f"{int(m_direct.group(1))}월"
+    m_fn = re.search(r"20\d{2}(\d{2})", file_name)
+    if m_fn and 1 <= int(m_fn.group(1)) <= 12:
+        return f"{int(m_fn.group(1))}월"
+    return None
 
 def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, total_diff):
     df_mw_raw = read_excel_smart_header(uploaded_file_mw)
@@ -1253,11 +1122,6 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
     ws.title = "WARRANTY 수령내역"
     ws.print_title_rows = "1:3"
 
-    target_headers = [
-        "Claim No", "차량번호", "Job No", "완결일자", "청구일자",
-        "공임청구액", "공임청구부가세", "부품청구액", "부품청구부가세",
-        "공임입금액", "공임입금부가세", "부품입금액", "부품입금부가세",
-    ]
     alias_dict = {
         "Claim No": ["CLAIM NO", "CLAIM", "클레임", "청구번호"],
         "차량번호": ["차량번호", "차량 번호", "CAR NO", "VEHICLE"],
@@ -1273,47 +1137,18 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         "부품입금액": ["부품입금액", "부품입금", "부품승인액", "부품승인", "부품 입금액", "부품승인금액"],
         "부품입금부가세": ["부품입금부가세", "부품입금 부가세", "부품승인부가세"],
     }
-    col_mapping = {
-        th: find_col_smart(df_mw_raw, alias_dict.get(th, [th]))
-        for th in target_headers
-    }
+    target_headers = list(alias_dict)
+    col_mapping = {th: find_col_smart(df_mw_raw, alias_dict[th]) for th in target_headers}
 
-    month_str = "X월"
-    file_name = getattr(uploaded_file_mw, "name", "")
-    m_direct = re.search(r"(\d{1,2})월", file_name)
-    if m_direct:
-        month_str = f"{int(m_direct.group(1))}월"
-    else:
-        m_fn = re.search(r"20\d{2}(\d{2})", file_name)
-        if m_fn and 1 <= int(m_fn.group(1)) <= 12:
-            month_str = f"{int(m_fn.group(1))}월"
+    month_str = detect_month_from_filename(getattr(uploaded_file_mw, "name", "")) or "X월"
+    write_report_title(ws, f"{month_str} WARRANTY 수 령 내 역")
 
-    ws.merge_cells("A1:N1")
-    ws["A1"] = f"{month_str} WARRANTY 수 령 내 역"
-    ws["A1"].font = Font(size=22, bold=True)
-    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 40
-
-    thin_border = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     ws.row_dimensions[3].height = 25
-    cell_a = ws.cell(row=3, column=1, value="No.")
-    cell_a.font = header_font
-    cell_a.alignment = header_align
-    cell_a.border = thin_border
-
-    for col_pos, h_name in enumerate(target_headers, 2):
-        cell = ws.cell(row=3, column=col_pos, value=h_name)
-        cell.font = header_font
-        cell.alignment = header_align
-        cell.border = thin_border
+    for col_pos, h_name in enumerate(["No."] + target_headers, 1):
+        xl_cell(ws, 3, col_pos, h_name, font=header_font, align=header_align, border=BORDER_BLACK)
 
     current_row = 4
     no_counter = 1
@@ -1321,12 +1156,10 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
         if row.dropna().empty:
             continue
         ws.row_dimensions[current_row].height = 20
-        c_no = ws.cell(row=current_row, column=1, value=no_counter)
-        c_no.alignment = Alignment(horizontal="center", vertical="center")
-        c_no.border = thin_border
+        xl_cell(ws, current_row, 1, no_counter, align=ALIGN_CENTER, border=BORDER_BLACK)
 
         for col_pos, h_name in enumerate(target_headers, 2):
-            cell = ws.cell(row=current_row, column=col_pos)
+            cell = xl_cell(ws, current_row, col_pos, border=BORDER_BLACK, align=ALIGN_CENTER)
             mapped_col = col_mapping.get(h_name)
             if mapped_col and mapped_col in row and not pd.isna(row[mapped_col]):
                 val = row[mapped_col]
@@ -1336,91 +1169,56 @@ def create_mw_excel_report(uploaded_file_mw, count, total_pdf, total_excel, tota
                     val = val.split()[0]
                 cell.value = val
                 if isinstance(val, (int, float)):
-                    cell.number_format = "#,##0"
-                    cell.alignment = Alignment(horizontal="right", vertical="center")
-                else:
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.number_format = FMT_INT
+                    cell.alignment = ALIGN_RIGHT
             else:
                 cell.value = ""
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = thin_border
         current_row += 1
         no_counter += 1
 
+    # 합계 행
     ws.row_dimensions[current_row].height = 25
-    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
-    c_sum = ws.cell(row=current_row, column=1, value="합계")
-    c_sum.font = Font(bold=True)
-    c_sum.alignment = Alignment(horizontal="center", vertical="center")
-    ws.cell(row=current_row, column=1).border = thin_border
-    ws.cell(row=current_row, column=2).border = thin_border
+    for start_col, end_col in [(1, 2), (3, 4), (13, 14)]:
+        ws.merge_cells(start_row=current_row, start_column=start_col, end_row=current_row, end_column=end_col)
+    for col in range(1, 15):
+        ws.cell(row=current_row, column=col).border = BORDER_BLACK
 
-    ws.merge_cells(start_row=current_row, start_column=3, end_row=current_row, end_column=4)
-    c_cnt = ws.cell(row=current_row, column=3, value=f"댓수 : {count}")
-    c_cnt.font = Font(bold=True)
-    c_cnt.alignment = Alignment(horizontal="center", vertical="center")
-    ws.cell(row=current_row, column=3).border = thin_border
-    ws.cell(row=current_row, column=4).border = thin_border
+    bold = Font(bold=True)
+    summary_cells = [
+        (1, "합계", None),
+        (3, f"댓수 : {count}", None),
+        (7, "총 실 수령액 :", None),
+        (8, total_pdf, FMT_INT),
+        (9, "총 청구 금액 :", None),
+        (10, total_excel, FMT_INT),
+        (11, "총 차액 :", None),
+        (12, total_diff, FMT_INT),
+        (13, "*부가세포함", None),
+    ]
+    for col, value, fmt in summary_cells:
+        xl_cell(ws, current_row, col, value, font=bold, fmt=fmt,
+                align=ALIGN_RIGHT if fmt else ALIGN_CENTER)
 
-    ws.cell(row=current_row, column=5).border = thin_border
-    ws.cell(row=current_row, column=6).border = thin_border
-
-    c_g = ws.cell(row=current_row, column=7, value="총 실 수령액 :")
-    c_g.font = Font(bold=True)
-    c_g.alignment = Alignment(horizontal="center", vertical="center")
-    c_g.border = thin_border
-
-    c_h = ws.cell(row=current_row, column=8, value=total_pdf)
-    c_h.font = Font(bold=True)
-    c_h.number_format = "#,##0"
-    c_h.alignment = Alignment(horizontal="right", vertical="center")
-    c_h.border = thin_border
-
-    c_i = ws.cell(row=current_row, column=9, value="총 청구 금액 :")
-    c_i.font = Font(bold=True)
-    c_i.alignment = Alignment(horizontal="center", vertical="center")
-    c_i.border = thin_border
-
-    c_j = ws.cell(row=current_row, column=10, value=total_excel)
-    c_j.font = Font(bold=True)
-    c_j.number_format = "#,##0"
-    c_j.alignment = Alignment(horizontal="right", vertical="center")
-    c_j.border = thin_border
-
-    c_k = ws.cell(row=current_row, column=11, value="총 차액 :")
-    c_k.font = Font(bold=True)
-    c_k.alignment = Alignment(horizontal="center", vertical="center")
-    c_k.border = thin_border
-
-    c_l = ws.cell(row=current_row, column=12, value=total_diff)
-    c_l.font = Font(bold=True)
-    c_l.number_format = "#,##0"
-    c_l.alignment = Alignment(horizontal="right", vertical="center")
-    c_l.border = thin_border
-
-    ws.merge_cells(start_row=current_row, start_column=13, end_row=current_row, end_column=14)
-    c_mn = ws.cell(row=current_row, column=13, value="*부가세포함")
-    c_mn.font = Font(bold=True)
-    c_mn.alignment = Alignment(horizontal="center", vertical="center")
-    ws.cell(row=current_row, column=13).border = thin_border
-    ws.cell(row=current_row, column=14).border = thin_border
-
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.row > 3 and cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output, month_str
+    autofit_columns(ws, padding=4, min_width=12)
+    return workbook_to_bytes(wb), month_str
 
 # ────────────────────────────────────────────────────────
 # 2️⃣ [모드 2] 쿠폰 보증 비교
 # ────────────────────────────────────────────────────────
+def _group_coupon_rows(df, col_car, amount_fn):
+    """차량번호별로 금액 / Claim Type / 제목을 묶습니다. (쿠폰 A·B 공용)"""
+    col_r, col_v = find_type_desc_cols(df)
+    groups = defaultdict(list)
+    for _, row in df.iterrows():
+        car_no = cell_str(row, col_car, "Unknown")
+        if car_no and car_no != "nan":
+            groups[car_no].append({
+                "amount": amount_fn(row),
+                "claim_type": clean_text(cell_str(row, col_r, "-")),
+                "v_desc": clean_text(cell_str(row, col_v, "-")),
+            })
+    return groups
+
 def load_excel_coupon_a(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
     col_car = find_col_smart(
@@ -1428,37 +1226,11 @@ def load_excel_coupon_a(uploaded_file):
     )
     col_part = find_col_smart(df, ["부품청구", "부품"], fallback_idx=8)
     col_labour = find_col_smart(df, ["공임청구", "공임"], fallback_idx=9)
-    if col_part:
-        df[col_part] = pd.to_numeric(df[col_part], errors="coerce").fillna(0)
-    if col_labour:
-        df[col_labour] = pd.to_numeric(df[col_labour], errors="coerce").fillna(0)
+    to_numeric_cols(df, [col_part, col_labour])
     df["Calc_Total"] = (
         ((df[col_part] if col_part else 0) + (df[col_labour] if col_labour else 0)) * 1.1
     ).apply(round_half_up)
-
-    col_r = find_col_smart(
-        df,
-        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
-        fallback_idx=17,
-    )
-    col_v = find_col_smart(
-        df,
-        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
-        fallback_idx=21,
-    )
-
-    a_groups = defaultdict(list)
-    for _, row in df.iterrows():
-        car_no = str(row.get(col_car, "")).strip() if col_car else "Unknown"
-        if car_no and car_no != "nan":
-            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
-            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
-            a_groups[car_no].append({
-                "amount": int(row["Calc_Total"]),
-                "claim_type": r_val if r_val and r_val != "nan" else "-",
-                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
-            })
-    return a_groups
+    return _group_coupon_rows(df, col_car, lambda row: int(row["Calc_Total"]))
 
 def load_excel_coupon_b(uploaded_file):
     df = read_excel_smart_header(uploaded_file)
@@ -1466,32 +1238,21 @@ def load_excel_coupon_b(uploaded_file):
         df, ["차량번호", "CAR NO", "CAR_NO", "VEHICLE"], fallback_idx=6
     )
     col_total = find_col_smart(df, ["합계금액", "합계", "TOTAL"], fallback_idx=18)
-    if col_total:
-        df[col_total] = pd.to_numeric(df[col_total], errors="coerce").fillna(0)
+    to_numeric_cols(df, [col_total])
+    return _group_coupon_rows(df, col_car, lambda row: round_half_up(row[col_total]) if col_total else 0)
 
-    col_r = find_col_smart(
-        df,
-        ["CLAIM TYPE", "CLAIMTYPE", "청구유형", "클레임유형", "TYPE", "유형"],
-        fallback_idx=17,
-    )
-    col_v = find_col_smart(
-        df,
-        ["제목", "TITLE", "SUBJECT", "내용", "작업내용", "수리내용", "DESCRIPTION", "REMARK", "비고"],
-        fallback_idx=21,
-    )
-
-    b_groups = defaultdict(list)
-    for _, row in df.iterrows():
-        car_no = str(row.get(col_car, "")).strip() if col_car else "Unknown"
-        if car_no and car_no != "nan":
-            r_val = str(row.get(col_r, "-")).strip() if col_r else "-"
-            raw_v = str(row.get(col_v, "-")).strip() if col_v else "-"
-            b_groups[car_no].append({
-                "amount": round_half_up(row[col_total]) if col_total else 0,
-                "claim_type": r_val if r_val and r_val != "nan" else "-",
-                "v_desc": raw_v if raw_v and raw_v != "nan" else "-",
-            })
-    return b_groups
+def detect_coupon_month(uploaded_file_b, df_a_raw):
+    """월 판별 순서 : ① DMS 파일명(예: 쿠폰청구관리_20260818…) → ② 공지 파일의 날짜 열 → ③ 판별 불가 시 "X월" """
+    m_fn = re.search(r"20\d{2}(\d{2})", getattr(uploaded_file_b, "name", ""))
+    if m_fn and 1 <= int(m_fn.group(1)) <= 12:
+        return f"{int(m_fn.group(1))}월"
+    for col in df_a_raw.columns:
+        if any(keyword in str(col) for keyword in ["일자", "DATE", "승인", "청구", "입고", "출고"]):
+            for d in df_a_raw[col].dropna().astype(str).tolist():
+                m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
+                if m and 1 <= int(m.group(1)) <= 12:
+                    return f"{int(m.group(1))}월"
+    return "X월"
 
 def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b, total_a, total_diff):
     df_a_raw = read_excel_smart_header(uploaded_file_a)
@@ -1500,127 +1261,46 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     ws.title = "쿠폰 청구 현황"
     ws.print_title_rows = "1:3"
 
-    month_str = "8월"
-    file_b_name = getattr(uploaded_file_b, "name", "")
-    m_fn = re.search(r"20\d{2}(\d{2})", file_b_name)
-    if m_fn:
-        month_str = f"{int(m_fn.group(1))}월"
-    else:
-        for col in df_a_raw.columns:
-            if any(keyword in str(col) for keyword in ["일자", "DATE", "승인", "청구", "입고", "출고"]):
-                sample_dates = df_a_raw[col].dropna().astype(str).tolist()
-                for d in sample_dates:
-                    m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
-                    if m:
-                        month_str = f"{int(m.group(1))}월"
-                        break
-                if month_str != "8월":
-                    break
+    month_str = detect_coupon_month(uploaded_file_b, df_a_raw)
+    write_report_title(ws, f"{month_str} 쿠폰 청구 현황")
 
-    ws.merge_cells("A1:N1")
-    ws["A1"] = f"{month_str} 쿠폰 청구 현황"
-    ws["A1"].font = Font(size=22, bold=True)
-    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 40
-
-    thin_border = Border(
-        left=Side(style="thin", color="000000"),
-        right=Side(style="thin", color="000000"),
-        top=Side(style="thin", color="000000"),
-        bottom=Side(style="thin", color="000000"),
-    )
     header_font = Font(size=10, bold=True)
     header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    headers = list(df_a_raw.columns)
     ws.row_dimensions[3].height = 25
-    for col_idx, h_name in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col_idx, value=str(h_name))
-        cell.font = header_font
-        cell.alignment = header_align
-        cell.border = thin_border
+    for col_idx, h_name in enumerate(df_a_raw.columns, 1):
+        xl_cell(ws, 3, col_idx, str(h_name), font=header_font, align=header_align, border=BORDER_BLACK)
 
     current_row = 4
     for _, row in df_a_raw.iterrows():
         ws.row_dimensions[current_row].height = 20
         for col_idx, val in enumerate(row, 1):
-            cell = ws.cell(row=current_row, column=col_idx)
-            cell.value = "" if pd.isna(val) else val
-            cell.border = thin_border
-            if isinstance(val, (int, float)):
-                cell.number_format = "#,##0"
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-            else:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+            is_num = isinstance(val, (int, float))
+            xl_cell(ws, current_row, col_idx, "" if pd.isna(val) else val, border=BORDER_BLACK,
+                    fmt=FMT_INT if is_num else None, align=ALIGN_RIGHT if is_num else ALIGN_CENTER)
         current_row += 1
 
-    current_row += 2
-    ws.row_dimensions[current_row].height = 30
+    # 하단 요약 (2줄) : (라벨, 값, 값 정렬, 값 서식, 단위, VAT 표시)
+    font_big = Font(size=14, bold=True)
+    font_small = Font(size=10, bold=True)
+    summary_rows = [
+        [("댓수 :", count, ALIGN_CENTER, None, "대", False), ("총 청구 금액 :", total_b, ALIGN_RIGHT, FMT_INT, "원", True)],
+        [("차액 :", total_diff, ALIGN_CENTER, FMT_INT, "원", False), ("총 입금 금액 :", total_a, ALIGN_RIGHT, FMT_INT, "원", True)],
+    ]
+    # 각 묶음의 (라벨 열, 값 열, 단위 열)
+    positions = [(3, 4, 5), (7, 9, 10)]
+    for summary in summary_rows:
+        current_row += 2
+        ws.row_dimensions[current_row].height = 30
+        for (label, value, value_align, fmt, unit, show_vat), (c_lbl, c_val, c_unit) in zip(summary, positions):
+            xl_cell(ws, current_row, c_lbl, label, font=font_big, align=ALIGN_RIGHT)
+            xl_cell(ws, current_row, c_val, value, font=font_big, align=value_align, fmt=fmt)
+            xl_cell(ws, current_row, c_unit, unit, font=font_big, align=ALIGN_LEFT)
+            if show_vat:
+                xl_cell(ws, current_row, c_unit + 1, "VAT 포함", font=font_small, align=ALIGN_LEFT)
 
-    c_lbl1 = ws.cell(row=current_row, column=3, value="댓수 :")
-    c_lbl1.font = Font(size=14, bold=True)
-    c_lbl1.alignment = Alignment(horizontal="right", vertical="center")
-    c_val1 = ws.cell(row=current_row, column=4, value=count)
-    c_val1.font = Font(size=14, bold=True)
-    c_val1.alignment = Alignment(horizontal="center", vertical="center")
-    c_unit1 = ws.cell(row=current_row, column=5, value="대")
-    c_unit1.font = Font(size=14, bold=True)
-    c_unit1.alignment = Alignment(horizontal="left", vertical="center")
-
-    c_lbl2 = ws.cell(row=current_row, column=7, value="총 청구 금액 :")
-    c_lbl2.font = Font(size=14, bold=True)
-    c_lbl2.alignment = Alignment(horizontal="right", vertical="center")
-    c_val2 = ws.cell(row=current_row, column=9, value=total_b)
-    c_val2.font = Font(size=14, bold=True)
-    c_val2.number_format = "#,##0"
-    c_val2.alignment = Alignment(horizontal="right", vertical="center")
-    c_unit2 = ws.cell(row=current_row, column=10, value="원")
-    c_unit2.font = Font(size=14, bold=True)
-    c_unit2.alignment = Alignment(horizontal="left", vertical="center")
-    c_vat1 = ws.cell(row=current_row, column=11, value="VAT 포함")
-    c_vat1.font = Font(size=10, bold=True)
-    c_vat1.alignment = Alignment(horizontal="left", vertical="center")
-
-    current_row += 2
-    ws.row_dimensions[current_row].height = 30
-
-    c_lbl3 = ws.cell(row=current_row, column=3, value="차액 :")
-    c_lbl3.font = Font(size=14, bold=True)
-    c_lbl3.alignment = Alignment(horizontal="right", vertical="center")
-    c_val3 = ws.cell(row=current_row, column=4, value=total_diff)
-    c_val3.font = Font(size=14, bold=True)
-    c_val3.number_format = "#,##0"
-    c_val3.alignment = Alignment(horizontal="center", vertical="center")
-    c_unit3 = ws.cell(row=current_row, column=5, value="원")
-    c_unit3.font = Font(size=14, bold=True)
-    c_unit3.alignment = Alignment(horizontal="left", vertical="center")
-
-    c_lbl4 = ws.cell(row=current_row, column=7, value="총 입금 금액 :")
-    c_lbl4.font = Font(size=14, bold=True)
-    c_lbl4.alignment = Alignment(horizontal="right", vertical="center")
-    c_val4 = ws.cell(row=current_row, column=9, value=total_a)
-    c_val4.font = Font(size=14, bold=True)
-    c_val4.number_format = "#,##0"
-    c_val4.alignment = Alignment(horizontal="right", vertical="center")
-    c_unit4 = ws.cell(row=current_row, column=10, value="원")
-    c_unit4.font = Font(size=14, bold=True)
-    c_unit4.alignment = Alignment(horizontal="left", vertical="center")
-    c_vat2 = ws.cell(row=current_row, column=11, value="VAT 포함")
-    c_vat2.font = Font(size=10, bold=True)
-    c_vat2.alignment = Alignment(horizontal="left", vertical="center")
-
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.row > 3 and cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[col_letter].width = max(max_len + 5, 14)
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output, month_str
+    autofit_columns(ws, padding=5, min_width=14)
+    return workbook_to_bytes(wb), month_str
 
 # ────────────────────────────────────────────────────────
 # 3️⃣ [모드 3] 공임코드 비교
@@ -1643,14 +1323,189 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
+# ⚡ [대조 계산] 같은 파일이면 결과를 저장해 두고 재사용 (버튼 클릭 시 재계산 방지)
+# ────────────────────────────────────────────────────────
+class NamedBytesIO(io.BytesIO):
+    """업로드 파일처럼 .name 속성을 갖는 메모리 파일 (월 판별 등에 파일명 사용)"""
+    def __init__(self, data, name=""):
+        super().__init__(data)
+        self.name = name
+
+def _numbered_index(df):
+    # 1, 2, 3 … 순번 + 마지막 총합계 행은 빈칸
+    df.index = [str(i) for i in range(1, len(df))] + [""]
+    return df
+
+def compare_groups(groups_1, groups_2, amount_key_1, amount_key_2, key_col, col_1, col_2, meta_fn):
+    """두 자료를 키(주문번호/차량번호)별로 맞대어 금액을 대조합니다. (MW · 쿠폰 공용)
+    - 같은 키가 여러 건이면 순서대로 1:1 매칭, 라벨에 (1), (2) … 표시
+    - 차액 = 1번 자료 금액 - 2번 자료 금액, |차액| 100원 이상은 차액 리스트에 추가
+    - meta_fn(item_1, item_2) → (Claim Type, 제목)
+    """
+    matched_results = []
+    diff_over_100_results = []
+    total_1_sum = 0
+    total_2_sum = 0
+    total_diff_100_sum = 0
+
+    for key_item in sorted(set(groups_1) | set(groups_2)):
+        items_1 = groups_1.get(key_item, [])
+        items_2 = groups_2.get(key_item, [])
+        max_len = max(len(items_1), len(items_2))
+
+        for i in range(max_len):
+            item_1 = items_1[i] if i < len(items_1) else None
+            item_2 = items_2[i] if i < len(items_2) else None
+            val_1 = item_1[amount_key_1] if item_1 else None
+            val_2 = item_2[amount_key_2] if item_2 else None
+            r_val, v_val = meta_fn(item_1, item_2)
+            label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
+
+            total_1_sum += val_1 or 0
+            total_2_sum += val_2 or 0
+            diff_val = (val_1 or 0) - (val_2 or 0)
+
+            matched_results.append({
+                key_col: label_item,
+                col_1: f"{val_1:,}원" if val_1 is not None else "-",
+                col_2: f"{val_2:,}원" if val_2 is not None else "-",
+                "차액": f"{diff_val:,}원",
+            })
+
+            if abs(diff_val) >= 100:
+                total_diff_100_sum += diff_val
+                diff_over_100_results.append({
+                    key_col: label_item,
+                    "Claim Type": r_val,
+                    "제목": v_val,
+                    "차액": f"{diff_val:,}원",
+                })
+
+    total_diff_sum = total_1_sum - total_2_sum
+    total_cnt = len(matched_results)
+
+    matched_results.append({
+        key_col: "★ 총합계",
+        col_1: f"{total_1_sum:,}원",
+        col_2: f"{total_2_sum:,}원",
+        "차액": f"{total_diff_sum:,}원",
+    })
+    res_df = _numbered_index(pd.DataFrame(matched_results))
+
+    if diff_over_100_results:
+        diff_over_100_results.append({
+            key_col: "★ 총합계",
+            "Claim Type": "-",
+            "제목": "-",
+            "차액": f"{total_diff_100_sum:,}원",
+        })
+        diff_df = _numbered_index(pd.DataFrame(diff_over_100_results))
+    else:
+        diff_df = pd.DataFrame(columns=[key_col, "Claim Type", "제목", "차액"])
+
+    return {
+        "res_df": res_df,
+        "diff_df": diff_df,
+        "total_cnt": total_cnt,
+        "total_diff_sum": total_diff_sum,
+        "total_1_sum": total_1_sum,
+        "total_2_sum": total_2_sum,
+    }
+
+@st.cache_data(max_entries=5, show_spinner=False)
+def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
+    f_pdf = NamedBytesIO(pdf_bytes, pdf_name)
+    f_xlsx = NamedBytesIO(xlsx_bytes, xlsx_name)
+
+    excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f_xlsx)
+    pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f_pdf)
+
+    r = compare_groups(
+        pdf_groups, excel_groups, "total_vat", "amount",
+        "주문번호", "PDF 금액 (실 수령액)", "DMS 금액 (청구 금액)",
+        meta_fn=lambda p, e: (
+            e["claim_type"] if e else (p["clm_type"] if p else "-"),
+            e["v_desc"] if e else "-",
+        ),
+    )
+
+    excel_data, month_name = create_mw_excel_report(
+        f_xlsx, r["total_cnt"], r["total_1_sum"], r["total_2_sum"], r["total_diff_sum"]
+    )
+    matrix_excel_data = create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name)
+
+    r["detail_metrics"] = [
+        ("청구 공임 합계", raw_excel_labor), ("입금 공임 합계", raw_pdf_labour),
+        ("청구 부품 합계", raw_excel_part), ("입금 부품 합계", raw_pdf_material),
+    ]
+    r["downloads"] = [
+        (f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드",
+         excel_data.getvalue(), f"{month_name}_WARRANTY_수령내역_보고서.xlsx"),
+        (f"📊 [{month_name} MW 세부 대조 비교문서 (PDF vs DMS)] 다운로드",
+         matrix_excel_data.getvalue(), f"{month_name}_MW_세부대조_비교문서.xlsx"),
+    ]
+    return r
+
+@st.cache_data(max_entries=5, show_spinner=False)
+def compute_coupon(a_bytes, a_name, b_bytes, b_name):
+    f_a = NamedBytesIO(a_bytes, a_name)
+    f_b = NamedBytesIO(b_bytes, b_name)
+
+    r = compare_groups(
+        load_excel_coupon_a(f_a), load_excel_coupon_b(f_b), "amount", "amount",
+        "차량번호", "공지된 쿠폰 금액 ( 입금 금액 )", "DMS 쿠폰파일 ( 청구 금액 ) ",
+        meta_fn=lambda a, b: (
+            b["claim_type"] if b else (a["claim_type"] if a else "-"),
+            b["v_desc"] if b else (a["v_desc"] if a else "-"),
+        ),
+    )
+
+    excel_data, month_name = create_coupon_excel_report(
+        f_a, f_b, r["total_cnt"], r["total_2_sum"], r["total_1_sum"], r["total_diff_sum"]
+    )
+    r["detail_metrics"] = []
+    r["downloads"] = [
+        (f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드",
+         excel_data.getvalue(), f"{month_name}_쿠폰_청구_현황_보고서.xlsx"),
+    ]
+    return r
+
+# ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
-if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
-    is_mw = mode == "MW 보증 비교"
-    title_prefix = "MW" if is_mw else "쿠폰"
+COMPARE_MODES = {
+    "MW 보증 비교": {
+        "prefix": "MW",
+        "desc": "PDF(홀수페이지)와 엑셀",
+        # (안내 문구, 업로드 라벨, 파일 형식)
+        "uploads": [
+            ("1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)", "PDF 파일 업로드", "pdf"),
+            ("2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)", "엑셀 파일 업로드", "xlsx"),
+        ],
+        "label_1": "PDF 총 합계 (입금 합계)",
+        "label_2": "DMS 총 합계 (청구 합계)",
+        "compute": compute_mw,
+    },
+    "쿠폰 보증 비교": {
+        "prefix": "쿠폰",
+        "desc": "공지된 쿠폰 파일과 DMS 엑셀",
+        "uploads": [
+            ("1. 공지된 쿠폰 파일을 선택하세요 (예시 : IR_JJ_Aug)", "공지 쿠폰 파일 업로드", "xlsx"),
+            ("2. DMS 쿠폰파일을 선택하세요 (예시 : 쿠폰청구관리_20260818085441)", "DMS 쿠폰 파일 업로드", "xlsx"),
+        ],
+        "label_1": "공지 쿠폰 (입금 합계)",
+        "label_2": "DMS 쿠폰 (청구 합계)",
+        "compute": compute_coupon,
+    },
+}
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+if mode in COMPARE_MODES:
+    cfg = COMPARE_MODES[mode]
 
     st.markdown(
-        f"### 🔍 {'PDF(홀수페이지)와 엑셀' if is_mw else '공지된 쿠폰 파일과 DMS 엑셀'}의"
+        f"### 🔍 {cfg['desc']}의"
         " 금액을 각각 계산 후 반올림 처리하여 대조합니다."
     )
     st.write("")
@@ -1658,50 +1513,16 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     left_col, right_col = st.columns([3.2, 6.8], gap="medium")
 
     with left_col:
-        if is_mw:
-            st.markdown(
-                '<div class="custom-sub-label">1. PDF 파일을 선택하세요 (예시 : DEALER_CREDITNOTE_6755)</div>',
-                unsafe_allow_html=True,
-            )
-            f1 = st.file_uploader(
-                "PDF 파일 업로드",
-                type=["pdf"],
-                key=f"file_1_{st.session_state.reset_trigger}",
+        uploaded = []
+        for n, (guide, upload_label, file_type) in enumerate(cfg["uploads"], 1):
+            st.markdown(f'<div class="custom-sub-label">{guide}</div>', unsafe_allow_html=True)
+            uploaded.append(st.file_uploader(
+                upload_label,
+                type=[file_type],
+                key=f"file_{n}_{st.session_state.reset_trigger}",
                 label_visibility="collapsed",
-            )
-
-            st.markdown(
-                '<div class="custom-sub-label">2. 엑셀 파일을 선택하세요 (예시 : 보증청구현황 [ 항목 조정 가능 ]_2026)</div>',
-                unsafe_allow_html=True,
-            )
-            f2 = st.file_uploader(
-                "엑셀 파일 업로드",
-                type=["xlsx"],
-                key=f"file_2_{st.session_state.reset_trigger}",
-                label_visibility="collapsed",
-            )
-        else:
-            st.markdown(
-                '<div class="custom-sub-label">1. 공지된 쿠폰 파일을 선택하세요 (예시 : IR_JJ_Aug)</div>',
-                unsafe_allow_html=True,
-            )
-            f1 = st.file_uploader(
-                "공지 쿠폰 파일 업로드",
-                type=["xlsx"],
-                key=f"file_1_{st.session_state.reset_trigger}",
-                label_visibility="collapsed",
-            )
-
-            st.markdown(
-                '<div class="custom-sub-label">2. DMS 쿠폰파일을 선택하세요 (예시 : 쿠폰청구관리_20260818085441)</div>',
-                unsafe_allow_html=True,
-            )
-            f2 = st.file_uploader(
-                "DMS 쿠폰 파일 업로드",
-                type=["xlsx"],
-                key=f"file_2_{st.session_state.reset_trigger}",
-                label_visibility="collapsed",
-            )
+            ))
+        f1, f2 = uploaded
 
         st.write("")
         if st.button("🗑️ 첨부파일 초기화", use_container_width=True):
@@ -1709,288 +1530,49 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
             st.rerun()
 
     if f1 and f2:
-        with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
-            if is_mw:
-                excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f2)
-                pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f1)
-                all_keys = sorted(
-                    list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
-                )
+        with st.spinner(f"{cfg['prefix']} 보증 데이터 교차 대조 중..."):
+            r = cfg["compute"](f1.getvalue(), f1.name, f2.getvalue(), f2.name)
 
-                matched_results = []
-                diff_over_100_results = []
-                total_pdf_sum = 0
-                total_excel_sum = 0
-                total_diff_100_sum = 0
-
-                for key_item in all_keys:
-                    items_pdf = pdf_groups.get(key_item, [])
-                    items_excel = excel_groups.get(key_item, [])
-                    max_len = max(len(items_pdf), len(items_excel))
-
-                    for i in range(max_len):
-                        p_item = items_pdf[i] if i < len(items_pdf) else None
-                        e_item = items_excel[i] if i < len(items_excel) else None
-
-                        val_pdf = p_item["total_vat"] if p_item else None
-                        val_excel = e_item["amount"] if e_item else None
-                        r_val = e_item["claim_type"] if e_item else (p_item["clm_type"] if p_item else "-")
-                        v_val = e_item["v_desc"] if e_item else "-"
-
-                        label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
-
-                        if val_pdf is not None:
-                            total_pdf_sum += val_pdf
-                        if val_excel is not None:
-                            total_excel_sum += val_excel
-
-                        diff_val = 0
-                        if val_pdf is not None and val_excel is not None:
-                            diff_val = val_pdf - val_excel
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
-                                "DMS 금액 (청구 금액)": f"{val_excel:,}원",
-                                "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
-                            }
-                        elif val_pdf is not None:
-                            diff_val = val_pdf
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
-                                "DMS 금액 (청구 금액)": "-",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        elif val_excel is not None:
-                            diff_val = -val_excel
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": "-",
-                                "DMS 금액 (청구 금액)": f"{val_excel:,}원",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        matched_results.append(row_dict)
-
-                        if abs(diff_val) >= 100:
-                            total_diff_100_sum += diff_val
-                            diff_over_100_results.append({
-                                "주문번호": label_item,
-                                "Claim Type": r_val,
-                                "제목": v_val,
-                                "차액": f"{diff_val:,}원",
-                            })
-
-                total_diff_sum = total_pdf_sum - total_excel_sum
-                total_cnt = len(matched_results)
-
-                matched_results.append({
-                    "주문번호": "★ 총합계",
-                    "PDF 금액 (실 수령액)": f"{total_pdf_sum:,}원",
-                    "DMS 금액 (청구 금액)": f"{total_excel_sum:,}원",
-                    "차액": f"{total_diff_sum:,}원",
-                })
-
-                res_df = pd.DataFrame(matched_results)
-                res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-
-                excel_data, month_name = create_mw_excel_report(
-                    f2, total_cnt, total_pdf_sum, total_excel_sum, total_diff_sum
-                )
-                dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
-                dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
-
-                matrix_excel_data = create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name)
-                matrix_dl_label = f"📊 [{month_name} MW 세부 대조 비교문서 (PDF vs DMS)] 다운로드"
-                matrix_dl_name = f"{month_name}_MW_세부대조_비교문서.xlsx"
-
-                if diff_over_100_results:
-                    diff_list_with_total = list(diff_over_100_results)
-                    diff_list_with_total.append({
-                        "주문번호": "★ 총합계",
-                        "Claim Type": "-",
-                        "제목": "-",
-                        "차액": f"{total_diff_100_sum:,}원",
-                    })
-                    diff_df = pd.DataFrame(diff_list_with_total)
-                    diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-                else:
-                    diff_df = pd.DataFrame(columns=["주문번호", "Claim Type", "제목", "차액"])
-
-                total_1_sum = total_pdf_sum
-                total_2_sum = total_excel_sum
-
-                with right_col:
-                    render_mw_side_by_side_tables(res_df, diff_df)
-
-            else:
-                a_groups = load_excel_coupon_a(f1)
-                b_groups = load_excel_coupon_b(f2)
-                all_keys = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
-
-                matched_results = []
-                diff_over_100_results = []
-                total_a_sum = 0
-                total_b_sum = 0
-                total_diff_100_sum = 0
-
-                for key_item in all_keys:
-                    items_a = a_groups.get(key_item, [])
-                    items_b = b_groups.get(key_item, [])
-                    max_len = max(len(items_a), len(items_b))
-
-                    for i in range(max_len):
-                        a_item = items_a[i] if i < len(items_a) else None
-                        b_item = items_b[i] if i < len(items_b) else None
-                        val_a = a_item["amount"] if a_item else None
-                        val_b = b_item["amount"] if b_item else None
-                        r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
-                        v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
-
-                        label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
-
-                        if val_a is not None:
-                            total_a_sum += val_a
-                        if val_b is not None:
-                            total_b_sum += val_b
-
-                        diff_val = 0
-                        if val_a is not None and val_b is not None:
-                            diff_val = val_a - val_b
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
-                                "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
-                            }
-                        elif val_a is not None:
-                            diff_val = val_a
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": "-",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        elif val_b is not None:
-                            diff_val = -val_b
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": "-",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        matched_results.append(row_dict)
-
-                        if abs(diff_val) >= 100:
-                            total_diff_100_sum += diff_val
-                            diff_over_100_results.append({
-                                "차량번호": label_item,
-                                "Claim Type": r_val,
-                                "제목": v_val,
-                                "차액": f"{diff_val:,}원",
-                            })
-
-                total_diff_sum = total_a_sum - total_b_sum
-                total_cnt = len(matched_results)
-
-                matched_results.append({
-                    "차량번호": "★ 총합계",
-                    "공지된 쿠폰 금액 ( 입금 금액 )": f"{total_a_sum:,}원",
-                    "DMS 쿠폰파일 ( 청구 금액 ) ": f"{total_b_sum:,}원",
-                    "차액": f"{total_diff_sum:,}원",
-                })
-
-                res_df = pd.DataFrame(matched_results)
-                res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-
-                excel_data, month_name = create_coupon_excel_report(
-                    f1, f2, total_cnt, total_b_sum, total_a_sum, total_diff_sum
-                )
-                dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
-                dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
-
-                if diff_over_100_results:
-                    diff_list_with_total = list(diff_over_100_results)
-                    diff_list_with_total.append({
-                        "차량번호": "★ 총합계",
-                        "Claim Type": "-",
-                        "제목": "-",
-                        "차액": f"{total_diff_100_sum:,}원",
-                    })
-                    diff_df = pd.DataFrame(diff_list_with_total)
-                    diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-                else:
-                    diff_df = pd.DataFrame(columns=["차량번호", "Claim Type", "제목", "차액"])
-
-                total_1_sum = total_a_sum
-                total_2_sum = total_b_sum
-
-                with right_col:
-                    render_coupon_side_by_side_tables(res_df, diff_df)
+        with right_col:
+            render_side_by_side_tables(r["res_df"], r["diff_df"])
 
         with left_col:
             st.divider()
             st.subheader("📌 분석 요약 결과")
             sub_c1, sub_c2 = st.columns(2)
-            sub_c1.metric("총 대조 건수", f"{total_cnt} 건")
+            sub_c1.metric("총 대조 건수", f"{r['total_cnt']} 건")
             sub_c2.metric(
                 "최종 총 차이 금액",
-                f"{total_diff_sum:,}원",
-                delta=(f"{total_diff_sum:,}원" if total_diff_sum != 0 else None),
+                f"{r['total_diff_sum']:,}원",
+                delta=(f"{r['total_diff_sum']:,}원" if r["total_diff_sum"] != 0 else None),
             )
 
-            # 🔄 위치 교체 및 텍스트 보강
             sub_c3, sub_c4 = st.columns(2)
-            sub_c3.metric(
-                f"{'DMS 총 합계 (청구 합계)' if is_mw else 'DMS 쿠폰 (청구 합계)'}",
-                f"{total_2_sum:,}원",
-            )
-            sub_c4.metric(
-                f"{'PDF 총 합계 (입금 합계)' if is_mw else '공지 쿠폰 (입금 합계)'}",
-                f"{total_1_sum:,}원",
-            )
+            sub_c3.metric(cfg["label_2"], f"{r['total_2_sum']:,}원")
+            sub_c4.metric(cfg["label_1"], f"{r['total_1_sum']:,}원")
 
-            if is_mw:
+            if r["detail_metrics"]:
                 st.write("")
                 st.markdown(
                     "<div style='font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;'>🔧 공임 / 부품 세부 내역 (VAT 제외)</div>",
                     unsafe_allow_html=True,
                 )
-                labor_col1, labor_col2 = st.columns(2)
-                labor_col1.metric("청구 공임 합계", f"{raw_excel_labor:,}원")
-                labor_col2.metric("입금 공임 합계", f"{raw_pdf_labour:,}원")
-
-                part_col1, part_col2 = st.columns(2)
-                part_col1.metric("청구 부품 합계", f"{raw_excel_part:,}원")
-                part_col2.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
+                metrics = r["detail_metrics"]
+                for i in range(0, len(metrics), 2):
+                    for m_col, (m_label, m_value) in zip(st.columns(2), metrics[i:i + 2]):
+                        m_col.metric(m_label, f"{m_value:,}원")
 
             st.write("")
-            # 📌 사진과 같이 가로 2열로 나란히 배치
-            if is_mw:
-                dl_btn_col1, dl_btn_col2 = st.columns(2)
-                with dl_btn_col1:
+            # 📌 다운로드 버튼 가로 나란히 배치
+            for dl_col, (dl_label, dl_data, dl_name) in zip(st.columns(len(r["downloads"])), r["downloads"]):
+                with dl_col:
                     st.download_button(
                         label=dl_label,
-                        data=excel_data,
+                        data=dl_data,
                         file_name=dl_name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        mime=XLSX_MIME,
                         use_container_width=True,
                     )
-                with dl_btn_col2:
-                    st.download_button(
-                        label=matrix_dl_label,
-                        data=matrix_excel_data,
-                        file_name=matrix_dl_name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                    )
-            else:
-                st.download_button(
-                    label=dl_label,
-                    data=excel_data,
-                    file_name=dl_name,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
     else:
         with right_col:
             st.info("👈 좌측에서 두 파일을 모두 선택하시면 우측에 상세 대조 내역과 차액 리스트가 표시됩니다.")
@@ -2000,172 +1582,65 @@ elif mode == "공임코드 비교":
     with top_col1:
         st.markdown("### 🔍 VF01 에서 확인된 공임코드들의 중복값을 비교합니다.")
     with top_col2:
-        if not st.session_state.show_group_c:
-            if st.button("➕ 그룹 C 추가하기", use_container_width=True):
-                st.session_state.show_group_c = True
-                st.rerun()
-        else:
-            if st.button("➖ 그룹 C 제거하기", use_container_width=True):
-                st.session_state.show_group_c = False
-                st.rerun()
+        show_c = st.session_state.show_group_c
+        if st.button("➖ 그룹 C 제거하기" if show_c else "➕ 그룹 C 추가하기", use_container_width=True):
+            st.session_state.show_group_c = not show_c
+            st.rerun()
 
     st.write("")
 
-    if not st.session_state.show_group_c:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            sub_a1, sub_a2 = st.columns([1.2, 1.8])
-            with sub_a1:
-                input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
-            with sub_a2:
-                input_desc_a = st.text_input("공임내역", placeholder="예시: coolant drain", key="desc_a")
-            st.markdown(
-                "<div style='font-size: 19px; font-weight: 700; margin-top: 10px; margin-bottom: 6px; color: #f1f5f9;'>공임상세내역</div>",
-                unsafe_allow_html=True,
-            )
-            text_a = st.text_area(
-                "공임상세내역 (A)",
-                height=380,
-                placeholder="예시 : 900-00-B   Engine hood open 1 7",
-                label_visibility="collapsed",
-                key="textarea_a",
-            )
+    # 그룹별 (공임코드 예시, 공임내역 예시)
+    LABOR_PLACEHOLDERS = {
+        "A": ("26215", "coolant drain"),
+        "B": ("26010", "coolant drain"),
+        "C": ("26300", "inspection"),
+    }
+    groups = ["A", "B", "C"] if st.session_state.show_group_c else ["A", "B"]
+    three_cols = len(groups) == 3
+    label_margin = "margin-top: 8px; margin-bottom: 4px;" if three_cols else "margin-top: 10px; margin-bottom: 6px;"
 
-        with col_b:
-            sub_b1, sub_b2 = st.columns([1.2, 1.8])
-            with sub_b1:
-                input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
-            with sub_b2:
-                st.markdown(
-                    "<div style='font-size: 19px; font-weight: 700; margin-bottom: 6px; color: #f1f5f9;'>공임내역</div>",
-                    unsafe_allow_html=True,
-                )
-                input_desc_b = st.text_input(
-                    "공임내역 (B)",
-                    placeholder="예시: coolant drain",
-                    label_visibility="collapsed",
-                    key="desc_b",
-                )
+    group_inputs = {}
+    for g_col, g in zip(st.columns(len(groups)), groups):
+        ph_code, ph_desc = LABOR_PLACEHOLDERS[g]
+        with g_col:
+            sub_1, sub_2 = st.columns([1.2, 1.8])
+            with sub_1:
+                code = st.text_input(f"공임코드 ({g})", placeholder=f"예시: {ph_code}", key=f"code_{g.lower()}")
+            with sub_2:
+                desc = st.text_input("공임내역", placeholder=f"예시: {ph_desc}", key=f"desc_{g.lower()}")
             st.markdown(
-                "<div style='font-size: 19px; font-weight: 700; margin-top: 10px; margin-bottom: 6px; color: #f1f5f9;'>공임상세내역</div>",
+                f"<div style='font-size: 19px; font-weight: 700; {label_margin} color: #f1f5f9;'>공임상세내역</div>",
                 unsafe_allow_html=True,
             )
-            text_b = st.text_area(
-                "공임상세내역 (B)",
-                height=380,
+            text = st.text_area(
+                f"공임상세내역 ({g})",
+                height=350 if three_cols else 380,
                 placeholder="예시 : 900-00-B   Engine hood open 1 7",
                 label_visibility="collapsed",
-                key="textarea_b",
+                key=f"textarea_{g.lower()}",
             )
-        input_code_c, input_desc_c, text_c = "", "", ""
-    else:
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            sub_a1, sub_a2 = st.columns([1.2, 1.8])
-            with sub_a1:
-                input_code_a = st.text_input("공임코드 (A)", placeholder="예시: 26215", key="code_a")
-            with sub_a2:
-                input_desc_a = st.text_input("공임내역", placeholder="예시: coolant drain", key="desc_a")
-            st.markdown(
-                "<div style='font-size: 19px; font-weight: 700; margin-top: 8px; margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
-                unsafe_allow_html=True,
-            )
-            text_a = st.text_area(
-                "공임상세내역 (A)",
-                height=350,
-                placeholder="예시 : 900-00-B   Engine hood open 1 7",
-                label_visibility="collapsed",
-                key="textarea_a",
-            )
-
-        with col_b:
-            sub_b1, sub_b2 = st.columns([1.2, 1.8])
-            with sub_b1:
-                input_code_b = st.text_input("공임코드 (B)", placeholder="예시: 26010", key="code_b")
-            with sub_b2:
-                st.markdown(
-                    "<div style='font-size: 19px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9;'>공임내역</div>",
-                    unsafe_allow_html=True,
-                )
-                input_desc_b = st.text_input(
-                    "공임내역 (B)",
-                    placeholder="예시: coolant drain",
-                    label_visibility="collapsed",
-                    key="desc_b",
-                )
-            st.markdown(
-                "<div style='font-size: 19px; font-weight: 700; margin-top: 8px; margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
-                unsafe_allow_html=True,
-            )
-            text_b = st.text_area(
-                "공임상세내역 (B)",
-                height=350,
-                placeholder="예시 : 900-00-B   Engine hood open 1 7",
-                label_visibility="collapsed",
-                key="textarea_b",
-            )
-
-        with col_c:
-            sub_c1, sub_c2 = st.columns([1.2, 1.8])
-            with sub_c1:
-                input_code_c = st.text_input("공임코드 (C)", placeholder="예시: 26300", key="code_c")
-            with sub_c2:
-                st.markdown(
-                    "<div style='font-size: 19px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9;'>공임내역</div>",
-                    unsafe_allow_html=True,
-                )
-                input_desc_c = st.text_input(
-                    "공임내역 (C)",
-                    placeholder="예시: inspection",
-                    label_visibility="collapsed",
-                    key="desc_c",
-                )
-            st.markdown(
-                "<div style='font-size: 19px; font-weight: 700; margin-top: 8px; margin-bottom: 4px; color: #f1f5f9;'>공임상세내역</div>",
-                unsafe_allow_html=True,
-            )
-            text_c = st.text_area(
-                "공임상세내역 (C)",
-                height=350,
-                placeholder="예시 : 900-00-B   Engine hood open 1 7",
-                label_visibility="collapsed",
-                key="textarea_c",
-            )
+            group_inputs[g] = (code.strip(), desc.strip(), text)
 
     st.write("")
     start_compare = st.button("🔍 비교진행", use_container_width=True, type="primary")
 
     if start_compare:
-        combined_text_a = text_a
-        if input_code_a.strip():
-            combined_text_a = f"{input_code_a.strip()} {input_desc_a.strip()}\n" + combined_text_a
+        # 공임코드를 입력했으면 상세내역 맨 위에 한 줄로 추가
+        combined_texts = {
+            g: (f"{code} {desc}\n" + text if code else text)
+            for g, (code, desc, text) in group_inputs.items()
+        }
 
-        combined_text_b = text_b
-        if input_code_b.strip():
-            combined_text_b = f"{input_code_b.strip()} {input_desc_b.strip()}\n" + combined_text_b
-
-        combined_text_c = text_c
-        if st.session_state.show_group_c and input_code_c.strip():
-            combined_text_c = f"{input_code_c.strip()} {input_desc_c.strip()}\n" + combined_text_c
-
-        if not combined_text_a.strip() and not combined_text_b.strip():
+        if not combined_texts["A"].strip() and not combined_texts["B"].strip():
             st.warning("⚠️ 공임코드를 입력하거나 내용을 붙여넣어 주세요.")
         else:
-            map_a = parse_labor_lines(combined_text_a)
-            map_b = parse_labor_lines(combined_text_b)
-            map_c = (
-                parse_labor_lines(combined_text_c)
-                if st.session_state.show_group_c
-                else OrderedDict()
-            )
+            maps = {g: parse_labor_lines(t) for g, t in combined_texts.items()}
 
-            if st.session_state.show_group_c:
-                all_codes = set(list(map_a.keys()) + list(map_b.keys()) + list(map_c.keys()))
-                duplicate_codes = [
-                    code for code in all_codes if sum([code in map_a, code in map_b, code in map_c]) >= 2
-                ]
-            else:
-                duplicate_codes = [code for code in map_a.keys() if code in map_b]
+            # 입력 순서(A → B → C)대로, 2개 이상 그룹에 있는 코드
+            all_codes = dict.fromkeys(code for m in maps.values() for code in m)
+            duplicate_codes = [
+                code for code in all_codes if sum(code in m for m in maps.values()) >= 2
+            ]
 
             st.divider()
 
@@ -2173,33 +1648,13 @@ elif mode == "공임코드 비교":
 
             with res_col_left:
                 st.markdown("### 📌 비교 요약 결과")
-                sum_col1, sum_col2 = st.columns(2)
-                with sum_col1:
-                    st.metric("A그룹 총 건수", f"{len(map_a)} 건")
-                with sum_col2:
-                    st.metric(
-                        "A그룹 고유",
-                        f"{len([c for c in map_a if c not in map_b and c not in map_c])} 건",
-                    )
-
-                sum_col3, sum_col4 = st.columns(2)
-                with sum_col3:
-                    st.metric("B그룹 총 건수", f"{len(map_b)} 건")
-                with sum_col4:
-                    st.metric(
-                        "B그룹 고유",
-                        f"{len([c for c in map_b if c not in map_a and c not in map_c])} 건",
-                    )
-
-                if st.session_state.show_group_c:
-                    sum_col5, sum_col6 = st.columns(2)
-                    with sum_col5:
-                        st.metric("C그룹 총 건수", f"{len(map_c)} 건")
-                    with sum_col6:
-                        st.metric(
-                            "C그룹 고유",
-                            f"{len([c for c in map_c if c not in map_a and c not in map_b])} 건",
-                        )
+                for g, m in maps.items():
+                    unique_cnt = len([c for c in m if not any(c in other for og, other in maps.items() if og != g)])
+                    sum_col1, sum_col2 = st.columns(2)
+                    with sum_col1:
+                        st.metric(f"{g}그룹 총 건수", f"{len(m)} 건")
+                    with sum_col2:
+                        st.metric(f"{g}그룹 고유", f"{unique_cnt} 건")
 
                 st.write("")
                 st.metric(
@@ -2211,69 +1666,21 @@ elif mode == "공임코드 비교":
             with res_col_right:
                 st.markdown("### 🚨 중복 발견 내역")
                 if duplicate_codes:
-                    dup_rows = []
+                    group_headers = [
+                        f"{code} {desc}".strip() or f"{g}그룹 내용"
+                        for g, (code, desc, _) in group_inputs.items()
+                    ]
+                    th_tags = "".join(f"<th>{h}</th>" for h in ["No.", "중복 공임코드"] + group_headers)
+
+                    main_tbody = []
                     for idx, code in enumerate(duplicate_codes, 1):
-                        lines_a_str = " | ".join(map_a[code]) if code in map_a else "-"
-                        lines_b_str = " | ".join(map_b[code]) if code in map_b else "-"
-                        if st.session_state.show_group_c:
-                            lines_c_str = " | ".join(map_c[code]) if code in map_c else "-"
-                            dup_rows.append({
-                                "중복 공임코드": code,
-                                "A그룹": lines_a_str,
-                                "B그룹": lines_b_str,
-                                "C그룹": lines_c_str,
-                            })
-                        else:
-                            dup_rows.append({
-                                "중복 공임코드": code,
-                                "A그룹": lines_a_str,
-                                "B그룹": lines_b_str,
-                            })
-
-                    df_dup = pd.DataFrame(dup_rows)
-                    df_dup.index = range(1, len(df_dup) + 1)
-
-                    header_a_name = (
-                        f"{input_code_a.strip()} {input_desc_a.strip()}".strip()
-                        if input_code_a.strip() or input_desc_a.strip()
-                        else "A그룹 내용"
-                    )
-                    header_b_name = (
-                        f"{input_code_b.strip()} {input_desc_b.strip()}".strip()
-                        if input_code_b.strip() or input_desc_b.strip()
-                        else "B그룹 내용"
-                    )
-
-                    if st.session_state.show_group_c:
-                        header_c_name = (
-                            f"{input_code_c.strip()} {input_desc_c.strip()}".strip()
-                            if input_code_c.strip() or input_desc_c.strip()
-                            else "C그룹 내용"
+                        group_cells = "".join(
+                            f'<td class="col-amt">{" | ".join(m[code]) if code in m else "-"}</td>'
+                            for m in maps.values()
                         )
-                        main_headers = [
-                            "No.",
-                            "중복 공임코드",
-                            header_a_name,
-                            header_b_name,
-                            header_c_name,
-                        ]
-                        main_tbody = []
-                        for idx, row in df_dup.iterrows():
-                            main_tbody.append(
-                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td><td class="col-amt">{row.iloc[3]}</td></tr>'
-                            )
-                    else:
-                        main_headers = [
-                            "No.",
-                            "중복 공임코드",
-                            header_a_name,
-                            header_b_name,
-                        ]
-                        main_tbody = []
-                        for idx, row in df_dup.iterrows():
-                            main_tbody.append(
-                                f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{row.iloc[0]}</td><td class="col-amt">{row.iloc[1]}</td><td class="col-amt">{row.iloc[2]}</td></tr>'
-                            )
+                        main_tbody.append(
+                            f'<tr><td class="col-no">{idx}</td><td class="col-id copyable" onclick="copyCell(this)">{code}</td>{group_cells}</tr>'
+                        )
 
                     css_dup = """
                       * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -2299,18 +1706,6 @@ elif mode == "공임코드 비교":
                       }
                     """
 
-                    if st.session_state.show_group_c:
-                        th_tags = (
-                            f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th>"
-                            f"<th>{main_headers[2]}</th><th>{main_headers[3]}</th>"
-                            f"<th>{main_headers[4]}</th>"
-                        )
-                    else:
-                        th_tags = (
-                            f"<th>{main_headers[0]}</th><th>{main_headers[1]}</th>"
-                            f"<th>{main_headers[2]}</th><th>{main_headers[3]}</th>"
-                        )
-
                     table_html = (
                         '<!DOCTYPE html><html><head><meta charset="utf-8" />'
                         f"<style>{css_dup}</style></head><body>"
@@ -2321,7 +1716,7 @@ elif mode == "공임코드 비교":
                         "</body></html>"
                     )
                     components.html(
-                        table_html, height=min(600, len(df_dup) * 44 + 80), scrolling=True
+                        table_html, height=min(600, len(duplicate_codes) * 44 + 80), scrolling=True
                     )
                 else:
                     st.success("✅ 비교 그룹 간에 중복된 공임코드가 없습니다.")
@@ -2330,15 +1725,17 @@ elif mode == "캘린더":
     st.markdown("### 📅 보증팀 주요 마감 및 업무 일정 관리")
     st.write("")
 
+    def shift_month(delta):
+        """delta = -1 : 이전 달, +1 : 다음 달"""
+        total = st.session_state.cal_year * 12 + (st.session_state.cal_month - 1) + delta
+        st.session_state.cal_year, month_idx = divmod(total, 12)
+        st.session_state.cal_month = month_idx + 1
+        st.rerun()
+
     ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.5, 4, 1.5, 3])
     with ctrl_c1:
         if st.button("◀ 이전 달", use_container_width=True):
-            if st.session_state.cal_month == 1:
-                st.session_state.cal_month = 12
-                st.session_state.cal_year -= 1
-            else:
-                st.session_state.cal_month -= 1
-            st.rerun()
+            shift_month(-1)
 
     with ctrl_c2:
         st.markdown(
@@ -2350,12 +1747,7 @@ elif mode == "캘린더":
 
     with ctrl_c3:
         if st.button("다음 달 ▶", use_container_width=True):
-            if st.session_state.cal_month == 12:
-                st.session_state.cal_month = 1
-                st.session_state.cal_year += 1
-            else:
-                st.session_state.cal_month += 1
-            st.rerun()
+            shift_month(1)
 
     with ctrl_c4:
         if st.button("📌 오늘 날짜로 이동", use_container_width=True):
@@ -2366,13 +1758,20 @@ elif mode == "캘린더":
 
     st.write("")
 
-    category_styles = {
-        "MW 마감": "chip-mw",
-        "쿠폰 정산": "chip-coupon",
-        "본사 청구": "chip-claim",
-        "휴가/당직": "chip-vacation",
-        "기타": "chip-etc",
+    # 업무 구분 : (달력 칩 스타일, 목록 아이콘)
+    CATEGORY_INFO = {
+        "MW 마감": ("chip-mw", "🟦"),
+        "쿠폰 정산": ("chip-coupon", "🟩"),
+        "본사 청구": ("chip-claim", "🟨"),
+        "휴가/당직": ("chip-vacation", "🟥"),
+        "기타": ("chip-etc", "⬜"),
     }
+    category_styles = {name: info[0] for name, info in CATEGORY_INFO.items()}
+
+    def event_range(ev):
+        """일정의 (시작일, 종료일) 문자열. 예전 형식('date' 하나)도 지원"""
+        s_d = ev.get("start_date", ev.get("date", ""))
+        return s_d, ev.get("end_date", s_d)
 
     # 📌 일요일 시작 요일로 설정하여 요일 밀림 방지
     calendar.setfirstweekday(calendar.SUNDAY)
@@ -2383,8 +1782,7 @@ elif mode == "캘린더":
 
     events_by_date = defaultdict(list)
     for ev in st.session_state.calendar_events:
-        s_date_str = ev.get("start_date", ev.get("date", ""))
-        e_date_str = ev.get("end_date", s_date_str)
+        s_date_str, e_date_str = event_range(ev)
         try:
             d_cur = datetime.datetime.strptime(s_date_str, "%Y-%m-%d").date()
             d_end = datetime.datetime.strptime(e_date_str, "%Y-%m-%d").date()
@@ -2546,9 +1944,7 @@ elif mode == "캘린더":
                     unsafe_allow_html=True,
                 )
             with chk_col:
-                st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
                 is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
-                st.markdown("</div>", unsafe_allow_html=True)
 
             if is_single_day:
                 start_date_val = st.date_input("선택 일자", value=default_day, key="cal_start_date_single")
@@ -2568,25 +1964,32 @@ elif mode == "캘린더":
             new_title = st.text_input("일정 제목", placeholder="예: 여름 휴가 / 9월 쿠폰 정산", key="cal_add_title")
             new_cat = st.selectbox(
                 "업무 구분",
-                ["MW 마감", "쿠폰 정산", "본사 청구", "휴가/당직", "기타"],
+                list(CATEGORY_INFO),
                 key="cal_add_cat",
             )
             new_memo = st.text_area("상세 메모 (선택)", height=70, placeholder="특이사항 입력", key="cal_add_memo")
 
             if st.button("등록하기", type="primary", use_container_width=True):
                 if new_title.strip():
-                    st.session_state.calendar_events.append({
+                    new_event = {
                         "start_date": start_date_val.strftime("%Y-%m-%d"),
                         "end_date": end_date_val.strftime("%Y-%m-%d"),
                         "title": new_title.strip(),
                         "category": new_cat,
                         "memo": new_memo.strip(),
-                    })
-                    github_save_file("calendar_data.json", st.session_state.calendar_events)
-                    st.success("✅ 일정이 영구 저장되었습니다!")
-                    st.rerun()
+                    }
+
+                    def _add_event(data):
+                        data.append(new_event)
+                        return True
+
+                    save_shared_and_rerun(
+                        "calendar_data.json", DEFAULT_CALENDAR_DATA, _add_event,
+                        "✅ 일정이 영구 저장되었습니다!",
+                    )
                 else:
                     st.warning("⚠️ 일정 제목을 입력해 주세요.")
+
 
     with bottom_col_right:
         cur_year = st.session_state.cal_year
@@ -2595,14 +1998,12 @@ elif mode == "캘린더":
         last_day_num = calendar.monthrange(cur_year, cur_month)[1]
         month_end_str = f"{cur_year:04d}-{cur_month:02d}-{last_day_num:02d}"
 
-        month_events = []
-        for idx, ev in enumerate(st.session_state.calendar_events):
-            ev_start = ev.get("start_date", ev.get("date", ""))
-            ev_end = ev.get("end_date", ev_start)
-            if ev_start <= month_end_str and ev_end >= month_start_str:
-                month_events.append((idx, ev))
-
-        month_events.sort(key=lambda x: x[1].get("start_date", x[1].get("date", "")))
+        # 이번 달에 걸쳐 있는 일정만, 시작일 순으로
+        month_events = [
+            ev for ev in st.session_state.calendar_events
+            if event_range(ev)[0] <= month_end_str and event_range(ev)[1] >= month_start_str
+        ]
+        month_events.sort(key=lambda ev: event_range(ev)[0])
 
         st.markdown(
             f"#### 📋 {st.session_state.cal_month}월 등록된 일정 목록"
@@ -2612,30 +2013,15 @@ elif mode == "캘린더":
 
         with st.container(height=360):
             if month_events:
-                grid_col1, grid_col2 = st.columns(2, gap="medium")
-                for i, (orig_idx, ev) in enumerate(month_events):
-                    target_col = grid_col1 if i % 2 == 0 else grid_col2
-                    with target_col:
+                grid_cols = st.columns(2, gap="medium")
+                for i, ev in enumerate(month_events):
+                    with grid_cols[i % 2]:
                         c_card, c_del = st.columns([8.2, 1.8])
                         with c_card:
-                            category_icon = {
-                                "MW 마감": "🟦",
-                                "쿠폰 정산": "🟩",
-                                "본사 청구": "🟨",
-                                "휴가/당직": "🟥",
-                                "기타": "⬜",
-                            }.get(ev.get("category"), "📌")
-
-                            s_d = ev.get("start_date", ev.get("date", ""))
-                            e_d = ev.get("end_date", s_d)
+                            category_icon = CATEGORY_INFO.get(ev.get("category"), (None, "📌"))[1]
+                            s_d, e_d = event_range(ev)
                             date_display = s_d if s_d == e_d else f"{s_d} ~ {e_d}"
-
-                            memo_txt = ev.get("memo", "").strip()
-                            memo_html = (
-                                f'<div class="event-card-memo">{memo_txt}</div>'
-                                if memo_txt
-                                else '<div class="event-card-memo">-</div>'
-                            )
+                            memo_txt = ev.get("memo", "").strip() or "-"
 
                             st.markdown(
                                 f"""
@@ -2643,17 +2029,23 @@ elif mode == "캘린더":
                                   <div class="event-card-title">
                                     {category_icon} <span>{date_display}</span> <span style="color:#94a3b8;">|</span> <span>[{ev['category']}] {ev['title']}</span>
                                   </div>
-                                  {memo_html}
+                                  <div class="event-card-memo">{memo_txt}</div>
                                 </div>
                                 """,
                                 unsafe_allow_html=True,
                             )
                         with c_del:
-                            st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
-                            if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
-                                st.session_state.calendar_events.pop(orig_idx)
-                                github_save_file("calendar_data.json", st.session_state.calendar_events)
-                                st.rerun()
-                            st.markdown("</div>", unsafe_allow_html=True)
+                            if st.button("삭제", key=f"delev_{i}", use_container_width=True):
+                                # 순번이 아니라 내용으로 찾아서 삭제 (그 사이 목록이 바뀌어도 안전)
+                                def _del_event(data, target=dict(ev)):
+                                    if target in data:
+                                        data.remove(target)
+                                        return True
+                                    return False
+
+                                save_shared_and_rerun(
+                                    "calendar_data.json", DEFAULT_CALENDAR_DATA, _del_event,
+                                    "🗑️ 일정이 삭제되었습니다.",
+                                )
             else:
                 st.info("해당 월에 등록된 일정이 없습니다.")
