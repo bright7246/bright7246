@@ -214,6 +214,12 @@ st.markdown(
 
 APP_URL = "https://iron-warranty-app.streamlit.app"
 
+# 화면 상단 제목 (서버별로 다르게 사용)
+#   main  : 아이언모터스 보증팀 지원 프로그램
+#   test  : TEST 용 서버
+#   test2 : 클로드 테스트용 서버
+APP_TITLE = "클로드 테스트용 서버"
+
 # ────────────────────────────────────────────────────────
 # ☁️ GitHub 영구 저장소 연동 모듈
 # ────────────────────────────────────────────────────────
@@ -500,7 +506,7 @@ with head_col1:
         f"""
         <div class="brand-title-wrap">
           <img src="{LOGO_DATA_URI}" class="brand-logo-img" alt="VOLVO" />
-          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">아이언모터스 보증팀 지원 프로그램</h1>
+          <h1 style="margin: 0; padding: 0; font-size: 1.85rem; font-weight: 800; color: #f8fafc;">{APP_TITLE}</h1>
         </div>
         """,
         unsafe_allow_html=True,
