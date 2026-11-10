@@ -1,6 +1,7 @@
 from collections import OrderedDict, defaultdict
 import datetime
 import calendar
+import copy
 import io
 import json
 import os
@@ -70,19 +71,20 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.3 !important;
     }
-    div.share-btn-wrap div.stButton > button {
+    /* 버튼 개별 스타일: 버튼 key 로 자동 생성되는 st-key-<key> 클래스를 이용 */
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-sharebtn"] button {
         height: 38px !important;
         min-height: 38px !important;
         padding: 4px 12px !important;
         border-radius: 8px !important;
         margin-top: 6px !important;
     }
-    div.share-btn-wrap div.stButton > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-sharebtn"] button p {
         font-size: 13px !important;
         font-weight: 600 !important;
         line-height: 1.2 !important;
     }
-    div.sw-btn-wrap div.stButton > button {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button {
         height: 38px !important;
         min-height: 38px !important;
         padding: 4px 8px !important;
@@ -93,12 +95,12 @@ st.markdown(
         color: #f8fafc !important;
         white-space: nowrap !important;
     }
-    div.sw-btn-wrap div.stButton > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button p {
         font-size: 13px !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
     }
-    div.sw-btn-wrap div.stButton > button:hover {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-swbtn_"] button:hover {
         background-color: #1e293b !important;
         border-color: #0ea5e9 !important;
         color: #38bdf8 !important;
@@ -164,7 +166,7 @@ st.markdown(
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button {
         height: 72px !important;
         min-height: 72px !important;
         border-radius: 8px !important;
@@ -174,21 +176,19 @@ st.markdown(
         padding: 0 !important;
         margin-bottom: 8px !important;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button p {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button p {
         font-size: 13px !important;
         font-weight: 700 !important;
     }
-    .del-btn-wrap div[data-testid="stButton"] > button:hover {
+    div[data-testid="stHorizontalBlock"] div[class*="st-key-delev_"] button:hover {
         background-color: #7f1d1d !important;
         border-color: #ef4444 !important;
         color: #ffffff !important;
     }
-    .single-day-checkbox {
-        display: flex;
-        align-items: center;
-        margin-top: 36px;
+    div[class*="st-key-cal_single_day"] {
+        margin-top: 10px;
     }
-    .single-day-checkbox label p {
+    div[class*="st-key-cal_single_day"] label p {
         font-size: 15px !important;
         font-weight: 600 !important;
         color: #38bdf8 !important;
@@ -228,54 +228,121 @@ def get_github_auth():
         return repo, headers
     return None, None
 
-def github_load_file(filename, default_data):
-    repo, headers = get_github_auth()
-    if repo and headers:
-        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                content_b64 = res.json().get("content", "")
-                decoded = base64.b64decode(content_b64).decode("utf-8")
-                return json.loads(decoded)
-        except Exception:
-            pass
-            
+def _local_load(filename, default_data):
     if os.path.exists(filename):
         try:
             with open(filename, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    return default_data
+    return copy.deepcopy(default_data)
 
-def github_save_file(filename, data):
-    repo, headers = get_github_auth()
-    content_str = json.dumps(data, ensure_ascii=False, indent=2)
-    
+def _local_save(filename, data):
     try:
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(content_str)
+            f.write(json.dumps(data, ensure_ascii=False, indent=2))
+        return True
     except Exception:
-        pass
-        
-    if repo and headers:
-        url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+        return False
+
+def _github_get(filename):
+    """GitHub 에서 파일을 읽어옵니다.
+    반환: (상태, 데이터, sha, 오류메시지)  상태 = "ok" / "missing" / "error" / "nolink"
+    """
+    repo, headers = get_github_auth()
+    if not (repo and headers):
+        return "nolink", None, None, "GitHub 연동 정보(GITHUB_TOKEN / GITHUB_REPO)가 없습니다."
+    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+    try:
+        res = requests.get(url, headers=headers, timeout=8)
+    except requests.RequestException as e:
+        return "error", None, None, f"GitHub 연결 실패 ({type(e).__name__})"
+    if res.status_code == 200:
         try:
-            sha = None
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                sha = res.json().get("sha")
-                
-            payload = {
-                "message": f"Update {filename} via App",
-                "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
-            }
-            if sha:
-                payload["sha"] = sha
-            requests.put(url, headers=headers, json=payload, timeout=5)
-        except Exception:
-            pass
+            body = res.json()
+            decoded = base64.b64decode(body.get("content", "")).decode("utf-8")
+            return "ok", json.loads(decoded), body.get("sha"), ""
+        except Exception as e:
+            return "error", None, None, f"GitHub 데이터 해석 실패 ({type(e).__name__})"
+    if res.status_code == 404:
+        return "missing", None, None, ""
+    return "error", None, None, f"GitHub 응답 오류 (코드 {res.status_code})"
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_shared_data(filename, default_data):
+    """모든 접속자가 공유하는 데이터(S/W 이력, 캘린더)를 읽어옵니다.
+    30초마다 GitHub 에서 최신본을 다시 읽어, 다른 사람이 등록한 내용도 반영됩니다."""
+    status, data, _, _ = _github_get(filename)
+    if status == "ok":
+        return data
+    if status == "missing":
+        return copy.deepcopy(default_data)
+    return _local_load(filename, default_data)
+
+def update_shared_data(filename, default_data, mutate_fn):
+    """저장 직전에 GitHub 최신본을 다시 읽고, 그 위에 변경사항(mutate_fn)만 적용해 저장합니다.
+    → 여러 명이 동시에 사용해도 다른 사람이 등록한 내용을 덮어쓰지 않습니다.
+    mutate_fn(data) 는 실제로 변경했으면 True, 변경할 대상이 없으면 False 를 반환합니다.
+    반환: (결과, 메시지)  결과 = "success" / "warning" / "info" / "error"
+    """
+    repo, headers = get_github_auth()
+
+    # GitHub 연동 정보가 없는 경우 : 서버 로컬 파일에만 저장
+    if not (repo and headers):
+        data = _local_load(filename, default_data)
+        if not mutate_fn(data):
+            load_shared_data.clear()
+            return "info", "이미 삭제되었거나 변경된 항목입니다. 최신 내용으로 새로 고쳤습니다."
+        _local_save(filename, data)
+        load_shared_data.clear()
+        return "warning", (
+            "GitHub 연동 정보가 없어 서버에 임시로만 저장되었습니다. "
+            "서버가 재시작되면 사라질 수 있습니다."
+        )
+
+    url = f"https://api.github.com/repos/{repo}/contents/{filename}"
+    for _ in range(3):
+        status, data, sha, err_msg = _github_get(filename)
+        if status == "error":
+            return "error", f"저장 실패 : {err_msg}. 잠시 후 다시 시도해 주세요."
+        if status == "missing":
+            data, sha = copy.deepcopy(default_data), None
+
+        if not mutate_fn(data):
+            load_shared_data.clear()
+            return "info", "이미 삭제되었거나 변경된 항목입니다. 최신 내용으로 새로 고쳤습니다."
+
+        content_str = json.dumps(data, ensure_ascii=False, indent=2)
+        payload = {
+            "message": f"Update {filename} via App",
+            "content": base64.b64encode(content_str.encode("utf-8")).decode("utf-8"),
+        }
+        if sha:
+            payload["sha"] = sha
+        try:
+            res = requests.put(url, headers=headers, json=payload, timeout=10)
+        except requests.RequestException as e:
+            return "error", f"저장 실패 : GitHub 연결 실패 ({type(e).__name__}). 잠시 후 다시 시도해 주세요."
+
+        if res.status_code in (200, 201):
+            _local_save(filename, data)
+            load_shared_data.clear()
+            return "success", ""
+        if res.status_code in (409, 422):
+            # 그 사이 다른 사람이 먼저 저장함 → 최신본을 다시 읽어 재시도
+            continue
+        return "error", f"저장 실패 : GitHub 응답 오류 (코드 {res.status_code}). 잠시 후 다시 시도해 주세요."
+
+    return "error", "다른 사용자와 동시에 저장되어 저장하지 못했습니다. 다시 시도해 주세요."
+
+def set_flash(level, message):
+    """st.rerun() 후에도 보이도록 알림 메시지를 보관합니다."""
+    st.session_state.flash_msg = (level, message)
+
+def save_shared_and_rerun(filename, default_data, mutate_fn, success_msg):
+    result, msg = update_shared_data(filename, default_data, mutate_fn)
+    set_flash(result, success_msg if result == "success" else msg)
+    st.rerun()
 
 DEFAULT_SW_DATA = {
     "VOLVO": [{"version": "5.2.16", "date": datetime.date.today().strftime("%Y-%m-%d"), "memo": ""}],
@@ -293,11 +360,9 @@ DEFAULT_CALENDAR_DATA = [
     }
 ]
 
-if "sw_history" not in st.session_state:
-    st.session_state.sw_history = github_load_file("sw_data.json", DEFAULT_SW_DATA)
-
-if "calendar_events" not in st.session_state:
-    st.session_state.calendar_events = github_load_file("calendar_data.json", DEFAULT_CALENDAR_DATA)
+# 매 실행마다 공유 데이터를 다시 읽음 (30초 캐시) → 다른 접속자의 변경사항도 반영
+st.session_state.sw_history = load_shared_data("sw_data.json", DEFAULT_SW_DATA)
+st.session_state.calendar_events = load_shared_data("calendar_data.json", DEFAULT_CALENDAR_DATA)
 
 @st.dialog("🚗 S/W 버전 관리")
 def manage_sw_dialog(car_key):
@@ -324,19 +389,20 @@ def manage_sw_dialog(car_key):
 
     if st.button("신규 버전 등록하기", type="primary", use_container_width=True):
         if new_ver_input.strip():
-            today_str = datetime.date.today().strftime("%Y-%m-%d")
-            if car_key not in st.session_state.sw_history:
-                st.session_state.sw_history[car_key] = []
-            st.session_state.sw_history[car_key].insert(
-                0, {
-                    "version": new_ver_input.strip(),
-                    "date": today_str,
-                    "memo": new_memo_input.strip()
-                }
+            new_item = {
+                "version": new_ver_input.strip(),
+                "date": datetime.date.today().strftime("%Y-%m-%d"),
+                "memo": new_memo_input.strip(),
+            }
+
+            def _add_version(data):
+                data.setdefault(car_key, []).insert(0, new_item)
+                return True
+
+            save_shared_and_rerun(
+                "sw_data.json", DEFAULT_SW_DATA, _add_version,
+                f"✅ {car_key} S/W 버전이 영구 저장되었습니다!",
             )
-            github_save_file("sw_data.json", st.session_state.sw_history)
-            st.success(f"✅ {car_key} S/W 버전이 영구 저장되었습니다!")
-            st.rerun()
         else:
             st.warning("⚠️ 버전을 입력해 주세요.")
 
@@ -358,9 +424,18 @@ def manage_sw_dialog(car_key):
                 )
             with c_h_del:
                 if st.button("삭제", key=f"del_sw_{car_key}_{idx}", use_container_width=True):
-                    st.session_state.sw_history[car_key].pop(idx)
-                    github_save_file("sw_data.json", st.session_state.sw_history)
-                    st.rerun()
+                    # 순번이 아니라 내용으로 찾아서 삭제 (그 사이 목록이 바뀌어도 안전)
+                    def _del_version(data, target=dict(item)):
+                        items = data.get(car_key, [])
+                        if target in items:
+                            items.remove(target)
+                            return True
+                        return False
+
+                    save_shared_and_rerun(
+                        "sw_data.json", DEFAULT_SW_DATA, _del_version,
+                        f"🗑️ {car_key} S/W 버전 기록이 삭제되었습니다.",
+                    )
             st.markdown(
                 "<hr style='border:0; border-top:1px solid #334155; margin:6px 0;'>",
                 unsafe_allow_html=True,
@@ -441,10 +516,8 @@ latest_v = (
     else "-"
 )
 with col_sw_v:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"VOLVO  {latest_v}", use_container_width=True, key="btn_sw_volvo"):
+    if st.button(f"VOLVO  {latest_v}", use_container_width=True, key="swbtn_volvo"):
         manage_sw_dialog("VOLVO")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 latest_ve = (
     st.session_state.sw_history["V.ELEC"][0]["version"]
@@ -452,10 +525,8 @@ latest_ve = (
     else "-"
 )
 with col_sw_ve:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"V.ELEC  {latest_ve}", use_container_width=True, key="btn_sw_velec"):
+    if st.button(f"V.ELEC  {latest_ve}", use_container_width=True, key="swbtn_velec"):
         manage_sw_dialog("V.ELEC")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 latest_p = (
     st.session_state.sw_history["POL"][0]["version"]
@@ -463,16 +534,12 @@ latest_p = (
     else "-"
 )
 with col_sw_p:
-    st.markdown('<div class="sw-btn-wrap">', unsafe_allow_html=True)
-    if st.button(f"POL  {latest_p}", use_container_width=True, key="btn_sw_pol"):
+    if st.button(f"POL  {latest_p}", use_container_width=True, key="swbtn_pol"):
         manage_sw_dialog("POL")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with head_col2:
-    st.markdown('<div class="share-btn-wrap">', unsafe_allow_html=True)
-    if st.button("🔗 공유 / QR", use_container_width=True):
+    if st.button("🔗 공유 / QR", use_container_width=True, key="sharebtn"):
         share_modal()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 today_date = datetime.date.today()
 
@@ -540,6 +607,12 @@ with nav_col4:
             st.rerun()
 
 st.divider()
+
+# 저장 결과 알림 (st.rerun 이후에도 표시)
+_flash = st.session_state.pop("flash_msg", None)
+if _flash:
+    _level, _message = _flash
+    {"success": st.success, "warning": st.warning, "info": st.info}.get(_level, st.error)(_message)
 
 mode = st.session_state.current_mode
 
@@ -1500,10 +1573,11 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
     ws.title = "쿠폰 청구 현황"
     ws.print_title_rows = "1:3"
 
-    month_str = "8월"
+    # 월 판별 순서 : ① DMS 파일명(예: 쿠폰청구관리_20260818…) → ② 공지 파일의 날짜 열 → ③ 판별 불가 시 "X월"
+    month_str = None
     file_b_name = getattr(uploaded_file_b, "name", "")
     m_fn = re.search(r"20\d{2}(\d{2})", file_b_name)
-    if m_fn:
+    if m_fn and 1 <= int(m_fn.group(1)) <= 12:
         month_str = f"{int(m_fn.group(1))}월"
     else:
         for col in df_a_raw.columns:
@@ -1511,11 +1585,13 @@ def create_coupon_excel_report(uploaded_file_a, uploaded_file_b, count, total_b,
                 sample_dates = df_a_raw[col].dropna().astype(str).tolist()
                 for d in sample_dates:
                     m = re.search(r"-(\d{2})-", d) or re.search(r"/(\d{2})/", d)
-                    if m:
+                    if m and 1 <= int(m.group(1)) <= 12:
                         month_str = f"{int(m.group(1))}월"
                         break
-                if month_str != "8월":
+                if month_str:
                     break
+    if not month_str:
+        month_str = "X월"
 
     ws.merge_cells("A1:N1")
     ws["A1"] = f"{month_str} 쿠폰 청구 현황"
@@ -1643,6 +1719,251 @@ def parse_labor_lines(text):
     return code_map
 
 # ────────────────────────────────────────────────────────
+# ⚡ [대조 계산] 같은 파일이면 결과를 저장해 두고 재사용 (버튼 클릭 시 재계산 방지)
+# ────────────────────────────────────────────────────────
+class NamedBytesIO(io.BytesIO):
+    """업로드 파일처럼 .name 속성을 갖는 메모리 파일 (월 판별 등에 파일명 사용)"""
+    def __init__(self, data, name=""):
+        super().__init__(data)
+        self.name = name
+
+def _numbered_index(df):
+    # 1, 2, 3 … 순번 + 마지막 총합계 행은 빈칸
+    df.index = [str(i) for i in range(1, len(df))] + [""]
+    return df
+
+@st.cache_data(max_entries=5, show_spinner=False)
+def compute_mw(pdf_bytes, pdf_name, xlsx_bytes, xlsx_name):
+    f1 = NamedBytesIO(pdf_bytes, pdf_name)
+    f2 = NamedBytesIO(xlsx_bytes, xlsx_name)
+
+    excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f2)
+    pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f1)
+    all_keys = sorted(
+        list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
+    )
+
+    matched_results = []
+    diff_over_100_results = []
+    total_pdf_sum = 0
+    total_excel_sum = 0
+    total_diff_100_sum = 0
+
+    for key_item in all_keys:
+        items_pdf = pdf_groups.get(key_item, [])
+        items_excel = excel_groups.get(key_item, [])
+        max_len = max(len(items_pdf), len(items_excel))
+
+        for i in range(max_len):
+            p_item = items_pdf[i] if i < len(items_pdf) else None
+            e_item = items_excel[i] if i < len(items_excel) else None
+
+            val_pdf = p_item["total_vat"] if p_item else None
+            val_excel = e_item["amount"] if e_item else None
+            r_val = e_item["claim_type"] if e_item else (p_item["clm_type"] if p_item else "-")
+            v_val = e_item["v_desc"] if e_item else "-"
+
+            label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
+
+            if val_pdf is not None:
+                total_pdf_sum += val_pdf
+            if val_excel is not None:
+                total_excel_sum += val_excel
+
+            diff_val = 0
+            if val_pdf is not None and val_excel is not None:
+                diff_val = val_pdf - val_excel
+                row_dict = {
+                    "주문번호": label_item,
+                    "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
+                    "DMS 금액 (청구 금액)": f"{val_excel:,}원",
+                    "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
+                }
+            elif val_pdf is not None:
+                diff_val = val_pdf
+                row_dict = {
+                    "주문번호": label_item,
+                    "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
+                    "DMS 금액 (청구 금액)": "-",
+                    "차액": f"{diff_val:,}원",
+                }
+            elif val_excel is not None:
+                diff_val = -val_excel
+                row_dict = {
+                    "주문번호": label_item,
+                    "PDF 금액 (실 수령액)": "-",
+                    "DMS 금액 (청구 금액)": f"{val_excel:,}원",
+                    "차액": f"{diff_val:,}원",
+                }
+            matched_results.append(row_dict)
+
+            if abs(diff_val) >= 100:
+                total_diff_100_sum += diff_val
+                diff_over_100_results.append({
+                    "주문번호": label_item,
+                    "Claim Type": r_val,
+                    "제목": v_val,
+                    "차액": f"{diff_val:,}원",
+                })
+
+    total_diff_sum = total_pdf_sum - total_excel_sum
+    total_cnt = len(matched_results)
+
+    matched_results.append({
+        "주문번호": "★ 총합계",
+        "PDF 금액 (실 수령액)": f"{total_pdf_sum:,}원",
+        "DMS 금액 (청구 금액)": f"{total_excel_sum:,}원",
+        "차액": f"{total_diff_sum:,}원",
+    })
+    res_df = _numbered_index(pd.DataFrame(matched_results))
+
+    excel_data, month_name = create_mw_excel_report(
+        f2, total_cnt, total_pdf_sum, total_excel_sum, total_diff_sum
+    )
+    matrix_excel_data = create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name)
+
+    if diff_over_100_results:
+        diff_list_with_total = list(diff_over_100_results)
+        diff_list_with_total.append({
+            "주문번호": "★ 총합계",
+            "Claim Type": "-",
+            "제목": "-",
+            "차액": f"{total_diff_100_sum:,}원",
+        })
+        diff_df = _numbered_index(pd.DataFrame(diff_list_with_total))
+    else:
+        diff_df = pd.DataFrame(columns=["주문번호", "Claim Type", "제목", "차액"])
+
+    return {
+        "res_df": res_df,
+        "diff_df": diff_df,
+        "total_cnt": total_cnt,
+        "total_diff_sum": total_diff_sum,
+        "total_1_sum": total_pdf_sum,
+        "total_2_sum": total_excel_sum,
+        "raw_excel_labor": raw_excel_labor,
+        "raw_excel_part": raw_excel_part,
+        "raw_pdf_labour": raw_pdf_labour,
+        "raw_pdf_material": raw_pdf_material,
+        "excel_data": excel_data.getvalue(),
+        "dl_label": f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드",
+        "dl_name": f"{month_name}_WARRANTY_수령내역_보고서.xlsx",
+        "matrix_excel_data": matrix_excel_data.getvalue(),
+        "matrix_dl_label": f"📊 [{month_name} MW 세부 대조 비교문서 (PDF vs DMS)] 다운로드",
+        "matrix_dl_name": f"{month_name}_MW_세부대조_비교문서.xlsx",
+    }
+
+@st.cache_data(max_entries=5, show_spinner=False)
+def compute_coupon(a_bytes, a_name, b_bytes, b_name):
+    f1 = NamedBytesIO(a_bytes, a_name)
+    f2 = NamedBytesIO(b_bytes, b_name)
+
+    a_groups = load_excel_coupon_a(f1)
+    b_groups = load_excel_coupon_b(f2)
+    all_keys = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
+
+    matched_results = []
+    diff_over_100_results = []
+    total_a_sum = 0
+    total_b_sum = 0
+    total_diff_100_sum = 0
+
+    for key_item in all_keys:
+        items_a = a_groups.get(key_item, [])
+        items_b = b_groups.get(key_item, [])
+        max_len = max(len(items_a), len(items_b))
+
+        for i in range(max_len):
+            a_item = items_a[i] if i < len(items_a) else None
+            b_item = items_b[i] if i < len(items_b) else None
+            val_a = a_item["amount"] if a_item else None
+            val_b = b_item["amount"] if b_item else None
+            r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
+            v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
+
+            label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
+
+            if val_a is not None:
+                total_a_sum += val_a
+            if val_b is not None:
+                total_b_sum += val_b
+
+            diff_val = 0
+            if val_a is not None and val_b is not None:
+                diff_val = val_a - val_b
+                row_dict = {
+                    "차량번호": label_item,
+                    "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
+                    "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
+                    "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
+                }
+            elif val_a is not None:
+                diff_val = val_a
+                row_dict = {
+                    "차량번호": label_item,
+                    "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
+                    "DMS 쿠폰파일 ( 청구 금액 ) ": "-",
+                    "차액": f"{diff_val:,}원",
+                }
+            elif val_b is not None:
+                diff_val = -val_b
+                row_dict = {
+                    "차량번호": label_item,
+                    "공지된 쿠폰 금액 ( 입금 금액 )": "-",
+                    "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
+                    "차액": f"{diff_val:,}원",
+                }
+            matched_results.append(row_dict)
+
+            if abs(diff_val) >= 100:
+                total_diff_100_sum += diff_val
+                diff_over_100_results.append({
+                    "차량번호": label_item,
+                    "Claim Type": r_val,
+                    "제목": v_val,
+                    "차액": f"{diff_val:,}원",
+                })
+
+    total_diff_sum = total_a_sum - total_b_sum
+    total_cnt = len(matched_results)
+
+    matched_results.append({
+        "차량번호": "★ 총합계",
+        "공지된 쿠폰 금액 ( 입금 금액 )": f"{total_a_sum:,}원",
+        "DMS 쿠폰파일 ( 청구 금액 ) ": f"{total_b_sum:,}원",
+        "차액": f"{total_diff_sum:,}원",
+    })
+    res_df = _numbered_index(pd.DataFrame(matched_results))
+
+    excel_data, month_name = create_coupon_excel_report(
+        f1, f2, total_cnt, total_b_sum, total_a_sum, total_diff_sum
+    )
+
+    if diff_over_100_results:
+        diff_list_with_total = list(diff_over_100_results)
+        diff_list_with_total.append({
+            "차량번호": "★ 총합계",
+            "Claim Type": "-",
+            "제목": "-",
+            "차액": f"{total_diff_100_sum:,}원",
+        })
+        diff_df = _numbered_index(pd.DataFrame(diff_list_with_total))
+    else:
+        diff_df = pd.DataFrame(columns=["차량번호", "Claim Type", "제목", "차액"])
+
+    return {
+        "res_df": res_df,
+        "diff_df": diff_df,
+        "total_cnt": total_cnt,
+        "total_diff_sum": total_diff_sum,
+        "total_1_sum": total_a_sum,
+        "total_2_sum": total_b_sum,
+        "excel_data": excel_data.getvalue(),
+        "dl_label": f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드",
+        "dl_name": f"{month_name}_쿠폰_청구_현황_보고서.xlsx",
+    }
+
+# ────────────────────────────────────────────────────────
 # 🖥️ 본문 화면 렌더링
 # ────────────────────────────────────────────────────────
 if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
@@ -1711,221 +2032,20 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
     if f1 and f2:
         with st.spinner(f"{title_prefix} 보증 데이터 교차 대조 중..."):
             if is_mw:
-                excel_groups, raw_excel_labor, raw_excel_part = load_excel_mw(f2)
-                pdf_groups, raw_pdf_labour, raw_pdf_material = load_pdf_mw(f1)
-                all_keys = sorted(
-                    list(set(list(excel_groups.keys()) + list(pdf_groups.keys())))
-                )
-
-                matched_results = []
-                diff_over_100_results = []
-                total_pdf_sum = 0
-                total_excel_sum = 0
-                total_diff_100_sum = 0
-
-                for key_item in all_keys:
-                    items_pdf = pdf_groups.get(key_item, [])
-                    items_excel = excel_groups.get(key_item, [])
-                    max_len = max(len(items_pdf), len(items_excel))
-
-                    for i in range(max_len):
-                        p_item = items_pdf[i] if i < len(items_pdf) else None
-                        e_item = items_excel[i] if i < len(items_excel) else None
-
-                        val_pdf = p_item["total_vat"] if p_item else None
-                        val_excel = e_item["amount"] if e_item else None
-                        r_val = e_item["claim_type"] if e_item else (p_item["clm_type"] if p_item else "-")
-                        v_val = e_item["v_desc"] if e_item else "-"
-
-                        label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
-
-                        if val_pdf is not None:
-                            total_pdf_sum += val_pdf
-                        if val_excel is not None:
-                            total_excel_sum += val_excel
-
-                        diff_val = 0
-                        if val_pdf is not None and val_excel is not None:
-                            diff_val = val_pdf - val_excel
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
-                                "DMS 금액 (청구 금액)": f"{val_excel:,}원",
-                                "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
-                            }
-                        elif val_pdf is not None:
-                            diff_val = val_pdf
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": f"{val_pdf:,}원",
-                                "DMS 금액 (청구 금액)": "-",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        elif val_excel is not None:
-                            diff_val = -val_excel
-                            row_dict = {
-                                "주문번호": label_item,
-                                "PDF 금액 (실 수령액)": "-",
-                                "DMS 금액 (청구 금액)": f"{val_excel:,}원",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        matched_results.append(row_dict)
-
-                        if abs(diff_val) >= 100:
-                            total_diff_100_sum += diff_val
-                            diff_over_100_results.append({
-                                "주문번호": label_item,
-                                "Claim Type": r_val,
-                                "제목": v_val,
-                                "차액": f"{diff_val:,}원",
-                            })
-
-                total_diff_sum = total_pdf_sum - total_excel_sum
-                total_cnt = len(matched_results)
-
-                matched_results.append({
-                    "주문번호": "★ 총합계",
-                    "PDF 금액 (실 수령액)": f"{total_pdf_sum:,}원",
-                    "DMS 금액 (청구 금액)": f"{total_excel_sum:,}원",
-                    "차액": f"{total_diff_sum:,}원",
-                })
-
-                res_df = pd.DataFrame(matched_results)
-                res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-
-                excel_data, month_name = create_mw_excel_report(
-                    f2, total_cnt, total_pdf_sum, total_excel_sum, total_diff_sum
-                )
-                dl_label = f"📥 [{month_name} WARRANTY 수령내역] 엑셀 보고서 다운로드"
-                dl_name = f"{month_name}_WARRANTY_수령내역_보고서.xlsx"
-
-                matrix_excel_data = create_mw_comparison_matrix_excel(excel_groups, pdf_groups, month_name)
-                matrix_dl_label = f"📊 [{month_name} MW 세부 대조 비교문서 (PDF vs DMS)] 다운로드"
-                matrix_dl_name = f"{month_name}_MW_세부대조_비교문서.xlsx"
-
-                if diff_over_100_results:
-                    diff_list_with_total = list(diff_over_100_results)
-                    diff_list_with_total.append({
-                        "주문번호": "★ 총합계",
-                        "Claim Type": "-",
-                        "제목": "-",
-                        "차액": f"{total_diff_100_sum:,}원",
-                    })
-                    diff_df = pd.DataFrame(diff_list_with_total)
-                    diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-                else:
-                    diff_df = pd.DataFrame(columns=["주문번호", "Claim Type", "제목", "차액"])
-
-                total_1_sum = total_pdf_sum
-                total_2_sum = total_excel_sum
-
-                with right_col:
-                    render_mw_side_by_side_tables(res_df, diff_df)
-
+                r = compute_mw(f1.getvalue(), f1.name, f2.getvalue(), f2.name)
             else:
-                a_groups = load_excel_coupon_a(f1)
-                b_groups = load_excel_coupon_b(f2)
-                all_keys = sorted(list(set(list(a_groups.keys()) + list(b_groups.keys()))))
+                r = compute_coupon(f1.getvalue(), f1.name, f2.getvalue(), f2.name)
 
-                matched_results = []
-                diff_over_100_results = []
-                total_a_sum = 0
-                total_b_sum = 0
-                total_diff_100_sum = 0
+        with right_col:
+            if is_mw:
+                render_mw_side_by_side_tables(r["res_df"], r["diff_df"])
+            else:
+                render_coupon_side_by_side_tables(r["res_df"], r["diff_df"])
 
-                for key_item in all_keys:
-                    items_a = a_groups.get(key_item, [])
-                    items_b = b_groups.get(key_item, [])
-                    max_len = max(len(items_a), len(items_b))
-
-                    for i in range(max_len):
-                        a_item = items_a[i] if i < len(items_a) else None
-                        b_item = items_b[i] if i < len(items_b) else None
-                        val_a = a_item["amount"] if a_item else None
-                        val_b = b_item["amount"] if b_item else None
-                        r_val = b_item["claim_type"] if b_item else (a_item["claim_type"] if a_item else "-")
-                        v_val = b_item["v_desc"] if b_item else (a_item["v_desc"] if a_item else "-")
-
-                        label_item = f"{key_item} ({i+1})" if max_len > 1 else key_item
-
-                        if val_a is not None:
-                            total_a_sum += val_a
-                        if val_b is not None:
-                            total_b_sum += val_b
-
-                        diff_val = 0
-                        if val_a is not None and val_b is not None:
-                            diff_val = val_a - val_b
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
-                                "차액": f"{diff_val:,}원" if diff_val != 0 else "0원",
-                            }
-                        elif val_a is not None:
-                            diff_val = val_a
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": f"{val_a:,}원",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": "-",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        elif val_b is not None:
-                            diff_val = -val_b
-                            row_dict = {
-                                "차량번호": label_item,
-                                "공지된 쿠폰 금액 ( 입금 금액 )": "-",
-                                "DMS 쿠폰파일 ( 청구 금액 ) ": f"{val_b:,}원",
-                                "차액": f"{diff_val:,}원",
-                            }
-                        matched_results.append(row_dict)
-
-                        if abs(diff_val) >= 100:
-                            total_diff_100_sum += diff_val
-                            diff_over_100_results.append({
-                                "차량번호": label_item,
-                                "Claim Type": r_val,
-                                "제목": v_val,
-                                "차액": f"{diff_val:,}원",
-                            })
-
-                total_diff_sum = total_a_sum - total_b_sum
-                total_cnt = len(matched_results)
-
-                matched_results.append({
-                    "차량번호": "★ 총합계",
-                    "공지된 쿠폰 금액 ( 입금 금액 )": f"{total_a_sum:,}원",
-                    "DMS 쿠폰파일 ( 청구 금액 ) ": f"{total_b_sum:,}원",
-                    "차액": f"{total_diff_sum:,}원",
-                })
-
-                res_df = pd.DataFrame(matched_results)
-                res_df.index = [str(i) for i in range(1, len(res_df))] + [""]
-
-                excel_data, month_name = create_coupon_excel_report(
-                    f1, f2, total_cnt, total_b_sum, total_a_sum, total_diff_sum
-                )
-                dl_label = f"📥 [{month_name} 쿠폰 청구 현황] 엑셀 보고서 다운로드"
-                dl_name = f"{month_name}_쿠폰_청구_현황_보고서.xlsx"
-
-                if diff_over_100_results:
-                    diff_list_with_total = list(diff_over_100_results)
-                    diff_list_with_total.append({
-                        "차량번호": "★ 총합계",
-                        "Claim Type": "-",
-                        "제목": "-",
-                        "차액": f"{total_diff_100_sum:,}원",
-                    })
-                    diff_df = pd.DataFrame(diff_list_with_total)
-                    diff_df.index = [str(i) for i in range(1, len(diff_df))] + [""]
-                else:
-                    diff_df = pd.DataFrame(columns=["차량번호", "Claim Type", "제목", "차액"])
-
-                total_1_sum = total_a_sum
-                total_2_sum = total_b_sum
-
-                with right_col:
-                    render_coupon_side_by_side_tables(res_df, diff_df)
+        total_cnt = r["total_cnt"]
+        total_diff_sum = r["total_diff_sum"]
+        total_1_sum = r["total_1_sum"]
+        total_2_sum = r["total_2_sum"]
 
         with left_col:
             st.divider()
@@ -1956,12 +2076,12 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                     unsafe_allow_html=True,
                 )
                 labor_col1, labor_col2 = st.columns(2)
-                labor_col1.metric("청구 공임 합계", f"{raw_excel_labor:,}원")
-                labor_col2.metric("입금 공임 합계", f"{raw_pdf_labour:,}원")
+                labor_col1.metric("청구 공임 합계", f"{r['raw_excel_labor']:,}원")
+                labor_col2.metric("입금 공임 합계", f"{r['raw_pdf_labour']:,}원")
 
                 part_col1, part_col2 = st.columns(2)
-                part_col1.metric("청구 부품 합계", f"{raw_excel_part:,}원")
-                part_col2.metric("입금 부품 합계", f"{raw_pdf_material:,}원")
+                part_col1.metric("청구 부품 합계", f"{r['raw_excel_part']:,}원")
+                part_col2.metric("입금 부품 합계", f"{r['raw_pdf_material']:,}원")
 
             st.write("")
             # 📌 사진과 같이 가로 2열로 나란히 배치
@@ -1969,25 +2089,25 @@ if mode in ["MW 보증 비교", "쿠폰 보증 비교"]:
                 dl_btn_col1, dl_btn_col2 = st.columns(2)
                 with dl_btn_col1:
                     st.download_button(
-                        label=dl_label,
-                        data=excel_data,
-                        file_name=dl_name,
+                        label=r["dl_label"],
+                        data=r["excel_data"],
+                        file_name=r["dl_name"],
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
                     )
                 with dl_btn_col2:
                     st.download_button(
-                        label=matrix_dl_label,
-                        data=matrix_excel_data,
-                        file_name=matrix_dl_name,
+                        label=r["matrix_dl_label"],
+                        data=r["matrix_excel_data"],
+                        file_name=r["matrix_dl_name"],
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
                     )
             else:
                 st.download_button(
-                    label=dl_label,
-                    data=excel_data,
-                    file_name=dl_name,
+                    label=r["dl_label"],
+                    data=r["excel_data"],
+                    file_name=r["dl_name"],
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
@@ -2160,7 +2280,8 @@ elif mode == "공임코드 비교":
             )
 
             if st.session_state.show_group_c:
-                all_codes = set(list(map_a.keys()) + list(map_b.keys()) + list(map_c.keys()))
+                # 입력 순서(A → B → C)대로 정렬되도록 dict 로 중복 제거 (set 은 순서가 매번 바뀜)
+                all_codes = list(dict.fromkeys(list(map_a.keys()) + list(map_b.keys()) + list(map_c.keys())))
                 duplicate_codes = [
                     code for code in all_codes if sum([code in map_a, code in map_b, code in map_c]) >= 2
                 ]
@@ -2546,9 +2667,7 @@ elif mode == "캘린더":
                     unsafe_allow_html=True,
                 )
             with chk_col:
-                st.markdown('<div class="single-day-checkbox" style="margin-top: 10px;">', unsafe_allow_html=True)
                 is_single_day = st.checkbox("하루예약", value=False, key="cal_single_day")
-                st.markdown("</div>", unsafe_allow_html=True)
 
             if is_single_day:
                 start_date_val = st.date_input("선택 일자", value=default_day, key="cal_start_date_single")
@@ -2575,16 +2694,22 @@ elif mode == "캘린더":
 
             if st.button("등록하기", type="primary", use_container_width=True):
                 if new_title.strip():
-                    st.session_state.calendar_events.append({
+                    new_event = {
                         "start_date": start_date_val.strftime("%Y-%m-%d"),
                         "end_date": end_date_val.strftime("%Y-%m-%d"),
                         "title": new_title.strip(),
                         "category": new_cat,
                         "memo": new_memo.strip(),
-                    })
-                    github_save_file("calendar_data.json", st.session_state.calendar_events)
-                    st.success("✅ 일정이 영구 저장되었습니다!")
-                    st.rerun()
+                    }
+
+                    def _add_event(data):
+                        data.append(new_event)
+                        return True
+
+                    save_shared_and_rerun(
+                        "calendar_data.json", DEFAULT_CALENDAR_DATA, _add_event,
+                        "✅ 일정이 영구 저장되었습니다!",
+                    )
                 else:
                     st.warning("⚠️ 일정 제목을 입력해 주세요.")
 
@@ -2649,11 +2774,17 @@ elif mode == "캘린더":
                                 unsafe_allow_html=True,
                             )
                         with c_del:
-                            st.markdown('<div class="del-btn-wrap">', unsafe_allow_html=True)
-                            if st.button("삭제", key=f"del_ev_{orig_idx}", use_container_width=True):
-                                st.session_state.calendar_events.pop(orig_idx)
-                                github_save_file("calendar_data.json", st.session_state.calendar_events)
-                                st.rerun()
-                            st.markdown("</div>", unsafe_allow_html=True)
+                            if st.button("삭제", key=f"delev_{orig_idx}", use_container_width=True):
+                                # 순번이 아니라 내용으로 찾아서 삭제 (그 사이 목록이 바뀌어도 안전)
+                                def _del_event(data, target=dict(ev)):
+                                    if target in data:
+                                        data.remove(target)
+                                        return True
+                                    return False
+
+                                save_shared_and_rerun(
+                                    "calendar_data.json", DEFAULT_CALENDAR_DATA, _del_event,
+                                    "🗑️ 일정이 삭제되었습니다.",
+                                )
             else:
                 st.info("해당 월에 등록된 일정이 없습니다.")
